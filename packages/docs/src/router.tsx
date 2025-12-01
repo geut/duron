@@ -1,9 +1,7 @@
-import { createHashHistory, createRouter as createTanStackRouter } from '@tanstack/react-router'
+import { createRouter as createTanStackRouter } from '@tanstack/react-router'
 
 import { NotFound } from '@/components/not-found'
 import { routeTree } from './routeTree.gen'
-
-const hashHistory = createHashHistory()
 
 export function getRouter() {
   return createTanStackRouter({
@@ -11,6 +9,6 @@ export function getRouter() {
     defaultPreload: 'intent',
     scrollRestoration: true,
     defaultNotFoundComponent: NotFound,
-    history: hashHistory,
+    // basepath: import.meta.env.PROD ? '/duron' : '/',
   })
 }

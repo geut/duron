@@ -30,6 +30,7 @@
     "dev": "bun --hot src/dev.tsx",
     "build": "bun run build.ts && bun run build:get-html",
     "build:get-html": "tsc --project tsconfig.node.json",
+    "prepublishOnly": "bun run build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -9,5 +9,6 @@ export function getRouter() {
     defaultPreload: 'intent',
     scrollRestoration: true,
     defaultNotFoundComponent: NotFound,
+    basepath: import.meta.env.PROD ? '/duron' : '/',
   })
 }

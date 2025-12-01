@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres
+    image: postgres:16-alpine
     container_name: duron-postgres
     environment:
       POSTGRES_USER: duron

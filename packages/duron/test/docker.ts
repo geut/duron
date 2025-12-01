@@ -14,13 +14,31 @@ interface CreateContainerOptions {
   environment?: Record<string, string>
 }
 
-async function createContainer({ image, containerName, ports, environment }: CreateContainerOptions) {
+async function ensureImageExists(image: string) {
+  try {
+    // Check if image exists locally
+    const { stdout } = await execFile('docker', ['images', '-q', image])
+    if (stdout.toString().trim()) {
+      return // Image exists, no need to pull
+    }
+  } catch {
+    // Image doesn't exist or error checking, proceed to pull
+  }
+
+  // Pull the image if it doesn't exist
+  await execFile('docker', ['pull', image])
+}
+
+export async function createContainer({ image, containerName, ports, environment }: CreateContainerOptions) {
   if (containersCreated.has(containerName)) {
     return containersCreated.get(containerName)!
   }
 
   const promise = (async () => {
     try {
+      // Ensure the image exists before running
+      await ensureImageExists(image)
+
       await execFile('docker', [
         'run',
         '--name',
@@ -50,7 +68,7 @@ async function createContainer({ image, containerName, ports, environment }: Cre
   return promise
 }
 
-async function waitForContainer(containerName: string, expectedMessage: string) {
+export async function waitForContainer(containerName: string, expectedMessage: string) {
   if (containersStarted.has(containerName)) {
     return containersStarted.get(containerName)!
   }
@@ -82,7 +100,7 @@ async function waitForContainer(containerName: string, expectedMessage: string) 
 
 export const getPostgresConnection = async ({ containerName, port }: { containerName: string; port: number }) => {
   await createContainer({
-    image: 'postgres',
+    image: 'postgres:16-alpine',
     containerName,
     ports: [port, 5432],
     environment: {

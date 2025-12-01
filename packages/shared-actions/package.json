@@ -1,0 +1,15 @@
+{
+  "name": "shared-actions",
+  "private": true,
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.73",
+    "ai": "^5.0.102",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

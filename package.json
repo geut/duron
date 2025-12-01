@@ -1,0 +1,23 @@
+{
+  "name": "duron-workspace",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "docs/*",
+    "packages/*"
+  ],
+  "dependencies": {
+    "@biomejs/biome": "2.3.4",
+    "biome-standard-mate": "^1.0.0"
+  },
+  "scripts": {
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "test": "bun run --filter duron test",
+    "dev": "bun --filter '*' dev",
+    "dev:duron": "bun run --filter duron dev",
+    "dev:dashboard": "bun run --filter duron-dashboard dev",
+    "dev:examples:basic": "bun run --filter examples dev",
+    "build": "bun run --filter '*' build"
+  }
+}

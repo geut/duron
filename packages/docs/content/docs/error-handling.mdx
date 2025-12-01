@@ -1,0 +1,282 @@
+---
+title: Error Handling
+description: Learn how to handle errors in Duron
+icon: AlertCircle
+---
+
+Duron provides built-in retry logic for handling transient failures. However, some errors should not be retried. Use `NonRetriableError` to prevent Duron from retrying steps that will fail regardless of retry attempts.
+
+## NonRetriableError
+
+`NonRetriableError` is the primary error type you'll use in your actions. When a step throws this error, Duron will fail the step immediately without retrying, even if retry options are configured.
+
+```ts
+import { NonRetriableError } from 'duron/errors'
+
+await ctx.step('validateInput', async () => {
+  if (!isValid(ctx.input)) {
+    throw new NonRetriableError('Invalid input')
+  }
+})
+```
+
+## When to Use NonRetriableError
+
+Use `NonRetriableError` for errors that won't succeed on retry:
+
+- **Validation errors** - Invalid input data
+- **Authorization errors** - Insufficient permissions
+- **Business logic errors** - Conditions that won't change
+- **Permanent failures** - Errors that indicate a fundamental problem
+
+### Validation Errors
+
+Don't retry validation errors - they won't succeed on retry:
+
+```ts
+await ctx.step('validateOrder', async () => {
+  if (ctx.input.items.length === 0) {
+    throw new NonRetriableError('Order must have at least one item')
+  }
+
+  if (ctx.input.total < 0) {
+    throw new NonRetriableError('Order total cannot be negative')
+  }
+}, {
+  retry: {
+    limit: 0, // Don't retry validation
+  },
+})
+```
+
+### Authorization Errors
+
+Authorization failures won't succeed on retry:
+
+```ts
+await ctx.step('checkPermissions', async () => {
+  const user = await fetchUser(ctx.input.userId)
+
+  if (!user.hasPermission('create_order')) {
+    throw new NonRetriableError('User does not have permission to create orders')
+  }
+})
+```
+
+### Business Logic Errors
+
+Business logic errors indicate conditions that won't change:
+
+```ts
+await ctx.step('checkInventory', async () => {
+  const product = await fetchProduct(ctx.input.productId)
+
+  if (product.stock < ctx.input.quantity) {
+    throw new NonRetriableError(`Insufficient stock. Available: ${product.stock}`)
+  }
+})
+```
+
+### Converting Retriable to Non-Retriable Errors
+
+Sometimes you want to convert a retriable error to non-retriable after multiple failures:
+
+```ts
+let attempts = 0
+await ctx.step('fetchData', async () => {
+  try {
+    return await fetchData()
+  } catch (error) {
+    attempts++
+
+    // After 3 attempts, mark as non-retriable
+    if (attempts >= 3) {
+      throw new NonRetriableError('Failed to fetch data after multiple attempts', {
+        cause: error,
+      })
+    }
+
+    throw error // Retry for now
+  }
+})
+```
+
+## Error Context
+
+Include useful context in your errors:
+
+```ts
+throw new NonRetriableError('Payment failed', {
+  cause: {
+    paymentId: payment.id,
+    reason: payment.failureReason,
+    userId: ctx.input.userId,
+  },
+})
+```
+
+## Complete Example
+
+```ts
+import { defineAction } from 'duron/action'
+import { NonRetriableError } from 'duron/errors'
+import { z } from 'zod'
+
+const processOrder = defineAction()({
+  name: 'processOrder',
+  input: z.object({
+    orderId: z.string(),
+    userId: z.string(),
+    items: z.array(z.object({
+      productId: z.string(),
+      quantity: z.number(),
+    })),
+  }),
+  handler: async (ctx) => {
+    // Step 1: Validate input (non-retriable)
+    await ctx.step('validateOrder', async () => {
+      if (ctx.input.items.length === 0) {
+        throw new NonRetriableError('Order must have at least one item')
+      }
+    }, {
+      retry: {
+        limit: 0, // Don't retry validation
+      },
+    })
+
+    // Step 2: Check permissions (non-retriable)
+    await ctx.step('checkPermissions', async () => {
+      const user = await fetchUser(ctx.input.userId)
+      if (!user.hasPermission('create_order')) {
+        throw new NonRetriableError('User does not have permission', {
+          cause: { userId: ctx.input.userId },
+        })
+      }
+    })
+
+    // Step 3: Check inventory (non-retriable)
+    await ctx.step('checkInventory', async () => {
+      for (const item of ctx.input.items) {
+        const product = await fetchProduct(item.productId)
+        if (product.stock < item.quantity) {
+          throw new NonRetriableError(`Insufficient stock for ${product.name}`, {
+            cause: {
+              productId: item.productId,
+              requested: item.quantity,
+              available: product.stock,
+            },
+          })
+        }
+      }
+    })
+
+    // Step 4: Process payment (retriable - network issues might resolve)
+    const payment = await ctx.step('processPayment', async () => {
+      return await processPayment(ctx.input)
+    })
+
+    if (!payment.success) {
+      // Payment failure is non-retriable
+      throw new NonRetriableError('Payment failed', {
+        cause: {
+          paymentId: payment.id,
+          reason: payment.failureReason,
+        },
+      })
+    }
+
+    return { success: true, paymentId: payment.id }
+  },
+})
+```
+
+## Best Practices
+
+### Use NonRetriableError for Permanent Failures
+
+Always use `NonRetriableError` for errors that indicate permanent failures:
+
+```ts
+// ✅ Good: Validation errors are permanent
+if (!isValid(ctx.input)) {
+  throw new NonRetriableError('Invalid input')
+}
+
+// ✅ Good: Authorization errors won't change
+if (!user.hasPermission('action')) {
+  throw new NonRetriableError('Insufficient permissions')
+}
+
+// ✅ Good: Business logic errors
+if (product.stock < quantity) {
+  throw new NonRetriableError('Insufficient stock')
+}
+```
+
+### Let Transient Errors Retry
+
+Don't use `NonRetriableError` for transient failures that might succeed on retry:
+
+```ts
+// ✅ Good: Network errors might succeed on retry
+try {
+  return await fetchData()
+} catch (error) {
+  if (error instanceof NetworkError) {
+    throw error // Let Duron retry
+  }
+  throw new NonRetriableError('Permanent failure', { cause: error })
+}
+```
+
+### Include Useful Context
+
+Provide context in error causes to help with debugging:
+
+```ts
+throw new NonRetriableError('Payment failed', {
+  cause: {
+    paymentId: payment.id,
+    amount: ctx.input.amount,
+    userId: ctx.input.userId,
+    reason: payment.failureReason,
+  },
+})
+```
+
+### Log Errors
+
+Use the logger to log errors with context:
+
+```ts
+try {
+  await operation()
+} catch (error) {
+  ctx.logger.error(
+    {
+      error,
+      jobId: ctx.jobId,
+      input: ctx.input,
+    },
+    'Operation failed'
+  )
+
+  // Convert to non-retriable if appropriate
+  if (error instanceof ValidationError) {
+    throw new NonRetriableError('Validation failed', { cause: error })
+  }
+
+  throw error // Let other errors retry
+}
+```
+
+## Error Serialization
+
+Errors are automatically serialized and stored in the database. The serialization includes:
+
+- `name` - Error class name
+- `message` - Error message
+- `cause` - Underlying cause (if any)
+- `stack` - Stack trace (if available)
+
+This allows you to inspect errors later through the API or dashboard.

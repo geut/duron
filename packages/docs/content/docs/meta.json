@@ -1,0 +1,14 @@
+{
+  "pages": [
+    "index",
+    "getting-started",
+    "actions",
+    "jobs-and-steps",
+    "client-api",
+    "server-api",
+    "adapters",
+    "retries",
+    "error-handling",
+    "examples"
+  ]
+}

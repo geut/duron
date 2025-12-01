@@ -1,0 +1,369 @@
+---
+title: Actions
+description: Learn how to define and use actions in Duron
+icon: Zap
+---
+
+Actions are the core building blocks of Duron. They define what work needs to be done and how it should be executed.
+
+## Defining Actions
+
+Actions are defined using the `defineAction` function. Each action must have:
+
+- **name**: A unique identifier for the action
+- **handler**: The function that executes the action logic
+- **input** (optional): A Zod schema for validating input
+- **output** (optional): A Zod schema for validating output
+
+```ts
+import { defineAction } from 'duron/action'
+import { z } from 'zod'
+
+const processOrder = defineAction()({
+  name: 'processOrder',
+  input: z.object({
+    orderId: z.string(),
+    userId: z.string(),
+  }),
+  output: z.object({
+    success: z.boolean(),
+    orderNumber: z.string(),
+  }),
+  handler: async (ctx) => {
+    // Access input data
+    const { orderId, userId } = ctx.input
+
+    // Use steps to break down work into retryable units
+    const order = await ctx.step('processOrder', async ({ signal }) => {
+      // Your business logic here
+      // The signal can be used to handle cancellation
+      return await processOrderLogic(orderId, userId, { signal })
+    })
+
+    return {
+      success: true,
+      orderNumber: order.number,
+    }
+  },
+})
+```
+
+## Action Context
+
+The handler function receives a context object (`ctx`) with the following properties:
+
+### `ctx.input`
+
+The validated input data based on your input schema.
+
+```ts
+handler: async (ctx) => {
+  // Type-safe access to input
+  const orderId = ctx.input.orderId
+  const userId = ctx.input.userId
+}
+```
+
+### `ctx.jobId`
+
+The unique identifier of the job executing this action.
+
+```ts
+handler: async (ctx) => {
+  console.log(`Processing job ${ctx.jobId}`)
+}
+```
+
+### `ctx.groupKey`
+
+The group key for this job, used for concurrency control.
+
+```ts
+handler: async (ctx) => {
+  console.log(`Job belongs to group: ${ctx.groupKey}`)
+}
+```
+
+### `ctx.var`
+
+Variables passed to the Duron client, accessible to all actions.
+
+```ts
+// When creating the client
+const client = duron({
+  variables: {
+    apiKey: process.env.API_KEY,
+    db: myDatabase,
+  },
+  // ...
+})
+
+// In your action handler
+handler: async (ctx) => {
+  const apiKey = ctx.var.apiKey
+  const db = ctx.var.db
+}
+```
+
+### `ctx.logger`
+
+A Pino logger instance for structured logging.
+
+```ts
+handler: async (ctx) => {
+  ctx.logger.info({ orderId: ctx.input.orderId }, 'Processing order')
+  ctx.logger.error({ error }, 'Failed to process order')
+}
+```
+
+### `ctx.step`
+
+A function to create and execute steps within the action. See [Steps](/docs/jobs-and-steps#steps) for more details.
+
+```ts
+handler: async (ctx) => {
+  const result = await ctx.step('fetchUser', async ({ signal }) => {
+    return await fetchUser(ctx.input.userId, { signal })
+  })
+}
+```
+
+## Action Options
+
+### `name`
+
+**Required.** A unique string identifier for the action. This is used as the queue name.
+
+```ts
+{
+  name: 'sendEmail', // Must be unique across all actions
+}
+```
+
+### `version`
+
+**Optional.** A version string for tracking changes to the action. Used in checksum generation.
+
+```ts
+{
+  name: 'sendEmail',
+  version: '1.0.0',
+}
+```
+
+### `input`
+
+**Optional.** A Zod schema for validating action input. If provided, input will be validated before the handler is called.
+
+```ts
+{
+  name: 'sendEmail',
+  input: z.object({
+    to: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+}
+```
+
+### `output`
+
+**Optional.** A Zod schema for validating action output. If provided, output will be validated after the handler completes.
+
+```ts
+{
+  name: 'sendEmail',
+  output: z.object({
+    success: z.boolean(),
+    messageId: z.string(),
+  }),
+}
+```
+
+### `handler`
+
+**Required.** The function that executes the action logic. Must return a Promise.
+
+```ts
+{
+  name: 'sendEmail',
+  handler: async (ctx) => {
+    // Use steps for retryable work
+    await ctx.step('sendEmail', async ({ signal }) => {
+      // Your logic here
+      // The signal can be used to handle cancellation
+      return await sendEmailLogic(ctx.input, { signal })
+    })
+
+    return { success: true }
+  },
+}
+```
+
+### `expire`
+
+**Optional.** Timeout in milliseconds for the entire action. Defaults to `15 minutes`.
+
+```ts
+{
+  name: 'sendEmail',
+  expire: 30 * 60 * 1000, // 30 minutes
+}
+```
+
+### `concurrency`
+
+**Optional.** Maximum number of jobs that can run concurrently for this action. Defaults to `100`.
+
+```ts
+{
+  name: 'sendEmail',
+  concurrency: 50, // Allow up to 50 concurrent jobs
+}
+```
+
+### `groups`
+
+**Optional.** Configuration for grouping jobs and controlling concurrency per group.
+
+#### `groups.groupKey`
+
+A function that determines the group key for a job. Jobs with the same group key will respect the group concurrency limit.
+
+```ts
+{
+  name: 'processOrder',
+  groups: {
+    groupKey: async (ctx) => {
+      // Group by user ID to prevent concurrent processing for the same user
+      return `user-${ctx.input.userId}`
+    },
+  },
+}
+```
+
+#### `groups.concurrency`
+
+A function that determines the concurrency limit for a job's group. Defaults to `10`.
+
+```ts
+{
+  name: 'processOrder',
+  groups: {
+    groupKey: async (ctx) => `user-${ctx.input.userId}`,
+    concurrency: async (ctx) => {
+      // Higher concurrency for premium users
+      return ctx.input.isPremium ? 20 : 5
+    },
+  },
+}
+```
+
+### `steps`
+
+**Optional.** Configuration for steps within the action.
+
+#### `steps.concurrency`
+
+Maximum number of steps that can run concurrently for this action. Defaults to `10`.
+
+```ts
+{
+  name: 'processOrder',
+  steps: {
+    concurrency: 5, // Allow up to 5 concurrent steps
+  },
+}
+```
+
+#### `steps.retry`
+
+Retry configuration for steps. See [Retries](/docs/retries) for details.
+
+```ts
+{
+  name: 'processOrder',
+  steps: {
+    retry: {
+      limit: 3,
+      factor: 2,
+      minTimeout: 1000,
+      maxTimeout: 10000,
+    },
+  },
+}
+```
+
+#### `steps.expire`
+
+Default timeout in milliseconds for steps. Defaults to `5 minutes`.
+
+```ts
+{
+  name: 'processOrder',
+  steps: {
+    expire: 10 * 60 * 1000, // 10 minutes
+  },
+}
+```
+
+## Complete Example
+
+Here's a complete example with all options:
+
+```ts
+import { defineAction } from 'duron/action'
+import { z } from 'zod'
+
+const processOrder = defineAction<{ db: Database }>()({
+  name: 'processOrder',
+  version: '1.0.0',
+  input: z.object({
+    orderId: z.string(),
+    userId: z.string(),
+  }),
+  output: z.object({
+    success: z.boolean(),
+    orderNumber: z.string(),
+  }),
+  expire: 30 * 60 * 1000, // 30 minutes
+  concurrency: 50,
+  groups: {
+    groupKey: async (ctx) => `user-${ctx.input.userId}`,
+    concurrency: async (ctx) => 5,
+  },
+  steps: {
+    concurrency: 10,
+    retry: {
+      limit: 3,
+      factor: 2,
+      minTimeout: 1000,
+      maxTimeout: 10000,
+    },
+    expire: 5 * 60 * 1000,
+  },
+  handler: async (ctx) => {
+    ctx.logger.info({ orderId: ctx.input.orderId }, 'Processing order')
+
+    // Use variables
+    const db = ctx.var.db
+
+    // Execute steps
+    const user = await ctx.step('fetchUser', async ({ signal }) => {
+      return await db.users.findById(ctx.input.userId, { signal })
+    })
+
+    const order = await ctx.step('createOrder', async ({ signal }) => {
+      return await db.orders.create({
+        orderId: ctx.input.orderId,
+        userId: ctx.input.userId,
+      }, { signal })
+    })
+
+    return {
+      success: true,
+      orderNumber: order.number,
+    }
+  },
+})
+```

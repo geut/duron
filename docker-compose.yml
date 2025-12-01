@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: duron-postgres
+    environment:
+      POSTGRES_USER: duron
+      POSTGRES_PASSWORD: duron
+      POSTGRES_DB: duron
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U duron"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

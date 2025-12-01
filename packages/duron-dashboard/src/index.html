@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Duron Dashboard</title>
+    <link rel="icon" href="@assets/favicon.svg" type="image/svg+xml" />
+    <script type="module" src="./init.tsx" async></script>
+    <script>
+      function autoInit() {
+        globalThis.initDuron('#root', {
+          url: 'http://localhost:3000/api',
+          enableLogin: true,
+          showLogo: true,
+        })
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', autoInit)
+      } else {
+        autoInit()
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

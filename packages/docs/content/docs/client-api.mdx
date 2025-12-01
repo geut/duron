@@ -1,0 +1,465 @@
+---
+title: Client API
+description: Complete reference for the Duron Client API
+icon: Code
+---
+
+The Duron Client is the main interface for interacting with Duron. It manages job execution, action handling, and database operations.
+
+## Creating a Client
+
+Create a client using the `duron()` function:
+
+```ts
+import { duron } from 'duron'
+import { pgliteAdapter } from 'duron/adapters/pglite'
+
+const client = duron({
+  database: pgliteAdapter({
+    connection: ':memory:',
+  }),
+  actions: {
+    sendEmail,
+    processOrder,
+  },
+})
+```
+
+## Client Options
+
+### `database`
+
+**Required.** The database adapter to use.
+
+```ts
+{
+  database: pgliteAdapter({ connection: ':memory:' }),
+}
+```
+
+### `actions`
+
+**Optional.** A record of action definitions.
+
+```ts
+{
+  actions: {
+    sendEmail,
+    processOrder,
+  },
+}
+```
+
+### `variables`
+
+**Optional.** Variables available to all actions via `ctx.var`.
+
+```ts
+{
+  variables: {
+    apiKey: process.env.API_KEY,
+    db: myDatabase,
+  },
+}
+```
+
+### `id`
+
+**Optional.** Unique identifier for this Duron instance. Defaults to a random UUID.
+
+```ts
+{
+  id: 'worker-1',
+}
+```
+
+### `syncPattern`
+
+**Optional.** Synchronization pattern for fetching jobs. Defaults to `'hybrid'`.
+
+- `'pull'` - Periodically poll the database
+- `'push'` - Listen for database notifications
+- `'hybrid'` - Use both pull and push (recommended)
+- `false` - Disable automatic fetching (manual only)
+
+```ts
+{
+  syncPattern: 'hybrid',
+}
+```
+
+### `pullInterval`
+
+**Optional.** Interval in milliseconds between pull operations. Defaults to `5000`.
+
+```ts
+{
+  pullInterval: 10_000, // 10 seconds
+}
+```
+
+### `batchSize`
+
+**Optional.** Maximum number of jobs to fetch in a single batch. Defaults to `10`.
+
+```ts
+{
+  batchSize: 20,
+}
+```
+
+### `actionConcurrencyLimit`
+
+**Optional.** Maximum number of jobs that can run concurrently per action. Defaults to `100`.
+
+```ts
+{
+  actionConcurrencyLimit: 50,
+}
+```
+
+### `groupConcurrencyLimit`
+
+**Optional.** Maximum number of jobs that can run concurrently per group key. Defaults to `10`.
+
+```ts
+{
+  groupConcurrencyLimit: 5,
+}
+```
+
+### `migrateOnStart`
+
+**Optional.** Whether to run database migrations on startup. Defaults to `true`.
+
+```ts
+{
+  migrateOnStart: true,
+}
+```
+
+### `recoverJobsOnStart`
+
+**Optional.** Whether to recover stuck jobs on startup. Defaults to `true`.
+
+```ts
+{
+  recoverJobsOnStart: true,
+}
+```
+
+### `multiProcessMode`
+
+**Optional.** Enable multi-process mode for job recovery. Defaults to `false`.
+
+```ts
+{
+  multiProcessMode: true,
+}
+```
+
+### `processTimeout`
+
+**Optional.** Timeout in milliseconds to wait for process ping responses. Defaults to `300000` (5 minutes).
+
+```ts
+{
+  processTimeout: 10 * 60 * 1000, // 10 minutes
+}
+```
+
+### `logger`
+
+**Optional.** Logger instance or log level. Defaults to `'error'`.
+
+```ts
+{
+  logger: 'info', // or a Pino logger instance
+}
+```
+
+## Lifecycle Methods
+
+### `start()`
+
+Start the Duron instance. Initializes the database, recovers stuck jobs, and sets up sync patterns.
+
+```ts
+await client.start()
+```
+
+### `stop()`
+
+Stop the Duron instance. Stops the pull loop, aborts all running jobs, waits for queues to drain, and stops the database.
+
+```ts
+await client.stop()
+```
+
+## Job Methods
+
+### `runAction(actionName, input?)`
+
+Run an action by creating a new job.
+
+```ts
+const jobId = await client.runAction('sendEmail', {
+  to: 'user@example.com',
+  subject: 'Hello',
+  body: 'Test',
+})
+```
+
+**Parameters:**
+- `actionName` - Name of the action to run
+- `input` - Input data for the action (validated against action's input schema)
+
+**Returns:** Promise resolving to the created job ID
+
+### `fetch(options?)`
+
+Manually fetch and process jobs from the database.
+
+```ts
+const jobs = await client.fetch({
+  batchSize: 20,
+})
+```
+
+**Parameters:**
+- `options.batchSize` - Number of jobs to fetch (optional)
+
+**Returns:** Promise resolving to array of fetched jobs
+
+### `cancelJob(jobId)`
+
+Cancel a job by its ID.
+
+```ts
+await client.cancelJob(jobId)
+```
+
+**Parameters:**
+- `jobId` - The ID of the job to cancel
+
+**Returns:** Promise resolving to `true` if cancelled, `false` otherwise
+
+### `retryJob(jobId)`
+
+Retry a failed job by creating a copy of it.
+
+```ts
+const newJobId = await client.retryJob(jobId)
+```
+
+**Parameters:**
+- `jobId` - The ID of the job to retry
+
+**Returns:** Promise resolving to the new job ID, or `null` if retry failed
+
+## Query Methods
+
+### `getJobById(jobId)`
+
+Get a job by its ID. Does not include step information.
+
+```ts
+const job = await client.getJobById(jobId)
+```
+
+**Parameters:**
+- `jobId` - The ID of the job to retrieve
+
+**Returns:** Promise resolving to the job, or `null` if not found
+
+### `getJobs(options?)`
+
+Get jobs with pagination, filtering, and sorting.
+
+```ts
+const result = await client.getJobs({
+  page: 1,
+  pageSize: 20,
+  filters: {
+    status: ['active', 'completed'],
+    actionName: ['sendEmail'],
+    groupKey: ['user-123'],
+    ownerId: ['worker-1'],
+    createdAt: [new Date('2024-01-01'), new Date('2024-12-31')],
+    startedAt: [new Date('2024-01-01'), new Date('2024-12-31')],
+    finishedAt: [new Date('2024-01-01'), new Date('2024-12-31')],
+    updatedAfter: new Date('2024-01-01'),
+    search: 'email',
+    inputFilter: { userId: '123' },
+    outputFilter: { success: true },
+  },
+  sort: [
+    { field: 'createdAt', order: 'desc' },
+    { field: 'status', order: 'asc' },
+  ],
+})
+```
+
+**Parameters:**
+- `options.page` - Page number (default: 1)
+- `options.pageSize` - Number of items per page (default: 20)
+- `options.filters` - Filter options (see below)
+- `options.sort` - Sort options (see below)
+
+**Filter Options:**
+- `status` - Array of job statuses
+- `actionName` - Array of action names
+- `groupKey` - Array of group keys
+- `ownerId` - Array of owner IDs
+- `createdAt` - Date range `[start, end]`
+- `startedAt` - Date range `[start, end]`
+- `finishedAt` - Date range `[start, end]`
+- `updatedAfter` - Jobs updated after this date
+- `search` - Fuzzy search in job data
+- `inputFilter` - JSONB filter on input data
+- `outputFilter` - JSONB filter on output data
+
+**Sort Options:**
+- `field` - Field to sort by: `'createdAt'`, `'startedAt'`, `'finishedAt'`, `'updatedAt'`, `'status'`, `'actionName'`
+- `order` - Sort order: `'asc'` or `'desc'`
+
+**Returns:** Promise resolving to jobs result with pagination info
+
+### `getJobSteps(options)`
+
+Get steps for a job with pagination and fuzzy search.
+
+```ts
+const result = await client.getJobSteps({
+  jobId,
+  page: 1,
+  pageSize: 20,
+  search: 'fetch',
+  updatedAfter: new Date('2024-01-01'),
+})
+```
+
+**Parameters:**
+- `options.jobId` - The ID of the job
+- `options.page` - Page number (default: 1)
+- `options.pageSize` - Number of items per page (default: 20)
+- `options.search` - Fuzzy search in step names (optional)
+- `options.updatedAfter` - Steps updated after this date (optional)
+
+**Returns:** Promise resolving to steps result with pagination info
+
+### `getJobStepById(stepId)`
+
+Get a step by its ID with all information.
+
+```ts
+const step = await client.getJobStepById(stepId)
+```
+
+**Parameters:**
+- `stepId` - The ID of the step to retrieve
+
+**Returns:** Promise resolving to the step, or `null` if not found
+
+### `getJobStatus(jobId)`
+
+Get job status and updatedAt timestamp.
+
+```ts
+const status = await client.getJobStatus(jobId)
+```
+
+**Parameters:**
+- `jobId` - The ID of the job
+
+**Returns:** Promise resolving to job status result, or `null` if not found
+
+### `getJobStepStatus(stepId)`
+
+Get job step status and updatedAt timestamp.
+
+```ts
+const status = await client.getJobStepStatus(stepId)
+```
+
+**Parameters:**
+- `stepId` - The ID of the step
+
+**Returns:** Promise resolving to step status result, or `null` if not found
+
+### `waitForJob(jobId, options?)`
+
+Wait for a job to change status by subscribing to job-status-changed events. When the job status changes, the job is fetched and returned. This method uses a shared event listener, so multiple concurrent calls are efficient.
+
+```ts
+const job = await client.waitForJob(jobId)
+```
+
+**Parameters:**
+- `jobId` - The ID of the job to wait for
+- `options.timeout` - Optional timeout in milliseconds. If the job status doesn't change within this time, the promise resolves to `null`. Defaults to no timeout (waits indefinitely).
+- `options.signal` - Optional AbortSignal to cancel waiting. If aborted, the promise resolves to `null`.
+
+**Returns:** Promise resolving to the job when its status changes, or `null` if timeout or aborted
+
+**Example:**
+
+```ts
+// Wait for a job to complete (no timeout)
+const job = await client.waitForJob(jobId)
+
+// Wait with a timeout
+const job = await client.waitForJob(jobId, { timeout: 5000 })
+
+// Wait with an abort signal
+const controller = new AbortController()
+const job = await client.waitForJob(jobId, { signal: controller.signal })
+
+// Cancel waiting
+controller.abort()
+```
+
+**Notes:**
+- If the job is already in a terminal state (completed, failed, or cancelled), the method returns immediately without waiting.
+- Multiple concurrent `waitForJob` calls for the same job share a single event listener for efficiency.
+- The method automatically cleans up event listeners and timeouts when the promise resolves.
+
+### `getActions()`
+
+Get action statistics including counts and last job created date.
+
+```ts
+const actions = await client.getActions()
+```
+
+**Returns:** Promise resolving to action statistics
+
+### `getActionsMetadata()`
+
+Get action metadata including input schemas and mock data.
+
+```ts
+const metadata = await client.getActionsMetadata()
+```
+
+**Returns:** Promise resolving to action metadata array
+
+## Utility Methods
+
+### `getConfig()`
+
+Get the current configuration of this Duron instance.
+
+```ts
+const config = client.getConfig()
+```
+
+**Returns:** Configuration object including options, actions, and variables
+
+### `logger`
+
+Access the logger instance.
+
+```ts
+client.logger.info('Client started')
+```

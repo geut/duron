@@ -1,0 +1,508 @@
+---
+title: Server API
+description: Create HTTP API endpoints for Duron using the server module
+icon: Server
+---
+
+Duron provides a server module for creating HTTP API endpoints. This is useful for building dashboards, monitoring tools, or integrating Duron with other services.
+
+## Installation
+
+The server module is included with Duron. No additional installation is required.
+
+## Creating a Server
+
+Create a server using the `createServer()` function:
+
+```ts
+import { createServer } from 'duron/server'
+import { duron } from 'duron'
+import { pgliteAdapter } from 'duron/adapters/pglite'
+
+// Create your Duron client
+const client = duron({
+  database: pgliteAdapter({ connection: ':memory:' }),
+  actions: {
+    sendEmail,
+  },
+})
+
+// Create the server
+const app = createServer({
+  client,
+  prefix: '/api', // Optional, defaults to '/api'
+  login: {
+    onLogin: async ({ email, password }) => {
+      // Implement your authentication logic
+      return email === 'admin@example.com' && password === 'password'
+    },
+    jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+    expirationTime: '24h', // Optional, defaults to '24h'
+  },
+})
+
+// Start your server (using Elysia/Bun)
+app.listen(3000)
+```
+
+## Server Options
+
+### `client`
+
+**Required.** The Duron client instance to use for API endpoints.
+
+```ts
+{
+  client: myDuronClient,
+}
+```
+
+### `prefix`
+
+**Optional.** Prefix for all routes. Defaults to `'/api'`.
+
+```ts
+{
+  prefix: '/api/v1',
+}
+```
+
+### `login`
+
+**Optional.** Configuration object for authentication. When provided, all API endpoints require authentication via JWT tokens.
+
+```ts
+{
+  login: {
+    onLogin: async ({ email, password }) => {
+      // Validate credentials
+      const user = await db.users.findByEmail(email)
+      if (!user) return false
+
+      return await bcrypt.compare(password, user.password)
+    },
+    jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+  },
+}
+```
+
+#### `login.onLogin`
+
+**Required when `login` is provided.** Function to handle login requests.
+
+**Parameters:**
+- `email` - User email
+- `password` - User password
+
+**Returns:** Promise resolving to `true` if login succeeds, `false` otherwise
+
+#### `login.jwtSecret`
+
+**Required when `login` is provided.** Secret key for JWT token generation. Can be a string or `Uint8Array`. Should be a secure random string in production.
+
+```ts
+{
+  login: {
+    jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+    // or
+    jwtSecret: new Uint8Array([...]), // Uint8Array is also supported
+  },
+}
+```
+
+#### `login.expirationTime`
+
+**Optional.** Expiration time for the JWT token. Defaults to `'24h'`. Accepts any valid time string format (e.g., `'1h'`, `'7d'`, `'30m'`).
+
+```ts
+{
+  login: {
+    jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+    expirationTime: '7d', // Token expires in 7 days
+  },
+}
+```
+
+## API Endpoints
+
+All endpoints use Zod for input and response validation.
+
+### Authentication
+
+#### `POST /login`
+
+Authenticate and receive a JWT token.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "password"
+}
+```
+
+**Response:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Status Codes:**
+- `200` - Success
+- `401` - Invalid credentials
+- `400` - Validation error
+
+### Jobs
+
+#### `GET /jobs`
+
+Get jobs with pagination, filtering, and sorting.
+
+**Query Parameters:**
+- `page` - Page number (default: 1)
+- `pageSize` - Items per page (default: 20, max: 1000)
+- `fStatus` - Filter by status (comma-separated or multiple params)
+- `fActionName` - Filter by action name (comma-separated or multiple params)
+- `fGroupKey` - Filter by group key (comma-separated or multiple params)
+- `fOwnerId` - Filter by owner ID (comma-separated or multiple params)
+- `fCreatedAt` - Filter by created date (ISO string or JSON array `[start, end]`)
+- `fStartedAt` - Filter by started date (ISO string or JSON array `[start, end]`)
+- `fFinishedAt` - Filter by finished date (ISO string or JSON array `[start, end]`)
+- `fUpdatedAfter` - Filter by updated after date (ISO string)
+- `fSearch` - Fuzzy search in job data
+- `fInputFilter` - JSONB filter on input (JSON string)
+- `fOutputFilter` - JSONB filter on output (JSON string)
+- `sort` - Sort string format: `"field:asc,field:desc"`
+
+**Example:**
+```
+GET /api/jobs?page=1&pageSize=20&fStatus=active,completed&sort=createdAt:desc
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "actionName": "sendEmail",
+      "status": "completed",
+      "input": { "to": "user@example.com" },
+      "output": { "success": true },
+      "createdAt": "2024-01-01T00:00:00Z",
+      "startedAt": "2024-01-01T00:00:01Z",
+      "finishedAt": "2024-01-01T00:00:05Z",
+      "updatedAt": "2024-01-01T00:00:05Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 100,
+    "totalPages": 5
+  }
+}
+```
+
+#### `GET /jobs/:id`
+
+Get a job by its ID.
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "actionName": "sendEmail",
+  "status": "completed",
+  "input": { "to": "user@example.com" },
+  "output": { "success": true },
+  "createdAt": "2024-01-01T00:00:00Z",
+  "startedAt": "2024-01-01T00:00:01Z",
+  "finishedAt": "2024-01-01T00:00:05Z",
+  "updatedAt": "2024-01-01T00:00:05Z"
+}
+```
+
+#### `GET /jobs/:id/status`
+
+Get job status and updatedAt timestamp.
+
+**Response:**
+```json
+{
+  "status": "completed",
+  "updatedAt": "2024-01-01T00:00:05Z"
+}
+```
+
+#### `POST /jobs/:id/cancel`
+
+Cancel a job.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Job uuid has been cancelled"
+}
+```
+
+#### `POST /jobs/:id/retry`
+
+Retry a failed job.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Job uuid has been retried",
+  "newJobId": "new-uuid"
+}
+```
+
+### Steps
+
+#### `GET /jobs/:id/steps`
+
+Get steps for a job with pagination and search.
+
+**Query Parameters:**
+- `page` - Page number (default: 1)
+- `pageSize` - Items per page (default: 20, max: 1000)
+- `search` - Fuzzy search in step names
+- `fUpdatedAfter` - Steps updated after this date (ISO string)
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "jobId": "job-uuid",
+      "name": "fetchUser",
+      "status": "completed",
+      "createdAt": "2024-01-01T00:00:00Z",
+      "startedAt": "2024-01-01T00:00:01Z",
+      "finishedAt": "2024-01-01T00:00:02Z",
+      "updatedAt": "2024-01-01T00:00:02Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 5,
+    "totalPages": 1
+  }
+}
+```
+
+#### `GET /steps/:id`
+
+Get a step by its ID.
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "jobId": "job-uuid",
+  "name": "fetchUser",
+  "status": "completed",
+  "input": {},
+  "output": { "id": "123", "name": "John" },
+  "createdAt": "2024-01-01T00:00:00Z",
+  "startedAt": "2024-01-01T00:00:01Z",
+  "finishedAt": "2024-01-01T00:00:02Z",
+  "updatedAt": "2024-01-01T00:00:02Z"
+}
+```
+
+#### `GET /steps/:id/status`
+
+Get step status and updatedAt timestamp.
+
+**Response:**
+```json
+{
+  "status": "completed",
+  "updatedAt": "2024-01-01T00:00:02Z"
+}
+```
+
+### Actions
+
+#### `GET /actions`
+
+Get action statistics.
+
+**Response:**
+```json
+[
+  {
+    "name": "sendEmail",
+    "total": 100,
+    "completed": 95,
+    "failed": 3,
+    "active": 2,
+    "cancelled": 0,
+    "lastJobCreatedAt": "2024-01-01T00:00:00Z"
+  }
+]
+```
+
+#### `GET /actions/metadata`
+
+Get action metadata including input schemas and mock data.
+
+**Response:**
+```json
+[
+  {
+    "name": "sendEmail",
+    "mockInput": {
+      "to": "string",
+      "subject": "string",
+      "body": "string"
+    }
+  }
+]
+```
+
+#### `POST /actions/:actionName/run`
+
+Run an action by creating a new job.
+
+**Request Body:**
+```json
+{
+  "to": "user@example.com",
+  "subject": "Hello",
+  "body": "Test"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "jobId": "uuid"
+}
+```
+
+## Error Handling
+
+The server handles errors and returns appropriate status codes:
+
+- `400` - Validation error
+- `401` - Unauthorized
+- `404` - Not found
+- `500` - Internal server error
+
+**Error Response Format:**
+```json
+{
+  "error": "Error type",
+  "message": "Error message"
+}
+```
+
+## Authentication
+
+Authentication is optional. When the `login` option is provided, all API endpoints (except `/login` and `/refresh`) require authentication via JWT tokens.
+
+To authenticate, include the access token in the `Authorization` header:
+
+```
+Authorization: Bearer <accessToken>
+```
+
+### Token Management
+
+The authentication system uses a two-token approach:
+
+- **Access Token**: Short-lived token used for API requests (default: `'1h'`)
+- **Refresh Token**: Long-lived token used to obtain new access tokens (default: `'7d'`)
+
+Token expiration times can be configured via:
+- `login.expirationTime` - Access token expiration (defaults to `'1h'`)
+- `login.refreshTokenExpirationTime` - Refresh token expiration (defaults to `'7d'`)
+
+### Login
+
+Get tokens by calling the `POST /login` endpoint with valid credentials:
+
+```json
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+
+Response:
+```json
+{
+  "accessToken": "eyJ...",
+  "refreshToken": "eyJ..."
+}
+```
+
+### Token Refresh
+
+When the access token expires, use the `POST /refresh` endpoint to obtain a new access token:
+
+```json
+{
+  "refreshToken": "eyJ..."
+}
+```
+
+Response:
+```json
+{
+  "accessToken": "eyJ..."
+}
+```
+
+If `login` is not provided, all endpoints are publicly accessible without authentication.
+
+## Example: Full Server Setup
+
+```ts
+import { Elysia } from 'elysia'
+import { createServer } from 'duron/server'
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+
+// Create Duron client
+const client = duron({
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+  }),
+  actions: {
+    sendEmail,
+    processOrder,
+  },
+})
+
+// Create API server
+const api = createServer({
+  client,
+  prefix: '/api',
+  login: {
+    onLogin: async ({ email, password }) => {
+      // Your authentication logic
+      return await authenticateUser(email, password)
+    },
+    jwtSecret: process.env.JWT_SECRET!,
+    expirationTime: '1h', // Optional, defaults to '1h' (access token)
+    refreshTokenExpirationTime: '7d', // Optional, defaults to '7d' (refresh token)
+  },
+})
+
+// Create main app
+const app = new Elysia()
+  .use(api)
+  .listen(3000)
+
+console.log('Server running on http://localhost:3000')
+```

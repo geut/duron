@@ -1,0 +1,107 @@
+---
+title: Getting Started
+description: Learn how to get started with Duron, a powerful job queue system for Node.js and Bun.js
+icon: Rocket
+---
+
+Duron is a powerful, type-safe job queue system built for Node.js and Bun.js. It provides a robust way to manage background jobs, handle concurrency, retries, and more.
+
+## Installation
+
+Install Duron using your preferred package manager:
+
+```bash
+# Using npm
+npm install duron
+
+# Using pnpm
+pnpm add duron
+
+# Using yarn
+yarn add duron
+
+# Using bun
+bun add duron
+```
+
+## Quick Start
+
+Here's a simple example to get you started:
+
+```ts
+import { duron } from 'duron'
+import { defineAction } from 'duron/action'
+import { pgliteAdapter } from 'duron/adapters/pglite'
+import { z } from 'zod'
+
+// Define an action
+const sendEmail = defineAction()({
+  name: 'sendEmail',
+  input: z.object({
+    to: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  output: z.object({
+    success: z.boolean(),
+  }),
+  handler: async (ctx) => {
+    const { to, subject, body } = ctx.input
+
+    // Use steps to break down work into retryable units
+    const result = await ctx.step('sendEmail', async ({ signal }) => {
+      // Your email sending logic here
+      // The signal can be used to handle cancellation
+      console.log(`Sending email to ${to}`)
+
+      // Simulate API call
+      const response = await fetch('https://api.email.com/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, subject, body }),
+        signal, // Pass signal to enable cancellation
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to send email')
+      }
+
+      return await response.json()
+    })
+
+    return {
+      success: result.success ?? true,
+    }
+  },
+})
+
+// Create a Duron client
+const client = duron({
+  database: pgliteAdapter({
+    connection: ':memory:',
+  }),
+  actions: {
+    sendEmail,
+  },
+  logger: 'info',
+})
+
+// Start the client
+await client.start()
+
+// Run an action
+const jobId = await client.runAction('sendEmail', {
+  to: 'user@example.com',
+  subject: 'Hello',
+  body: 'This is a test email',
+})
+
+console.log(`Job created with ID: ${jobId}`)
+```
+
+## What's Next?
+
+- Learn about [Actions](/docs/actions) - the building blocks of Duron
+- Understand [Jobs and Steps](/docs/jobs-and-steps) - how work is organized
+- Explore [Adapters](/docs/adapters) - database backends
+- Check out [Examples](/docs/examples) - real-world use cases

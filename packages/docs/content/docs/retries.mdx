@@ -1,0 +1,284 @@
+---
+title: Retries
+description: Learn how to configure retries for actions and steps
+icon: RefreshCw
+---
+
+Duron provides built-in retry functionality for handling transient failures. You can configure retries at both the action and step levels.
+
+## Retry Configuration
+
+Retry configuration uses exponential backoff with configurable limits and timeouts.
+
+```ts
+{
+  retry: {
+    limit: 4,        // Maximum number of retry attempts
+    factor: 2,       // Exponential backoff factor
+    minTimeout: 1000, // Minimum delay before first retry (ms)
+    maxTimeout: 30000, // Maximum delay between retries (ms)
+  },
+}
+```
+
+### Retry Options
+
+#### `limit`
+
+Maximum number of retry attempts. Defaults to `4`.
+
+```ts
+{
+  retry: {
+    limit: 3, // Retry up to 3 times
+  },
+}
+```
+
+#### `factor`
+
+Exponential backoff factor. The delay between retries is calculated as: `minTimeout * (factor ^ attemptNumber)`. Defaults to `2`.
+
+```ts
+{
+  retry: {
+    factor: 2, // Double the delay each retry
+  },
+}
+```
+
+#### `minTimeout`
+
+Minimum delay in milliseconds before the first retry. Defaults to `1000`.
+
+```ts
+{
+  retry: {
+    minTimeout: 2000, // Wait at least 2 seconds before retrying
+  },
+}
+```
+
+#### `maxTimeout`
+
+Maximum delay in milliseconds between retries. The calculated delay will be capped at this value. Defaults to `30000`.
+
+```ts
+{
+  retry: {
+    maxTimeout: 60000, // Cap retry delays at 60 seconds
+  },
+}
+```
+
+## Action-Level Retries
+
+Configure retries for all steps in an action:
+
+```ts
+const processOrder = defineAction()({
+  name: 'processOrder',
+  steps: {
+    retry: {
+      limit: 3,
+      factor: 2,
+      minTimeout: 1000,
+      maxTimeout: 10000,
+    },
+  },
+  handler: async (ctx) => {
+    // All steps will use the retry configuration above
+    await ctx.step('fetchUser', async () => {
+      return await fetchUser(ctx.input.userId)
+    })
+  },
+})
+```
+
+## Step-Level Retries
+
+Override retry configuration for specific steps:
+
+```ts
+handler: async (ctx) => {
+  // Use default retry configuration
+  await ctx.step('fetchUser', async () => {
+    return await fetchUser(ctx.input.userId)
+  })
+
+  // Override retry configuration for this step
+  await ctx.step('riskyOperation', async () => {
+    return await riskyOperation()
+  }, {
+    retry: {
+      limit: 5,
+      factor: 3,
+      minTimeout: 2000,
+      maxTimeout: 30000,
+    },
+  })
+}
+```
+
+## Retry Behavior
+
+### When Retries Happen
+
+Retries are triggered when a step throws an error. The step will be retried up to `limit` times before failing.
+
+```ts
+await ctx.step('fetchData', async () => {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error('Failed to fetch') // This will trigger a retry
+  }
+  return response.json()
+}, {
+  retry: {
+    limit: 3,
+  },
+})
+```
+
+### Retry Delays
+
+The delay between retries follows exponential backoff:
+
+- **Attempt 1**: `minTimeout` ms
+- **Attempt 2**: `minTimeout * factor` ms
+- **Attempt 3**: `minTimeout * factor^2` ms
+- **Attempt N**: `minTimeout * factor^(N-1)` ms (capped at `maxTimeout`)
+
+Example with `minTimeout: 1000`, `factor: 2`:
+- Attempt 1: 1000ms
+- Attempt 2: 2000ms
+- Attempt 3: 4000ms
+- Attempt 4: 8000ms (capped at `maxTimeout`)
+
+### Non-Retriable Errors
+
+Some errors should not be retried. Use `NonRetriableError` to skip retries:
+
+```ts
+import { NonRetriableError } from 'duron/errors'
+
+await ctx.step('validateInput', async () => {
+  if (!isValid(ctx.input)) {
+    throw new NonRetriableError('Invalid input') // Won't retry
+  }
+}, {
+  retry: {
+    limit: 3,
+  },
+})
+```
+
+## Complete Example
+
+```ts
+import { defineAction } from 'duron/action'
+import { NonRetriableError } from 'duron/errors'
+import { z } from 'zod'
+
+const sendEmail = defineAction()({
+  name: 'sendEmail',
+  input: z.object({
+    to: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  steps: {
+    retry: {
+      limit: 3,
+      factor: 2,
+      minTimeout: 1000,
+      maxTimeout: 10000,
+    },
+  },
+  handler: async (ctx) => {
+    // Validate input (don't retry validation errors)
+    await ctx.step('validateInput', async () => {
+      if (!ctx.input.to.includes('@')) {
+        throw new NonRetriableError('Invalid email')
+      }
+    }, {
+      retry: {
+        limit: 0, // Don't retry validation
+      },
+    })
+
+    // Fetch user (retry on transient failures)
+    const user = await ctx.step('fetchUser', async () => {
+      return await fetchUser(ctx.input.to)
+    })
+
+    // Send email (use default retry config)
+    await ctx.step('sendEmail', async () => {
+      return await sendEmailToUser(user, ctx.input.subject, ctx.input.body)
+    })
+
+    return { success: true }
+  },
+})
+```
+
+## Best Practices
+
+### Retry Transient Failures
+
+Only retry errors that might succeed on retry:
+
+```ts
+await ctx.step('fetchData', async () => {
+  try {
+    return await fetch(url)
+  } catch (error) {
+    // Retry network errors
+    if (error instanceof NetworkError) {
+      throw error
+    }
+    // Don't retry validation errors
+    throw new NonRetriableError(error)
+  }
+})
+```
+
+### Use Appropriate Limits
+
+Set retry limits based on the operation:
+
+```ts
+// Quick operations: fewer retries
+{
+  retry: {
+    limit: 2,
+    minTimeout: 500,
+  },
+}
+
+// Slow operations: more retries
+{
+  retry: {
+    limit: 5,
+    minTimeout: 2000,
+    maxTimeout: 60000,
+  },
+}
+```
+
+### Consider Timeouts
+
+Ensure retry configuration works with step timeouts:
+
+```ts
+// If step timeout is 10 seconds and retry limit is 5,
+// make sure total retry time doesn't exceed timeout
+{
+  expire: 60 * 1000, // 60 seconds
+  retry: {
+    limit: 3,
+    minTimeout: 1000,
+    maxTimeout: 10000,
+  },
+}
+```

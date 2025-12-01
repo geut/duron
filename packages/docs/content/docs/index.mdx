@@ -1,0 +1,117 @@
+---
+title: Duron
+description: A powerful, type-safe job queue system for Node.js and Bun.js
+icon: Zap
+---
+
+Duron is a powerful, type-safe job queue system built for Node.js and Bun.js. It provides a robust way to manage background jobs, handle concurrency, retries, and more.
+
+## Features
+
+- **Type-Safe** - Full TypeScript support with Zod validation
+- **Flexible** - Support for multiple database backends (PostgreSQL, PGLite)
+- **Reliable** - Built-in retry logic and error handling
+- **Scalable** - Multi-process support and concurrency control
+- **Observable** - Track jobs and steps with detailed status information
+- **Simple** - Easy-to-use API with sensible defaults
+
+## Quick Start
+
+```ts
+import { duron } from 'duron'
+import { defineAction } from 'duron/action'
+import { pgliteAdapter } from 'duron/adapters/pglite'
+import { z } from 'zod'
+
+const sendEmail = defineAction()({
+  name: 'sendEmail',
+  input: z.object({
+    to: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  handler: async (ctx) => {
+    // Use steps to break down work into retryable units
+    await ctx.step('sendEmail', async ({ signal }) => {
+      console.log(`Sending email to ${ctx.input.to}`)
+      // Your email sending logic here
+      // The signal can be used to handle cancellation
+      const response = await fetch('https://api.email.com/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ctx.input),
+        signal,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to send email')
+      }
+    })
+
+    return { success: true }
+  },
+})
+
+const client = duron({
+  database: pgliteAdapter({ connection: ':memory:' }),
+  actions: { sendEmail },
+})
+
+await client.start()
+
+const jobId = await client.runAction('sendEmail', {
+  to: 'user@example.com',
+  subject: 'Hello',
+  body: 'This is a test email',
+})
+```
+
+## Documentation
+
+<Cards>
+  <Card
+    title="Getting Started"
+    description="Learn how to get started with Duron"
+    href="/docs/getting-started"
+  />
+  <Card
+    title="Actions"
+    description="Learn how to define and use actions"
+    href="/docs/actions"
+  />
+  <Card
+    title="Jobs and Steps"
+    description="Understand how jobs and steps work"
+    href="/docs/jobs-and-steps"
+  />
+  <Card
+    title="Client API"
+    description="Complete reference for the Duron Client API"
+    href="/docs/client-api"
+  />
+  <Card
+    title="Server API"
+    description="Create HTTP API endpoints for Duron"
+    href="/docs/server-api"
+  />
+  <Card
+    title="Adapters"
+    description="Learn about database adapters"
+    href="/docs/adapters"
+  />
+  <Card
+    title="Retries"
+    description="Configure retries for actions and steps"
+    href="/docs/retries"
+  />
+  <Card
+    title="Error Handling"
+    description="Learn how to handle errors in Duron"
+    href="/docs/error-handling"
+  />
+  <Card
+    title="Examples"
+    description="Real-world examples and use cases"
+    href="/docs/examples"
+  />
+</Cards>

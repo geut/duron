@@ -1,0 +1,87 @@
+{
+  "name": "duron",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "dev-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "dev-source": "./src/client.ts",
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    },
+    "./action": {
+      "dev-source": "./src/action.ts",
+      "types": "./dist/action.d.ts",
+      "default": "./dist/action.js"
+    },
+    "./constants": {
+      "dev-source": "./src/constants.ts",
+      "types": "./dist/constants.d.ts",
+      "default": "./dist/constants.js"
+    },
+    "./server": {
+      "dev-source": "./src/server.ts",
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
+    "./adapter": {
+      "dev-source": "./src/adapters/adapter.ts",
+      "types": "./dist/adapters/adapter.d.ts",
+      "default": "./dist/adapters/adapter.js"
+    },
+    "./adapters/postgres": {
+      "dev-source": "./src/adapters/postgres/postgres.ts",
+      "types": "./dist/adapters/postgres/postgres.d.ts",
+      "default": "./dist/adapters/postgres/postgres.js"
+    },
+    "./adapters/postgres/schema": {
+      "dev-source": "./src/adapters/postgres/schema.ts",
+      "types": "./dist/adapters/postgres/schema.d.ts",
+      "default": "./dist/adapters/postgres/schema.js"
+    },
+    "./adapters/pglite": {
+      "dev-source": "./src/adapters/postgres/pglite.ts",
+      "types": "./dist/adapters/postgres/pglite.d.ts",
+      "default": "./dist/adapters/postgres/pglite.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "migrations"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.node.json",
+    "dev": "tsc --watch --project tsconfig.node.json",
+    "prepublishOnly": "bun run build",
+    "test": "bun test --concurrent",
+    "generate:postgres": "bunx --bun drizzle-kit generate --config ./src/adapters/postgres/drizzle.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "@types/bun": "latest",
+    "@types/node": "^24.0.15",
+    "postgres": "^3.4.7",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "drizzle-kit": "^0.31.7",
+    "drizzle-orm": "^0.44.7",
+    "elysia": "^1.4.16",
+    "fastq": "^1.19.1",
+    "jose": "^6.1.2",
+    "p-retry": "^7.1.0",
+    "p-timeout": "^7.0.1",
+    "pino": "^10.1.0",
+    "zocker": "^3.0.0",
+    "zod": "^4.1.12"
+  }
+}

@@ -1,0 +1,210 @@
+---
+title: Adapters
+description: Learn about database adapters in Duron
+icon: Database
+---
+
+Duron uses adapters to interact with different database backends. Adapters abstract away the database-specific implementation details, allowing you to use Duron with any supported database.
+
+## Available Adapters
+
+### PostgreSQL Adapter
+
+The PostgreSQL adapter uses Drizzle ORM to interact with PostgreSQL databases.
+
+```ts
+import { postgresAdapter } from 'duron/adapters/postgres'
+
+const adapter = postgresAdapter({
+  connection: process.env.DATABASE_URL || 'postgres://user:pass@localhost:5432/db',
+  schema: 'duron', // Optional, defaults to 'duron'
+  migrateOnStart: true, // Optional, defaults to true
+})
+```
+
+**Options:**
+- `connection` - PostgreSQL connection string or postgres.js options object
+- `schema` - Database schema name (default: `'duron'`)
+- `migrateOnStart` - Whether to run migrations on startup (default: `true`)
+
+### PGLite Adapter
+
+The PGLite adapter extends the PostgreSQL adapter to work with PGLite (in-memory PostgreSQL). Perfect for development and testing.
+
+```ts
+import { pgliteAdapter } from 'duron/adapters/pglite'
+
+const adapter = pgliteAdapter({
+  connection: ':memory:', // or a file path for persistence
+  schema: 'duron', // Optional, defaults to 'duron'
+  migrateOnStart: true, // Optional, defaults to true
+})
+```
+
+**Options:**
+- `connection` - `':memory:'` for in-memory database, or a file path for persistence
+- `schema` - Database schema name (default: `'duron'`)
+- `migrateOnStart` - Whether to run migrations on startup (default: `true`)
+
+## Using Adapters
+
+Pass the adapter to the Duron client:
+
+```ts
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+
+const client = duron({
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+  }),
+  actions: {
+    sendEmail,
+  },
+})
+```
+
+## Database Schema
+
+Duron creates the following tables in your database:
+
+### `jobs` Table
+
+Stores job information.
+
+- `id` - UUID primary key
+- `action_name` - Name of the action
+- `group_key` - Group key for concurrency control
+- `checksum` - Checksum of the action definition
+- `input` - JSONB input data
+- `output` - JSONB output data (nullable)
+- `error` - JSONB error data (nullable)
+- `status` - Job status (`created`, `active`, `completed`, `failed`, `cancelled`)
+- `timeout_ms` - Timeout in milliseconds
+- `concurrency_limit` - Concurrency limit for the group
+- `created_at` - Timestamp
+- `started_at` - Timestamp (nullable)
+- `finished_at` - Timestamp (nullable)
+- `updated_at` - Timestamp
+- `owner_id` - ID of the Duron instance that owns the job
+
+### `job_steps` Table
+
+Stores step information.
+
+- `id` - UUID primary key
+- `job_id` - Foreign key to jobs table
+- `name` - Step name
+- `input` - JSONB input data
+- `output` - JSONB output data (nullable)
+- `error` - JSONB error data (nullable)
+- `status` - Step status (`active`, `completed`, `failed`, `cancelled`)
+- `timeout_ms` - Timeout in milliseconds
+- `delay_ms` - Delay in milliseconds (nullable)
+- `created_at` - Timestamp
+- `started_at` - Timestamp (nullable)
+- `finished_at` - Timestamp (nullable)
+- `updated_at` - Timestamp
+- `owner_id` - ID of the Duron instance that owns the step
+
+### Migrations
+
+Duron automatically runs migrations on startup if `migrateOnStart` is enabled. Migrations are located in the `migrations/postgres` directory.
+
+To generate new migrations:
+
+```bash
+bun run generate:postgres
+```
+
+## Custom Adapters
+
+You can create custom adapters by extending the `Adapter` class:
+
+```ts
+import { Adapter } from 'duron/adapter'
+import type {
+  CreateJobOptions,
+  Job,
+  // ... other types
+} from 'duron/adapter'
+
+export class MyCustomAdapter extends Adapter {
+  async _start() {
+    // Initialize your database connection
+  }
+
+  async _stop() {
+    // Close your database connection
+  }
+
+  protected async _createJob(options: CreateJobOptions): Promise<string | null> {
+    // Implement job creation
+  }
+
+  protected async _fetch(options: FetchOptions): Promise<Job[]> {
+    // Implement job fetching
+  }
+
+  // ... implement other required methods
+}
+```
+
+See the [Adapter API Reference](/docs/adapters) for all required methods.
+
+## Best Practices
+
+### Use PGLite for Development
+
+PGLite is perfect for development and testing:
+
+```ts
+const adapter = pgliteAdapter({
+  connection: ':memory:',
+})
+```
+
+### Use PostgreSQL for Production
+
+PostgreSQL is recommended for production:
+
+```ts
+const adapter = postgresAdapter({
+  connection: process.env.DATABASE_URL!,
+  schema: 'duron',
+})
+```
+
+### Connection Pooling
+
+For PostgreSQL, use connection pooling:
+
+```ts
+import postgres from 'postgres'
+
+const sql = postgres(process.env.DATABASE_URL!, {
+  max: 10, // Connection pool size
+})
+
+const adapter = postgresAdapter({
+  connection: sql,
+})
+```
+
+### Schema Isolation
+
+Use different schemas for different environments:
+
+```ts
+// Development
+const adapter = postgresAdapter({
+  connection: process.env.DATABASE_URL!,
+  schema: 'duron_dev',
+})
+
+// Production
+const adapter = postgresAdapter({
+  connection: process.env.DATABASE_URL!,
+  schema: 'duron_prod',
+})
+```

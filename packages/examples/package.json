@@ -1,0 +1,18 @@
+{
+  "name": "examples",
+  "private": true,
+  "dependencies": {
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "duron": "workspace:*",
+    "duron-dashboard": "workspace:*"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "scripts": {
+    "basic": "bun --hot basic/start.ts"
+  }
+}

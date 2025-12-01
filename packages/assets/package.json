@@ -1,0 +1,8 @@
+{
+  "name": "assets",
+  "private": true,
+  "exports": {
+    "./favicon": "./favicon.svg",
+    "./logo": "./logo.svg"
+  }
+}

@@ -1,0 +1,282 @@
+---
+title: Jobs and Steps
+description: Understand how jobs and steps work in Duron
+icon: Workflow
+---
+
+Duron organizes work into **jobs** and **steps**. Understanding these concepts is key to using Duron effectively.
+
+## Jobs
+
+A **job** represents a single execution of an action. When you call `client.runAction()`, Duron creates a new job.
+
+### Job Lifecycle
+
+Jobs go through the following states:
+
+1. **`created`** - Job has been created but not yet started
+2. **`active`** - Job is currently being executed
+3. **`completed`** - Job finished successfully
+4. **`failed`** - Job failed with an error
+5. **`cancelled`** - Job was cancelled before completion
+
+### Creating Jobs
+
+Jobs are created automatically when you call `runAction()`:
+
+```ts
+const jobId = await client.runAction('sendEmail', {
+  to: 'user@example.com',
+  subject: 'Hello',
+  body: 'Test',
+})
+```
+
+### Job Properties
+
+Each job has the following properties:
+
+- **`id`** - Unique identifier (UUID)
+- **`actionName`** - Name of the action
+- **`groupKey`** - Group key for concurrency control
+- **`status`** - Current status
+- **`input`** - Input data passed to the action
+- **`output`** - Output data returned by the action (if completed)
+- **`error`** - Error information (if failed)
+- **`createdAt`** - Timestamp when job was created
+- **`startedAt`** - Timestamp when job started
+- **`finishedAt`** - Timestamp when job finished
+- **`updatedAt`** - Timestamp when job was last updated
+- **`ownerId`** - ID of the Duron instance that owns the job
+- **`checksum`** - Checksum of the action definition
+
+### Querying Jobs
+
+You can query jobs using the client:
+
+```ts
+// Get a job by ID
+const job = await client.getJobById(jobId)
+
+// Get jobs with filters and pagination
+const result = await client.getJobs({
+  page: 1,
+  pageSize: 20,
+  filters: {
+    status: ['active', 'completed'],
+    actionName: ['sendEmail'],
+  },
+  sort: [
+    { field: 'createdAt', order: 'desc' },
+  ],
+})
+```
+
+### Cancelling Jobs
+
+You can cancel a job:
+
+```ts
+await client.cancelJob(jobId)
+```
+
+### Retrying Jobs
+
+You can retry a failed job:
+
+```ts
+const newJobId = await client.retryJob(jobId)
+```
+
+## Steps
+
+**Steps** are units of work within an action. They allow you to break down complex actions into smaller, trackable pieces.
+
+### Creating Steps
+
+Steps are created using `ctx.step()`:
+
+```ts
+const processOrder = defineAction()({
+  name: 'processOrder',
+  handler: async (ctx) => {
+    // Step 1: Fetch user
+    const user = await ctx.step('fetchUser', async ({ signal }) => {
+      return await fetchUser(ctx.input.userId, { signal })
+    })
+
+    // Step 2: Validate order
+    await ctx.step('validateOrder', async ({ signal }) => {
+      return await validateOrder(ctx.input.orderId, { signal })
+    })
+
+    // Step 3: Process payment
+    const payment = await ctx.step('processPayment', async ({ signal }) => {
+      return await processPayment(ctx.input.orderId, { signal })
+    })
+
+    return { success: true }
+  },
+})
+```
+
+### Step Context
+
+The step handler receives a context object with:
+
+- **`signal`** - AbortSignal for cancellation support
+
+```ts
+await ctx.step('fetchData', async ({ signal }) => {
+  // Use signal for cancellation
+  const response = await fetch(url, { signal })
+  return response.json()
+})
+```
+
+### Step Options
+
+You can configure steps with options:
+
+```ts
+await ctx.step(
+  'fetchData',
+  async ({ signal }) => {
+    return await fetchData({ signal })
+  },
+  {
+    expire: 10 * 60 * 1000, // 10 minute timeout
+    retry: {
+      limit: 3,
+      factor: 2,
+      minTimeout: 1000,
+      maxTimeout: 10000,
+    },
+  }
+)
+```
+
+#### `expire`
+
+Timeout in milliseconds for the step. Defaults to the action's `steps.expire` value.
+
+```ts
+{
+  expire: 5 * 60 * 1000, // 5 minutes
+}
+```
+
+#### `retry`
+
+Retry configuration for the step. See [Retries](/docs/retries) for details.
+
+```ts
+{
+  retry: {
+    limit: 3,
+    factor: 2,
+    minTimeout: 1000,
+    maxTimeout: 10000,
+  },
+}
+```
+
+### Step Lifecycle
+
+Steps go through the following states:
+
+1. **`active`** - Step is currently executing
+2. **`completed`** - Step finished successfully
+3. **`failed`** - Step failed with an error
+4. **`cancelled`** - Step was cancelled
+
+### Step Properties
+
+Each step has the following properties:
+
+- **`id`** - Unique identifier (UUID)
+- **`jobId`** - ID of the parent job
+- **`name`** - Name of the step
+- **`status`** - Current status
+- **`input`** - Input data (serialized)
+- **`output`** - Output data (if completed)
+- **`error`** - Error information (if failed)
+- **`createdAt`** - Timestamp when step was created
+- **`startedAt`** - Timestamp when step started
+- **`finishedAt`** - Timestamp when step finished
+- **`updatedAt`** - Timestamp when step was last updated
+- **`ownerId`** - ID of the Duron instance that owns the step
+
+### Querying Steps
+
+You can query steps for a job:
+
+```ts
+// Get steps for a job
+const result = await client.getJobSteps({
+  jobId,
+  page: 1,
+  pageSize: 20,
+  search: 'fetch', // Fuzzy search in step names
+})
+
+// Get a step by ID
+const step = await client.getJobStepById(stepId)
+```
+
+### Step Concurrency
+
+Steps within an action respect the `steps.concurrency` limit. By default, up to 10 steps can run concurrently per action.
+
+```ts
+{
+  name: 'processOrder',
+  steps: {
+    concurrency: 5, // Allow up to 5 concurrent steps
+  },
+}
+```
+
+## Best Practices
+
+### Use Steps for Trackable Work
+
+Break down complex actions into steps for better observability:
+
+```ts
+handler: async (ctx) => {
+  // Good: Each operation is a step
+  const user = await ctx.step('fetchUser', async () => fetchUser())
+  const order = await ctx.step('createOrder', async () => createOrder())
+  const email = await ctx.step('sendConfirmation', async () => sendEmail())
+
+  return { success: true }
+}
+```
+
+### Use AbortSignal for Cancellation
+
+Always use the `signal` parameter for cancellation support:
+
+```ts
+await ctx.step('fetchData', async ({ signal }) => {
+  const response = await fetch(url, { signal })
+  return response.json()
+})
+```
+
+### Handle Step Failures
+
+Steps can fail independently. Handle failures appropriately:
+
+```ts
+try {
+  const result = await ctx.step('riskyOperation', async () => {
+    return await riskyOperation()
+  })
+} catch (error) {
+  // Handle step failure
+  ctx.logger.error({ error }, 'Step failed')
+  throw error // Re-throw to fail the action
+}
+```

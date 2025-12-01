@@ -1,0 +1,426 @@
+---
+title: Examples
+description: Real-world examples and use cases for Duron
+icon: BookOpen
+---
+
+Here are some real-world examples demonstrating how to use Duron in different scenarios.
+
+## Basic Email Sending
+
+A simple example of sending emails with retry logic:
+
+```ts
+import { duron } from 'duron'
+import { defineAction } from 'duron/action'
+import { pgliteAdapter } from 'duron/adapters/pglite'
+import { z } from 'zod'
+
+const sendEmail = defineAction()({
+  name: 'sendEmail',
+  input: z.object({
+    to: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  output: z.object({
+    success: z.boolean(),
+    messageId: z.string(),
+  }),
+  steps: {
+    retry: {
+      limit: 3,
+      factor: 2,
+      minTimeout: 1000,
+      maxTimeout: 10000,
+    },
+  },
+  handler: async (ctx) => {
+    const { to, subject, body } = ctx.input
+
+    const result = await ctx.step('sendEmail', async ({ signal }) => {
+      // Your email sending logic here
+      const response = await fetch('https://api.email.com/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, subject, body }),
+        signal,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to send email')
+      }
+
+      const data = await response.json()
+      return data
+    })
+
+    return {
+      success: true,
+      messageId: result.messageId,
+    }
+  },
+})
+
+const client = duron({
+  database: pgliteAdapter({ connection: ':memory:' }),
+  actions: {
+    sendEmail,
+  },
+})
+
+await client.start()
+
+// Send an email
+const jobId = await client.runAction('sendEmail', {
+  to: 'user@example.com',
+  subject: 'Hello',
+  body: 'This is a test email',
+})
+
+console.log(`Email job created: ${jobId}`)
+```
+
+## Order Processing with Steps
+
+Process orders with multiple steps and error handling:
+
+```ts
+import { defineAction } from 'duron/action'
+import { NonRetriableError } from 'duron/errors'
+import { z } from 'zod'
+
+const processOrder = defineAction<{ db: Database; paymentService: PaymentService }>()({
+  name: 'processOrder',
+  input: z.object({
+    orderId: z.string(),
+    userId: z.string(),
+    items: z.array(z.object({
+      productId: z.string(),
+      quantity: z.number(),
+    })),
+  }),
+  output: z.object({
+    success: z.boolean(),
+    orderNumber: z.string(),
+  }),
+  groups: {
+    groupKey: async (ctx) => `user-${ctx.input.userId}`,
+    concurrency: async () => 1, // Process one order per user at a time
+  },
+  steps: {
+    concurrency: 5,
+    retry: {
+      limit: 3,
+      factor: 2,
+      minTimeout: 1000,
+      maxTimeout: 10000,
+    },
+  },
+  handler: async (ctx) => {
+    const { orderId, userId, items } = ctx.input
+
+    // Step 1: Validate order
+    await ctx.step('validateOrder', async () => {
+      if (items.length === 0) {
+        throw new NonRetriableError('Order must have at least one item')
+      }
+    }, {
+      retry: {
+        limit: 0, // Don't retry validation
+      },
+    })
+
+    // Step 2: Fetch user
+    const user = await ctx.step('fetchUser', async ({ signal }) => {
+      return await ctx.var.db.users.findById(userId, { signal })
+    })
+
+    if (!user) {
+      throw new NonRetriableError('User not found')
+    }
+
+    // Step 3: Check inventory
+    await ctx.step('checkInventory', async ({ signal }) => {
+      for (const item of items) {
+        const product = await ctx.var.db.products.findById(item.productId, { signal })
+        if (!product || product.stock < item.quantity) {
+          throw new NonRetriableError(`Insufficient stock for product ${item.productId}`)
+        }
+      }
+    })
+
+    // Step 4: Process payment
+    const payment = await ctx.step('processPayment', async ({ signal }) => {
+      return await ctx.var.paymentService.charge({
+        userId,
+        amount: calculateTotal(items),
+        orderId,
+      }, { signal })
+    })
+
+    if (!payment.success) {
+      throw new NonRetriableError('Payment failed')
+    }
+
+    // Step 5: Create order
+    const order = await ctx.step('createOrder', async ({ signal }) => {
+      return await ctx.var.db.orders.create({
+        orderId,
+        userId,
+        items,
+        paymentId: payment.id,
+        status: 'confirmed',
+      }, { signal })
+    })
+
+    // Step 6: Update inventory
+    await ctx.step('updateInventory', async ({ signal }) => {
+      for (const item of items) {
+        await ctx.var.db.products.decrementStock(item.productId, item.quantity, { signal })
+      }
+    })
+
+    // Step 7: Send confirmation email
+    await ctx.step('sendConfirmation', async ({ signal }) => {
+      await sendEmail({
+        to: user.email,
+        subject: 'Order Confirmed',
+        body: `Your order ${order.orderNumber} has been confirmed.`,
+      }, { signal })
+    })
+
+    return {
+      success: true,
+      orderNumber: order.orderNumber,
+    }
+  },
+})
+```
+
+## Image Processing Pipeline
+
+Process images with multiple transformation steps:
+
+```ts
+import { defineAction } from 'duron/action'
+import { z } from 'zod'
+
+const processImage = defineAction<{ s3: S3Client; imageProcessor: ImageProcessor }>()({
+  name: 'processImage',
+  input: z.object({
+    imageUrl: z.string().url(),
+    transformations: z.array(z.object({
+      type: z.enum(['resize', 'crop', 'filter']),
+      params: z.record(z.any()),
+    })),
+  }),
+  output: z.object({
+    success: z.boolean(),
+    processedUrl: z.string(),
+  }),
+  steps: {
+    concurrency: 3,
+    expire: 10 * 60 * 1000, // 10 minutes
+    retry: {
+      limit: 2,
+      factor: 2,
+      minTimeout: 2000,
+      maxTimeout: 10000,
+    },
+  },
+  handler: async (ctx) => {
+    const { imageUrl, transformations } = ctx.input
+
+    // Step 1: Download image
+    const imageData = await ctx.step('downloadImage', async ({ signal }) => {
+      const response = await fetch(imageUrl, { signal })
+      if (!response.ok) {
+        throw new Error('Failed to download image')
+      }
+      return await response.arrayBuffer()
+    })
+
+    // Step 2: Apply transformations
+    let processedData = imageData
+    for (const transformation of transformations) {
+      processedData = await ctx.step(
+        `apply-${transformation.type}`,
+        async ({ signal }) => {
+          return await ctx.var.imageProcessor.apply(processedData, transformation, { signal })
+        },
+        {
+          expire: 5 * 60 * 1000, // 5 minutes per transformation
+        }
+      )
+    }
+
+    // Step 3: Upload processed image
+    const processedUrl = await ctx.step('uploadImage', async ({ signal }) => {
+      return await ctx.var.s3.upload(processedData, { signal })
+    })
+
+    return {
+      success: true,
+      processedUrl,
+    }
+  },
+})
+```
+
+## Data Synchronization
+
+Sync data between systems with retry logic:
+
+```ts
+import { defineAction } from 'duron/action'
+import { z } from 'zod'
+
+const syncData = defineAction<{ sourceDb: Database; targetDb: Database }>()({
+  name: 'syncData',
+  input: z.object({
+    table: z.string(),
+    lastSyncAt: z.date().optional(),
+  }),
+  output: z.object({
+    success: z.boolean(),
+    recordsSynced: z.number(),
+  }),
+  steps: {
+    retry: {
+      limit: 5,
+      factor: 2,
+      minTimeout: 5000,
+      maxTimeout: 60000,
+    },
+  },
+  handler: async (ctx) => {
+    const { table, lastSyncAt } = ctx.input
+
+    // Step 1: Fetch records from source
+    const records = await ctx.step('fetchRecords', async ({ signal }) => {
+      return await ctx.var.sourceDb.query({
+        table,
+        where: lastSyncAt ? { updatedAt: { $gt: lastSyncAt } } : {},
+      }, { signal })
+    })
+
+    if (records.length === 0) {
+      return {
+        success: true,
+        recordsSynced: 0,
+      }
+    }
+
+    // Step 2: Transform records
+    const transformed = await ctx.step('transformRecords', async ({ signal }) => {
+      return records.map(record => transformRecord(record))
+    })
+
+    // Step 3: Upsert to target
+    let synced = 0
+    for (const record of transformed) {
+      await ctx.step(`upsert-${record.id}`, async ({ signal }) => {
+        await ctx.var.targetDb.upsert({
+          table,
+          record,
+        }, { signal })
+        synced++
+      })
+    }
+
+    return {
+      success: true,
+      recordsSynced: synced,
+    }
+  },
+})
+```
+
+## Scheduled Jobs
+
+Use Duron with a scheduler to run periodic jobs:
+
+```ts
+import { duron } from 'duron'
+import { defineAction } from 'duron/action'
+import { postgresAdapter } from 'duron/adapters/postgres'
+import { z } from 'zod'
+
+const generateReport = defineAction()({
+  name: 'generateReport',
+  input: z.object({
+    reportType: z.enum(['daily', 'weekly', 'monthly']),
+    date: z.date(),
+  }),
+  output: z.object({
+    success: z.boolean(),
+    reportUrl: z.string(),
+  }),
+  handler: async (ctx) => {
+    const { reportType, date } = ctx.input
+
+    const report = await ctx.step('generateReport', async ({ signal }) => {
+      return await generateReportData(reportType, date, { signal })
+    })
+
+    const reportUrl = await ctx.step('uploadReport', async ({ signal }) => {
+      return await uploadReport(report, { signal })
+    })
+
+    return {
+      success: true,
+      reportUrl,
+    }
+  },
+})
+
+const client = duron({
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+  }),
+  actions: {
+    generateReport,
+  },
+})
+
+await client.start()
+
+// Schedule daily reports (using a cron library)
+import cron from 'node-cron'
+
+cron.schedule('0 0 * * *', async () => {
+  await client.runAction('generateReport', {
+    reportType: 'daily',
+    date: new Date(),
+  })
+})
+```
+
+## Multi-Process Setup
+
+Run Duron in multiple processes for scalability:
+
+```ts
+// worker-1.ts
+const client = duron({
+  id: 'worker-1',
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+  }),
+  actions: {
+    sendEmail,
+    processOrder,
+  },
+  multiProcessMode: true,
+  processTimeout: 5 * 60 * 1000,
+})
+
+await client.start()
+
+// worker-2.ts (same setup, different ID)
+const client = duron({
+  id: 'worker-2',
+  // ... same configuration
+})
+```

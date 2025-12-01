@@ -1,0 +1,4 @@
+[install]
+linker = "isolated"
+[test]
+timeout = 10000 # 10 seconds

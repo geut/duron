@@ -9,7 +9,7 @@ Duron is a modern, type-safe background job processing system built with TypeScr
 
 ## 📚 Documentation
 
-📖 **[View Full Documentation →](https://geut.github.io/duron/)**
+📖 **[View Full Documentation →](https://duron-docs.pages.dev/)**
 
 The complete documentation includes detailed guides on actions, adapters, client API, server API, error handling, retries, and more.
 

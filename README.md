@@ -40,7 +40,7 @@ The complete documentation includes detailed guides on actions, adapters, client
 ### Installation
 
 ```bash
-bun add duron
+bun add duron postgres
 # or
 npm install duron
 ```

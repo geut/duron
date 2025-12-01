@@ -6,16 +6,16 @@ A powerful, type-safe job queue system for Node.js and Bun.js. Duron provides a 
 
 ```bash
 # Using bun
-bun add duron
+bun add duron postgres
 
 # Using npm
-npm install duron
+npm install duron postgres
 
 # Using pnpm
-pnpm add duron
+pnpm add duron postgres
 
 # Using yarn
-yarn add duron
+yarn add duron postgres
 ```
 
 ## Quick Start

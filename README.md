@@ -7,6 +7,12 @@
 
 Duron is a modern, type-safe background job processing system built with TypeScript. It provides a robust foundation for executing asynchronous tasks with built-in retry logic, concurrency control, step-based execution, and comprehensive observability.
 
+## 📚 Documentation
+
+📖 **[View Full Documentation →](https://geut.github.io/duron/)**
+
+The complete documentation includes detailed guides on actions, adapters, client API, server API, error handling, retries, and more.
+
 ## ✨ Features
 
 - **Type-Safe Actions** - Define actions with Zod schemas for input/output validation
@@ -221,10 +227,6 @@ login: {
    - Use HTTPS in production
 
 The dashboard will automatically handle token refresh and maintain your session.
-
-## 📖 Documentation
-
-Full documentation is coming soon with Fumadocs. For now, check out the [examples directory](./packages/examples) for complete examples.
 
 ## 🤝 Contributing
 

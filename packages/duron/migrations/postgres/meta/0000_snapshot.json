@@ -1,5 +1,5 @@
 {
-  "id": "e46ba3be-8991-43b0-9aa1-0b0da5d37f56",
+  "id": "0811651b-5d13-459d-a0b0-52497e58c2b4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -215,6 +215,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_job_steps_output_fts": {
+          "name": "idx_job_steps_output_fts",
+          "columns": [
+            {
+              "expression": "to_tsvector('english', \"output\"::text)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -223,8 +238,12 @@
           "tableFrom": "job_steps",
           "tableTo": "jobs",
           "schemaTo": "duron",
-          "columnsFrom": ["job_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -234,7 +253,10 @@
         "unique_job_step_name": {
           "name": "unique_job_step_name",
           "nullsNotDistinct": false,
-          "columns": ["job_id", "name"]
+          "columns": [
+            "job_id",
+            "name"
+          ]
         }
       },
       "policies": {},

@@ -1,4 +1,4 @@
-CREATE SCHEMA IF NOT EXISTS "duron";
+CREATE SCHEMA "duron";
 --> statement-breakpoint
 CREATE TABLE "duron"."job_steps" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -48,6 +48,7 @@ CREATE INDEX "idx_job_steps_name" ON "duron"."job_steps" USING btree ("name");--
 CREATE INDEX "idx_job_steps_expires_at" ON "duron"."job_steps" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "idx_job_steps_job_status" ON "duron"."job_steps" USING btree ("job_id","status");--> statement-breakpoint
 CREATE INDEX "idx_job_steps_job_name" ON "duron"."job_steps" USING btree ("job_id","name");--> statement-breakpoint
+CREATE INDEX "idx_job_steps_output_fts" ON "duron"."job_steps" USING gin (to_tsvector('english', "output"::text));--> statement-breakpoint
 CREATE INDEX "idx_jobs_action_name" ON "duron"."jobs" USING btree ("action_name");--> statement-breakpoint
 CREATE INDEX "idx_jobs_status" ON "duron"."jobs" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "idx_jobs_group_key" ON "duron"."jobs" USING btree ("group_key");--> statement-breakpoint

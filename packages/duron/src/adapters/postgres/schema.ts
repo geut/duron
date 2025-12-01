@@ -101,6 +101,7 @@ export default function createSchema(schemaName: string) {
       // Composite indexes
       index('idx_job_steps_job_status').on(table.job_id, table.status),
       index('idx_job_steps_job_name').on(table.job_id, table.name),
+      index('idx_job_steps_output_fts').using('gin', sql`to_tsvector('english', ${table.output}::text)`),
       // Unique constraint
       unique('unique_job_step_name').on(table.job_id, table.name),
       check(

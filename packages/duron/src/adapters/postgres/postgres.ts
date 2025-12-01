@@ -876,9 +876,14 @@ export class PostgresAdapter extends Adapter {
 
     const jobStepsTable = this.tables.jobStepsTable
 
+    const fuzzySearch = search?.trim()
+
     const where = and(
       eq(jobStepsTable.job_id, jobId),
-      search && search.trim().length > 0 ? ilike(jobStepsTable.name, `%${search.trim()}%`) : undefined,
+      fuzzySearch && fuzzySearch.length > 0 ? ilike(jobStepsTable.name, `%${fuzzySearch}%`) : undefined,
+      fuzzySearch && fuzzySearch.length > 0
+        ? sql`to_tsvector('english', ${jobStepsTable.output}::text) @@ plainto_tsquery('english', ${fuzzySearch})`
+        : undefined,
       options.updatedAfter
         ? sql`date_trunc('milliseconds', ${jobStepsTable.updated_at}) > ${options.updatedAfter.toISOString()}::timestamptz`
         : undefined,

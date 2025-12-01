@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noConsole: we need to log for debugging */
 import { createContainer, waitForContainer } from './docker.js'
 
 console.log('🔄 Creating postgres container...')

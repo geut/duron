@@ -1,7 +1,7 @@
 ---
 title: Error Handling
 description: Learn how to handle errors in Duron
-icon: AlertCircle
+icon: CircleAlert
 ---
 
 Duron provides built-in retry logic for handling transient failures. However, some errors should not be retried. Use `NonRetriableError` to prevent Duron from retrying steps that will fail regardless of retry attempts.

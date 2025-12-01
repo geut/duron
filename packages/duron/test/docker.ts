@@ -82,7 +82,7 @@ async function waitForContainer(containerName: string, expectedMessage: string) 
 
 export const getPostgresConnection = async ({ containerName, port }: { containerName: string; port: number }) => {
   await createContainer({
-    image: 'postgres:16-alpine',
+    image: 'postgres',
     containerName,
     ports: [port, 5432],
     environment: {

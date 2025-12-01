@@ -404,6 +404,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
       })
     }
     this.#input = job.input ?? {}
+    this.step = this.step.bind(this)
   }
 
   // ============================================================================

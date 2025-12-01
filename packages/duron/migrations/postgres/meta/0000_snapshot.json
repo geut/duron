@@ -223,12 +223,8 @@
           "tableFrom": "job_steps",
           "tableTo": "jobs",
           "schemaTo": "duron",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["job_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -238,10 +234,7 @@
         "unique_job_step_name": {
           "name": "unique_job_step_name",
           "nullsNotDistinct": false,
-          "columns": [
-            "job_id",
-            "name"
-          ]
+          "columns": ["job_id", "name"]
         }
       },
       "policies": {},

@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noConsole: we need to log for debugging */
 import { execFile as baseExecFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -14,7 +15,7 @@ interface CreateContainerOptions {
   environment?: Record<string, string>
 }
 
-async function ensureImageExists(image: string) {
+export async function ensureImageExists(image: string) {
   try {
     // Check if image exists locally
     const { stdout } = await execFile('docker', ['images', '-q', image])
@@ -25,8 +26,15 @@ async function ensureImageExists(image: string) {
     // Image doesn't exist or error checking, proceed to pull
   }
 
-  // Pull the image if it doesn't exist
-  await execFile('docker', ['pull', image])
+  console.log('🔄 Pulling image...', image)
+  const proc = spawn('docker', ['pull', image])
+
+  const textDecoder = new TextDecoder()
+
+  for await (const chunk of proc.stdout!) {
+    const message = textDecoder.decode(chunk)
+    console.log(message)
+  }
 }
 
 export async function createContainer({ image, containerName, ports, environment }: CreateContainerOptions) {
@@ -112,10 +120,10 @@ export const getPostgresConnection = async ({ containerName, port }: { container
 
   await waitForContainer(containerName, 'PostgreSQL init process complete')
 
-  const name = crypto.randomUUID().split('-').at(-1)!
-
+  let name: string
   await pRetry(
     async () => {
+      name = crypto.randomUUID().split('-').at(-1)!
       await execFile('docker', ['exec', containerName, 'createdb', '-U', 'duron', name])
       await execFile('docker', [
         'exec',
@@ -138,7 +146,7 @@ export const getPostgresConnection = async ({ containerName, port }: { container
   )
 
   return {
-    CONNECTION_URL: `postgres://duron:duron@localhost:${port}/${name}`,
+    CONNECTION_URL: `postgres://duron:duron@localhost:${port}/${name!}`,
     deleteDb: async () => {
       await execFile('docker', ['exec', containerName, 'dropdb', '-U', 'duron', name])
     },

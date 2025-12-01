@@ -111,27 +111,32 @@ function runServerTests(adapterFactory: AdapterFactory) {
       },
     })
 
-    beforeEach(async () => {
-      const adapterInstance = await adapterFactory.create({})
-      deleteDb = adapterInstance.deleteDb
+    beforeEach(
+      async () => {
+        const adapterInstance = await adapterFactory.create({})
+        deleteDb = adapterInstance.deleteDb
 
-      client = new Client({
-        database: adapterInstance.adapter,
-        actions: {
-          testAction,
-          failingAction,
-        },
-        syncPattern: false,
-        recoverJobsOnStart: false,
-        logger: 'error',
-      })
+        client = new Client({
+          database: adapterInstance.adapter,
+          actions: {
+            testAction,
+            failingAction,
+          },
+          syncPattern: false,
+          recoverJobsOnStart: false,
+          logger: 'error',
+        })
 
-      await client.start()
+        await client.start()
 
-      server = createServer({
-        client,
-      })
-    })
+        server = createServer({
+          client,
+        })
+      },
+      {
+        timeout: 60_000,
+      },
+    )
 
     afterEach(async () => {
       if (client) {

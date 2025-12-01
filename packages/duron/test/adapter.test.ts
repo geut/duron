@@ -20,14 +20,19 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
     let adapter: Adapter
     let deleteDb: () => Promise<void>
 
-    beforeEach(async () => {
-      // Get a postgres connection using the docker utility
-      const adapterInstance = await adapterFactory.create()
-      adapter = adapterInstance.adapter
-      deleteDb = adapterInstance.deleteDb
-      // Create a new adapter instance for each test
-      adapter.setId('test-adapter')
-    })
+    beforeEach(
+      async () => {
+        // Get a postgres connection using the docker utility
+        const adapterInstance = await adapterFactory.create()
+        adapter = adapterInstance.adapter
+        deleteDb = adapterInstance.deleteDb
+        // Create a new adapter instance for each test
+        adapter.setId('test-adapter')
+      },
+      {
+        timeout: 60_000,
+      },
+    )
 
     afterEach(async () => {
       // Clean up: stop the adapter

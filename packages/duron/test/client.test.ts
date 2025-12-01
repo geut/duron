@@ -96,24 +96,29 @@ function runClientTests(adapterFactory: AdapterFactory) {
     let database: Adapter
     let deleteDb: () => Promise<void>
 
-    beforeEach(async () => {
-      const adapterInstance = await adapterFactory.create({})
-      database = adapterInstance.adapter
-      deleteDb = adapterInstance.deleteDb
+    beforeEach(
+      async () => {
+        const adapterInstance = await adapterFactory.create({})
+        database = adapterInstance.adapter
+        deleteDb = adapterInstance.deleteDb
 
-      client = new Client({
-        database,
-        actions: {
-          testAction,
-          failingAction,
-          slowAction,
-          slowStepAction,
-        },
-        syncPattern: false, // Disable auto-fetch for manual control in tests
-        recoverJobsOnStart: false,
-        logger: 'error',
-      })
-    })
+        client = new Client({
+          database,
+          actions: {
+            testAction,
+            failingAction,
+            slowAction,
+            slowStepAction,
+          },
+          syncPattern: false, // Disable auto-fetch for manual control in tests
+          recoverJobsOnStart: false,
+          logger: 'error',
+        })
+      },
+      {
+        timeout: 60_000,
+      },
+    )
 
     afterEach(async () => {
       if (client) {

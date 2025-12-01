@@ -1,4 +1,4 @@
-CREATE SCHEMA "duron";
+CREATE SCHEMA IF NOT EXISTS "duron";
 --> statement-breakpoint
 CREATE TABLE "duron"."job_steps" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

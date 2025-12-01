@@ -42,7 +42,7 @@ The complete documentation includes detailed guides on actions, adapters, client
 ```bash
 bun add duron postgres
 # or
-npm install duron
+npm install duron postgres
 ```
 
 ### Creating an Action with Context

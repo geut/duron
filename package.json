@@ -19,6 +19,7 @@
     "dev:dashboard": "bun run --filter duron-dashboard dev",
     "dev:examples:basic": "bun run --filter examples dev",
     "build": "bun run --filter '*' build",
+    "build:docs": "bun run --filter docs build",
     "typecheck": "bun run --filter '*' typecheck"
   }
 }

@@ -27,7 +27,6 @@ export default function DefaultSearchDialog(props: SharedProps) {
   const { locale } = useI18n() // (optional) for i18n
 
   const { search, setSearch, query } = useDocsSearch({
-    from: import.meta.env.PROD ? '/duron/api/search' : '/api/search',
     type: 'static',
     initOrama,
     locale,

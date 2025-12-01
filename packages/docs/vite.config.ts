@@ -8,7 +8,6 @@ import { defineConfig } from 'vite'
 import tsConfigPaths from 'vite-tsconfig-paths'
 
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/duron' : '/',
   server: {
     port: 3001,
   },
@@ -29,7 +28,6 @@ export default defineConfig({
         prerender: {
           outputPath: 'index.html',
           enabled: true,
-          crawlLinks: true,
         },
       },
 

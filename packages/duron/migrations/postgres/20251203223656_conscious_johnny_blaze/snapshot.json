@@ -2,9 +2,7 @@
   "version": "8",
   "dialect": "postgres",
   "id": "e32fddc5-6d55-4c79-87b4-13d3a01b7d09",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "duron",
@@ -888,14 +886,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "job_id"
-      ],
+      "columns": ["job_id"],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "job_steps_job_id_jobs_id_fkey",
@@ -904,9 +898,7 @@
       "table": "job_steps"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "job_steps_pkey",
       "schema": "duron",
@@ -914,9 +906,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "jobs_pkey",
       "schema": "duron",
@@ -925,10 +915,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "job_id",
-        "name"
-      ],
+      "columns": ["job_id", "name"],
       "nullsNotDistinct": false,
       "name": "unique_job_step_name",
       "entityType": "uniques",

@@ -1,9 +1,14 @@
+import { join } from 'node:path'
+
 import { drizzle } from 'drizzle-orm/pglite'
+import { migrate } from 'drizzle-orm/pglite/migrator'
 
-import type { PostgresAdapterOptions } from './postgres.js'
-import { type DB, PostgresAdapter } from './postgres.js'
+import { type AdapterOptions, PostgresBaseAdapter } from './base.js'
+import type createSchema from './schema.js'
 
-type PGLiteDB = ReturnType<typeof drizzle>
+type Schema = ReturnType<typeof createSchema>
+
+export type DB = ReturnType<typeof drizzle<Schema>>
 
 /**
  * PGLite adapter implementation for Duron.
@@ -11,9 +16,27 @@ type PGLiteDB = ReturnType<typeof drizzle>
  *
  * @template Options - The adapter options type
  */
-export class PGLiteAdapter extends PostgresAdapter {
-  override async _stop() {
-    await (this.db as unknown as PGLiteDB).$client.close()
+export class PGLiteAdapter extends PostgresBaseAdapter<DB, string | undefined> {
+  /**
+   * Start the adapter.
+   * Runs migrations if enabled and sets up database listeners.
+   *
+   * @returns Promise resolving to `true` if started successfully, `false` otherwise
+   */
+  protected override async _start() {
+    if (this.migrateOnStart) {
+      await migrate(this.db, {
+        migrationsFolder: join(import.meta.dirname, '..', '..', '..', 'migrations', 'postgres'),
+        migrationsTable: 'migrations',
+        migrationsSchema: 'duron',
+      })
+    }
+
+    await super._start()
+  }
+
+  protected override async _stop() {
+    await this.db?.$client.close()
   }
 
   /**
@@ -34,8 +57,8 @@ export class PGLiteAdapter extends PostgresAdapter {
   protected override _initDb() {
     let connection = ':memory:'
     // it means that the user is using a file path, so we need to use the file path
-    if (typeof this.options.connection === 'string' && !this.options.connection.startsWith('postgres://')) {
-      connection = this.options.connection
+    if (typeof this.connection === 'string' && !this.connection.startsWith('postgres://')) {
+      connection = this.connection
     }
     if (connection === ':memory:') {
       this.db = drizzle() as unknown as DB
@@ -52,9 +75,7 @@ export class PGLiteAdapter extends PostgresAdapter {
    * @returns Promise resolving to `void`
    */
   protected override async _notify(event: string, data: any): Promise<void> {
-    await (this.db as unknown as PGLiteDB).$client.query(
-      `NOTIFY "${this.options.schema}.${event}", '${JSON.stringify(data)}'`,
-    )
+    await this.db?.$client.query(`NOTIFY "${this.schema}.${event}", '${JSON.stringify(data)}'`)
   }
 
   /**
@@ -68,12 +89,9 @@ export class PGLiteAdapter extends PostgresAdapter {
     event: string,
     callback: (payload: string) => void,
   ): Promise<{ unlisten: () => void }> {
-    const unlisten = await (this.db as unknown as PGLiteDB).$client.listen(
-      `"${this.options.schema}.${event}"`,
-      (payload: string) => {
-        callback(payload)
-      },
-    )
+    const unlisten = await this.db?.$client.listen(`"${this.schema}.${event}"`, (payload: string) => {
+      callback(payload)
+    })
 
     return {
       unlisten,
@@ -81,6 +99,6 @@ export class PGLiteAdapter extends PostgresAdapter {
   }
 }
 
-export const pgliteAdapter = (options: PostgresAdapterOptions) => {
+export const pgliteAdapter = (options: AdapterOptions<string | undefined>) => {
   return new PGLiteAdapter(options)
 }

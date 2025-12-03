@@ -117,6 +117,92 @@ To generate new migrations:
 bun run generate:postgres
 ```
 
+## Integrating Duron Schema into Your Own Drizzle Schema
+
+If you're already using Drizzle ORM in your project and want to manage all migrations together, you can include Duron's schema in your own Drizzle schema instead of using Duron's automatic migrations.
+
+### Step 1: Import and Include Duron's Schema
+
+In your Drizzle schema file (e.g., `schema.ts`), import `createSchema` from Duron and include the tables:
+
+```ts
+import createSchema from 'duron/adapters/postgres/schema'
+
+// Create Duron's schema with your desired schema name
+const { jobsTable, jobStepsTable } = createSchema('public')
+
+// Export the tables so they can be used by Drizzle Kit
+export { jobsTable, jobStepsTable }
+
+// Also export your other tables
+export const users = pgTable('users', {
+  // ... your table definition
+})
+```
+
+**Note:** The schema name you pass to `createSchema()` (e.g., `'public'`) must match the `schema` option you provide to the adapter.
+
+### Step 2: Configure the Adapter
+
+When creating the adapter, set `migrateOnStart: false` to disable Duron's automatic migrations:
+
+```ts
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+
+const client = duron({
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+    schema: 'public', // Match the schema name used in createSchema
+    migrateOnStart: false, // Disable automatic migrations
+  }),
+  actions: {
+    sendEmail,
+  },
+})
+```
+
+### Step 3: Generate and Run Migrations
+
+Since you've disabled Duron's automatic migrations, you'll need to generate and run migrations using your own Drizzle Kit configuration:
+
+1. **Configure Drizzle Kit** to include your schema file:
+
+```ts
+// drizzle.config.ts
+import { defineConfig } from 'drizzle-kit'
+
+export default defineConfig({
+  schema: './schema.ts', // Your schema file that includes Duron's tables
+  out: './drizzle',
+  dialect: 'postgresql',
+})
+```
+
+2. **Generate migrations** using Drizzle Kit:
+
+```bash
+drizzle-kit generate
+```
+
+3. **Run migrations** using your preferred method (e.g., Drizzle Kit, a migration tool, or manually):
+
+```bash
+drizzle-kit migrate
+```
+
+### Benefits
+
+- **Unified migrations**: All your database migrations (including Duron's) are managed in one place
+- **Better control**: You have full control over when and how migrations are run
+- **Schema consistency**: Duron's tables are part of your main schema, making it easier to manage relationships and queries
+
+### Important Notes
+
+- Make sure the `schema` option in the adapter matches the schema name you pass to `createSchema()`
+- Always set `migrateOnStart: false` when using this approach
+- The `jobsTable` and `jobStepsTable` must be exported from your schema file for Duron to work correctly
+
 ## Custom Adapters
 
 You can create custom adapters by extending the `Adapter` class:

@@ -40,9 +40,13 @@ The complete documentation includes detailed guides on actions, adapters, client
 ### Installation
 
 ```bash
-bun add duron postgres
+bun add duron postgres drizzle-orm@beta
 # or
-npm install duron postgres
+npm install duron postgres drizzle-orm@beta
+# or
+pnpm add duron postgres drizzle-orm@beta
+# or
+yarn add duron postgres drizzle-orm@beta
 ```
 
 ### Creating an Action with Context

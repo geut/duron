@@ -56,7 +56,7 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         enableHiding: false,
       },
       {
-        id: 'id',
+        id: 'ID',
         accessorKey: 'id',
         header: ({ column }: { column: Column<Job, unknown> }) => <DataTableColumnHeader column={column} label="ID" />,
         cell: ({ cell }) => {
@@ -167,10 +167,10 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         enableColumnFilter: true,
       },
       {
-        id: 'expiresAt',
+        id: 'Expires At',
         accessorKey: 'expiresAt',
         header: ({ column }: { column: Column<Job, unknown> }) => (
-          <DataTableColumnHeader column={column} label="Expires" />
+          <DataTableColumnHeader column={column} label="Expires At" />
         ),
         cell: ({ cell, row }) => {
           const dateStr = cell.getValue<string | null>()
@@ -193,6 +193,20 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
           )
         },
         size: 64,
+        enableColumnFilter: false,
+      },
+      {
+        id: 'Client ID',
+        accessorKey: 'clientId',
+        header: ({ column }: { column: Column<Job, unknown> }) => (
+          <DataTableColumnHeader column={column} label="Client ID" />
+        ),
+        cell: ({ cell }) => {
+          const clientId = cell.getValue<string | null | undefined>()
+          return <div className="font-mono text-xs">{clientId || '-'}</div>
+        },
+        size: 64,
+        enableColumnFilter: false,
       },
     ],
     [actionNameOptions],
@@ -223,6 +237,9 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         pageSize: params.pageSize,
       },
       sorting: sort,
+      columnVisibility: {
+        clientId: false,
+      },
     },
     state: {
       rowSelection: selectedJobId ? { [selectedJobId]: true } : {},

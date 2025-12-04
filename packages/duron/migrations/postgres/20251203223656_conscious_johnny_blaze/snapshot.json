@@ -392,7 +392,7 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "owner_id",
+      "name": "client_id",
       "entityType": "columns",
       "schema": "duron",
       "table": "jobs"
@@ -727,7 +727,7 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "owner_id",
+          "value": "client_id",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -739,7 +739,7 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_owner_id",
+      "name": "idx_jobs_client_id",
       "entityType": "indexes",
       "schema": "duron",
       "table": "jobs"

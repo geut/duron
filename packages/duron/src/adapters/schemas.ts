@@ -45,6 +45,7 @@ export const JobSchema = z.object({
   createdAt: DateSchema,
   updatedAt: DateSchema,
   concurrencyLimit: z.coerce.number(),
+  clientId: z.string().nullable().optional(),
 })
 
 // ============================================================================
@@ -93,7 +94,7 @@ export const JobFiltersSchema = z.object({
   status: z.union([JobStatusSchema, z.array(JobStatusSchema)]).optional(),
   actionName: z.union([z.string(), z.array(z.string())]).optional(),
   groupKey: z.union([z.string(), z.array(z.string())]).optional(),
-  ownerId: z.union([z.string(), z.array(z.string())]).optional(),
+  clientId: z.union([z.string(), z.array(z.string())]).optional(),
   createdAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
   startedAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
   finishedAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),

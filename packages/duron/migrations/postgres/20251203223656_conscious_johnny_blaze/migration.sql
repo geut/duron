@@ -34,7 +34,7 @@ CREATE TABLE "duron"."jobs" (
 	"expires_at" timestamp with time zone,
 	"started_at" timestamp with time zone,
 	"finished_at" timestamp with time zone,
-	"owner_id" text,
+	"client_id" text,
 	"concurrency_limit" integer DEFAULT 10 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -54,7 +54,7 @@ CREATE INDEX "idx_jobs_group_key" ON "duron"."jobs" ("group_key");--> statement-
 CREATE INDEX "idx_jobs_started_at" ON "duron"."jobs" ("started_at");--> statement-breakpoint
 CREATE INDEX "idx_jobs_finished_at" ON "duron"."jobs" ("finished_at");--> statement-breakpoint
 CREATE INDEX "idx_jobs_expires_at" ON "duron"."jobs" ("expires_at");--> statement-breakpoint
-CREATE INDEX "idx_jobs_owner_id" ON "duron"."jobs" ("owner_id");--> statement-breakpoint
+CREATE INDEX "idx_jobs_client_id" ON "duron"."jobs" ("client_id");--> statement-breakpoint
 CREATE INDEX "idx_jobs_checksum" ON "duron"."jobs" ("checksum");--> statement-breakpoint
 CREATE INDEX "idx_jobs_concurrency_limit" ON "duron"."jobs" ("concurrency_limit");--> statement-breakpoint
 CREATE INDEX "idx_jobs_action_status" ON "duron"."jobs" ("action_name","status");--> statement-breakpoint

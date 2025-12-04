@@ -22,7 +22,7 @@ export default function createSchema(schemaName: string) {
       expires_at: timestamp('expires_at', { withTimezone: true }),
       started_at: timestamp('started_at', { withTimezone: true }),
       finished_at: timestamp('finished_at', { withTimezone: true }),
-      owner_id: text('owner_id'),
+      client_id: text('client_id'),
       concurrency_limit: integer('concurrency_limit').notNull().default(10),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true })
@@ -43,7 +43,7 @@ export default function createSchema(schemaName: string) {
       index('idx_jobs_started_at').on(table.started_at),
       index('idx_jobs_finished_at').on(table.finished_at),
       index('idx_jobs_expires_at').on(table.expires_at),
-      index('idx_jobs_owner_id').on(table.owner_id),
+      index('idx_jobs_client_id').on(table.client_id),
       index('idx_jobs_checksum').on(table.checksum),
       index('idx_jobs_concurrency_limit').on(table.concurrency_limit),
       // Composite indexes

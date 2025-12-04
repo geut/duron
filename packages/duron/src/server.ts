@@ -86,7 +86,7 @@ export const GetJobsQuerySchema = z
     fStatus: z.union([JobStatusSchema, z.array(JobStatusSchema)]).optional(),
     fActionName: z.union([z.string(), z.array(z.string())]).optional(),
     fGroupKey: z.union([z.string(), z.array(z.string())]).optional(),
-    fOwnerId: z.union([z.string(), z.array(z.string())]).optional(),
+    fClientId: z.union([z.string(), z.array(z.string())]).optional(),
     // Date filters: can be a single ISO string or JSON array [start, end] - both coerced to Date objects
     fCreatedAt: z.union([z.coerce.date(), z.array(z.coerce.date())]).optional(),
     fStartedAt: z.union([z.coerce.date(), z.array(z.coerce.date())]).optional(),
@@ -107,7 +107,7 @@ export const GetJobsQuerySchema = z
     if (data.fStatus) filters.status = data.fStatus
     if (data.fActionName) filters.actionName = data.fActionName
     if (data.fGroupKey) filters.groupKey = data.fGroupKey
-    if (data.fOwnerId) filters.ownerId = data.fOwnerId
+    if (data.fClientId) filters.clientId = data.fClientId
     if (data.fCreatedAt) filters.createdAt = data.fCreatedAt
     if (data.fStartedAt) filters.startedAt = data.fStartedAt
     if (data.fFinishedAt) filters.finishedAt = data.fFinishedAt

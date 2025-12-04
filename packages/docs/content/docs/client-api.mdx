@@ -284,7 +284,7 @@ const result = await client.getJobs({
     status: ['active', 'completed'],
     actionName: ['sendEmail'],
     groupKey: ['user-123'],
-    ownerId: ['worker-1'],
+    clientId: ['worker-1'],
     createdAt: [new Date('2024-01-01'), new Date('2024-12-31')],
     startedAt: [new Date('2024-01-01'), new Date('2024-12-31')],
     finishedAt: [new Date('2024-01-01'), new Date('2024-12-31')],
@@ -310,7 +310,7 @@ const result = await client.getJobs({
 - `status` - Array of job statuses
 - `actionName` - Array of action names
 - `groupKey` - Array of group keys
-- `ownerId` - Array of owner IDs
+- `clientId` - Array of client IDs
 - `createdAt` - Date range `[start, end]`
 - `startedAt` - Date range `[start, end]`
 - `finishedAt` - Date range `[start, end]`

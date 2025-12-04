@@ -112,7 +112,7 @@ export interface AdapterEvents {
     {
       jobId: string
       status: JobStatus | 'retried'
-      ownerId: string
+      clientId: string
     },
   ]
   'job-available': [
@@ -126,7 +126,7 @@ export interface AdapterEvents {
       stepId: string
       status: StepStatus
       error: any | null
-      ownerId: string
+      clientId: string
     },
   ]
   'step-delayed': [
@@ -135,7 +135,7 @@ export interface AdapterEvents {
       stepId: string
       delayedMs: number
       error: any
-      ownerId: string
+      clientId: string
     },
   ]
 }
@@ -319,7 +319,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
         await this._notify('job-status-changed', {
           jobId: parsedOptions.jobId,
           status: JOB_STATUS_COMPLETED,
-          ownerId: this.id,
+          clientId: this.id,
         })
       }
       return success
@@ -344,7 +344,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
         await this._notify('job-status-changed', {
           jobId: parsedOptions.jobId,
           status: JOB_STATUS_FAILED,
-          ownerId: this.id,
+          clientId: this.id,
         })
       }
       return success
@@ -369,7 +369,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
         await this._notify('job-status-changed', {
           jobId: parsedOptions.jobId,
           status: JOB_STATUS_CANCELLED,
-          ownerId: this.id,
+          clientId: this.id,
         })
       }
       return success
@@ -511,7 +511,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
             stepId: parsedOptions.stepId,
             status: STEP_STATUS_COMPLETED,
             error: null,
-            ownerId: this.id,
+            clientId: this.id,
           })
         }
       }
@@ -542,7 +542,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
             stepId: parsedOptions.stepId,
             status: STEP_STATUS_FAILED,
             error: parsedOptions.error,
-            ownerId: this.id,
+            clientId: this.id,
           })
         }
       }
@@ -573,7 +573,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
             stepId: parsedOptions.stepId,
             delayedMs: parsedOptions.delayMs,
             error: parsedOptions.error,
-            ownerId: this.id,
+            clientId: this.id,
           })
         }
       }
@@ -604,7 +604,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
             stepId: parsedOptions.stepId,
             status: STEP_STATUS_CANCELLED,
             error: null,
-            ownerId: this.id,
+            clientId: this.id,
           })
         }
       }

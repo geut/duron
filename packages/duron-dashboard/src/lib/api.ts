@@ -267,13 +267,13 @@ export function useDeleteJobs() {
           queryParams.set('fGroupKey', params.fGroupKey)
         }
       }
-      if (params.fOwnerId) {
-        if (Array.isArray(params.fOwnerId)) {
-          for (const id of params.fOwnerId) {
-            queryParams.append('fOwnerId', id)
+      if (params.fClientId) {
+        if (Array.isArray(params.fClientId)) {
+          for (const id of params.fClientId) {
+            queryParams.append('fClientId', id)
           }
         } else {
-          queryParams.set('fOwnerId', params.fOwnerId)
+          queryParams.set('fClientId', params.fClientId)
         }
       }
       if (params.fCreatedAt) {

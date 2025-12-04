@@ -103,14 +103,14 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _start() {
     await this._listen(`ping-${this.id}`, async (payload: string) => {
-      const fromOwnerId = JSON.parse(payload).fromOwnerId
-      await this._notify(`pong-${fromOwnerId}`, { toOwnerId: this.id })
+      const fromClientId = JSON.parse(payload).fromClientId
+      await this._notify(`pong-${fromClientId}`, { toClientId: this.id })
     })
 
     await this._listen(`job-status-changed`, (payload: string) => {
       if (this.listenerCount('job-status-changed') > 0) {
-        const { jobId, status, ownerId } = JSON.parse(payload)
-        this.emit('job-status-changed', { jobId, status, ownerId })
+        const { jobId, status, clientId } = JSON.parse(payload)
+        this.emit('job-status-changed', { jobId, status, clientId })
       }
     })
 
@@ -173,7 +173,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         and(
           eq(this.tables.jobsTable.id, jobId),
           eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE),
-          eq(this.tables.jobsTable.owner_id, this.id),
+          eq(this.tables.jobsTable.client_id, this.id),
           gt(this.tables.jobsTable.expires_at, sql`now()`),
         ),
       )
@@ -199,7 +199,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         and(
           eq(this.tables.jobsTable.id, jobId),
           eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE),
-          eq(this.tables.jobsTable.owner_id, this.id),
+          eq(this.tables.jobsTable.client_id, this.id),
         ),
       )
       .returning({ id: this.tables.jobsTable.id })
@@ -449,7 +449,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       SET status = ${JOB_STATUS_ACTIVE},
           started_at = now(),
           expires_at = now() + (timeout_ms || ' milliseconds')::interval,
-          owner_id = ${this.id}
+          client_id = ${this.id}
       FROM verify_concurrency vc
       WHERE j.id = vc.id
         AND vc.current_active < vc.concurrency_limit  -- Final concurrency check using job's concurrency limit
@@ -483,29 +483,29 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected async _recoverJobs(options: RecoverJobsOptions): Promise<number> {
     const { checksums, multiProcessMode = false, processTimeout = 5_000 } = options
 
-    const unresponsiveOwnerIds: string[] = [this.id]
+    const unresponsiveClientIds: string[] = [this.id]
 
     if (multiProcessMode) {
       const result = (await this.db
         .selectDistinct({
-          ownerId: this.tables.jobsTable.owner_id,
+          clientId: this.tables.jobsTable.client_id,
         })
         .from(this.tables.jobsTable)
         .where(
-          and(eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE), ne(this.tables.jobsTable.owner_id, this.id)),
-        )) as unknown as { ownerId: string }[]
+          and(eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE), ne(this.tables.jobsTable.client_id, this.id)),
+        )) as unknown as { clientId: string }[]
 
       if (result.length > 0) {
         const pongCount = new Set<string>()
         const { unlisten } = await this._listen(`pong-${this.id}`, (payload: string) => {
-          const toOwnerId = JSON.parse(payload).toOwnerId
-          pongCount.add(toOwnerId)
+          const toClientId = JSON.parse(payload).toClientId
+          pongCount.add(toClientId)
           if (pongCount.size >= result.length) {
             unlisten()
           }
         })
 
-        await Promise.all(result.map((row) => this._notify(`ping-${row.ownerId}`, { fromOwnerId: this.id })))
+        await Promise.all(result.map((row) => this._notify(`ping-${row.clientId}`, { fromClientId: this.id })))
 
         let waitForSeconds = processTimeout / 1_000
         while (pongCount.size < result.length && waitForSeconds > 0) {
@@ -513,18 +513,18 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           waitForSeconds--
         }
 
-        unresponsiveOwnerIds.push(...result.filter((row) => !pongCount.has(row.ownerId)).map((row) => row.ownerId))
+        unresponsiveClientIds.push(...result.filter((row) => !pongCount.has(row.clientId)).map((row) => row.clientId))
       }
     }
 
-    if (unresponsiveOwnerIds.length > 0) {
+    if (unresponsiveClientIds.length > 0) {
       const result = this._map(
         await this.db.execute<{ id: string }>(sql`
         WITH locked_jobs AS (
           SELECT j.id
           FROM ${this.tables.jobsTable} j
           WHERE j.status = ${JOB_STATUS_ACTIVE}
-            AND j.owner_id IN ${unresponsiveOwnerIds}
+            AND j.client_id IN ${unresponsiveClientIds}
           FOR UPDATE OF j SKIP LOCKED
         ),
         updated_jobs AS (
@@ -813,6 +813,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         createdAt: this.tables.jobsTable.created_at,
         updatedAt: this.tables.jobsTable.updated_at,
         concurrencyLimit: this.tables.jobsTable.concurrency_limit,
+        clientId: this.tables.jobsTable.client_id,
       })
       .from(this.tables.jobsTable)
       .where(eq(this.tables.jobsTable.id, jobId))
@@ -913,8 +914,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       filters.groupKey && !Array.isArray(filters.groupKey)
         ? ilike(jobsTable.group_key, `%${filters.groupKey}%`)
         : undefined,
-      filters.ownerId
-        ? inArray(jobsTable.owner_id, Array.isArray(filters.ownerId) ? filters.ownerId : [filters.ownerId])
+      filters.clientId
+        ? inArray(jobsTable.client_id, Array.isArray(filters.clientId) ? filters.clientId : [filters.clientId])
         : undefined,
       filters.createdAt && Array.isArray(filters.createdAt)
         ? between(
@@ -953,7 +954,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         ? or(
             ilike(jobsTable.action_name, `%${fuzzySearch}%`),
             ilike(jobsTable.group_key, `%${fuzzySearch}%`),
-            ilike(jobsTable.owner_id, `%${fuzzySearch}%`),
+            ilike(jobsTable.client_id, `%${fuzzySearch}%`),
             sql`${jobsTable.id}::text ilike ${`%${fuzzySearch}%`}`,
             sql`to_tsvector('english', ${jobsTable.input}::text) @@ plainto_tsquery('english', ${fuzzySearch})`,
             sql`to_tsvector('english', ${jobsTable.output}::text) @@ plainto_tsquery('english', ${fuzzySearch})`,
@@ -1018,6 +1019,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         createdAt: jobsTable.created_at,
         updatedAt: jobsTable.updated_at,
         concurrencyLimit: jobsTable.concurrency_limit,
+        clientId: jobsTable.client_id,
       })
       .from(jobsTable)
       .where(where)

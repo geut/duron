@@ -710,7 +710,7 @@ export class Client<
 
     this.#database.on(
       'job-status-changed',
-      async (event: { jobId: string; status: JobStatus | 'retried'; ownerId: string }) => {
+      async (event: { jobId: string; status: JobStatus | 'retried'; clientId: string }) => {
         const pendingWaits = this.#pendingJobWaits.get(event.jobId)
         if (!pendingWaits || pendingWaits.size === 0) {
           return

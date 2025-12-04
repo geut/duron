@@ -429,7 +429,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
         // Fetch the job to make it active
         await adapter.fetch({ batch: 1 })
 
-        // Simulate a stuck job by manually updating the owner_id to a non-existent one
+        // Simulate a stuck job by manually updating the client_id to a non-existent one
         // In a real scenario, this would happen when a process crashes
         const recovered = await adapter.recoverJobs({
           checksums: ['abc123'],

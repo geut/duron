@@ -218,6 +218,11 @@ export function JobDetails({ jobId, onOpenStepList }: JobDetailsProps) {
           <div>
             <span className="font-medium">Group Key:</span> {job.groupKey}
           </div>
+          {job.clientId && (
+            <div>
+              <span className="font-medium">Client ID:</span> <span className="font-mono text-xs">{job.clientId}</span>
+            </div>
+          )}
           <div>
             <span className="font-medium">Status:</span> <BadgeStatus status={job.status} />
           </div>

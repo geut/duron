@@ -413,7 +413,7 @@ const client = duron({
     processOrder,
   },
   multiProcessMode: true,
-  processTimeout: 5 * 60 * 1000,
+  processTimeout: 5 * 1000, // 5 seconds
 })
 
 await client.start()
@@ -424,3 +424,5 @@ const client = duron({
   // ... same configuration
 })
 ```
+
+For a complete guide on setting up multi-worker architectures, see the [Multi-Worker Setup](/docs/multi-worker) documentation.

@@ -1,0 +1,327 @@
+---
+title: Multi-Worker Setup
+description: Learn how to run Duron with multiple worker processes for scalability and fault tolerance
+icon: Server
+---
+
+Duron supports running multiple worker processes that share the same database, allowing you to scale job processing horizontally and improve fault tolerance.
+
+## Overview
+
+In a multi-worker setup, you can:
+
+- **Scale horizontally**: Add more worker processes to handle increased load
+- **Separate concerns**: Run dashboard/server processes separately from worker processes
+- **Improve fault tolerance**: If one worker crashes, others continue processing jobs
+- **Optimize resource usage**: Scale dashboard and workers independently
+
+## Architecture
+
+A typical multi-worker setup consists of:
+
+1. **Dashboard/Server Process**: Handles API requests and serves the dashboard UI
+   - Configured with `syncPattern: false` to prevent job processing
+   - Only manages the API and dashboard
+
+2. **Worker Processes**: Handle job processing
+   - Each worker has a unique `id`
+   - Configured with `syncPattern: 'hybrid'` for efficient job processing
+   - Uses `multiProcessMode: true` for proper job recovery
+
+All processes share the same database, so jobs created through any process are available to all workers.
+
+## Configuration
+
+### Worker Configuration
+
+Each worker process needs:
+
+- **Unique ID**: Each worker must have a unique identifier
+- **Multi-process mode**: Enable `multiProcessMode: true`
+- **Sync pattern**: Use `syncPattern: 'hybrid'` for efficient processing
+- **Process timeout**: Configure `processTimeout` for job recovery
+
+```ts
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+
+const workerId = process.env.WORKER_ID || `worker-${process.pid}`
+
+const client = duron({
+  id: workerId, // Unique ID for this worker
+  syncPattern: 'hybrid', // Efficient job processing
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+  }),
+  actions: {
+    sendEmail,
+    processOrder,
+  },
+  multiProcessMode: true, // Enable multi-process mode
+  processTimeout: 5 * 1000, // 5 seconds
+  recoverJobsOnStart: true, // Recover stuck jobs on startup
+})
+
+await client.start()
+```
+
+### Dashboard/Server Configuration
+
+The dashboard/server process should:
+
+- **Disable job processing**: Use `syncPattern: false`
+- **Share the same database**: Use the same database connection
+- **Define actions**: Actions must be defined for the API to work
+
+```ts
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+import { createServer } from 'duron/server'
+
+const client = duron({
+  id: 'dashboard-server',
+  syncPattern: false, // Disable automatic job fetching
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+  }),
+  actions: {
+    sendEmail, // Actions must be defined for the API
+    processOrder,
+  },
+})
+
+await client.start()
+
+// Create the API server
+const app = createServer({ client })
+```
+
+## Complete Example
+
+Here's a complete example showing how to set up a multi-worker architecture:
+
+### Parent Process (Dashboard Server)
+
+```ts
+import { serve } from 'bun'
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+import { createServer } from 'duron/server'
+import { getHTML } from 'duron-dashboard/get-html'
+
+// Dashboard server: Only serves the API
+const client = duron({
+  id: 'dashboard-server',
+  syncPattern: false, // Workers handle job processing
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+  }),
+  actions: {
+    sendEmail,
+    processOrder,
+  },
+})
+
+await client.start()
+
+// Create the API server
+const app = createServer({ client })
+
+// Spawn worker processes
+const workerCount = parseInt(process.env.WORKER_COUNT || '2', 10)
+const workers: Bun.Subprocess[] = []
+
+for (let i = 1; i <= workerCount; i++) {
+  const worker = Bun.spawn(['bun', 'worker.ts'], {
+    cwd: import.meta.dir,
+    env: {
+      ...process.env,
+      WORKER_ID: `worker-${i}`,
+    },
+    stdout: 'inherit',
+    stderr: 'inherit',
+  })
+
+  workers.push(worker)
+  client.logger.info(`Started worker ${i} (PID: ${worker.pid})`)
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  client.logger.info('Shutting down...')
+
+  // Stop all workers
+  for (const worker of workers) {
+    worker.kill()
+  }
+
+  // Wait for workers to exit
+  await Promise.all(workers.map((worker) => worker.exited))
+
+  // Stop the client
+  await client.stop()
+
+  process.exit(0)
+})
+
+// Start the server
+const port = parseInt(process.env.PORT || '3000', 10)
+serve({
+  port,
+  routes: {
+    '/': async () => {
+      const html = await getHTML({
+        url: `http://localhost:${port}/api`,
+        enableLogin: false,
+        showLogo: false,
+      })
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html' },
+      })
+    },
+    '/api/*': app.fetch,
+  },
+})
+
+client.logger.info(`🚀 Dashboard server running at http://localhost:${port}`)
+```
+
+### Worker Process
+
+```ts
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+
+const workerId = process.env.WORKER_ID || `worker-${process.pid}`
+
+const client = duron({
+  id: workerId,
+  syncPattern: 'hybrid',
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+  }),
+  actions: {
+    sendEmail,
+    processOrder,
+  },
+  logger: 'debug',
+  recoverJobsOnStart: true,
+  multiProcessMode: true,
+  processTimeout: 5 * 1000, // 5 seconds
+})
+
+await client.start()
+
+client.logger.info(`✅ Worker ${workerId} started and ready to process jobs`)
+
+// Keep the process alive
+process.on('SIGINT', async () => {
+  client.logger.info(`Shutting down worker ${workerId}...`)
+  await client.stop()
+  process.exit(0)
+})
+```
+
+## Job Recovery
+
+When `multiProcessMode: true` is enabled, Duron uses a ping-based mechanism to check if other processes are alive before recovering their jobs:
+
+1. **On startup**: Each worker checks for stuck jobs (jobs marked as active but owned by other processes)
+2. **Ping check**: Before recovering jobs, workers ping the owning process to verify it's still running
+3. **Timeout**: If a process doesn't respond within `processTimeout`, its jobs are recovered
+4. **Recovery**: Stuck jobs are reset to `created` status and can be picked up by any worker
+
+This prevents jobs from being incorrectly recovered when a process is temporarily unavailable (e.g., during a restart).
+
+## Best Practices
+
+### Worker IDs
+
+Use descriptive, unique IDs for each worker:
+
+```ts
+// Good: Descriptive and unique
+id: `worker-${process.env.WORKER_ID || process.pid}`
+
+// Good: Environment-based
+id: process.env.WORKER_ID || `worker-${Date.now()}`
+
+// Avoid: Random IDs that change on restart
+id: `worker-${Math.random()}`
+```
+
+### Process Timeout
+
+Set `processTimeout` based on your deployment strategy:
+
+- **Short timeout (1-2 minutes)**: For fast deployments and quick recovery
+- **Medium timeout (5 minutes)**: Default, good for most use cases
+- **Long timeout (10+ minutes)**: For slow deployments or maintenance windows
+
+```ts
+processTimeout: 5 * 1000, // 5 seconds (default)
+```
+
+### Resource Management
+
+- **Separate dashboard and workers**: Run dashboard/server in a separate process to avoid resource competition
+- **Monitor worker health**: Use process managers (PM2, systemd, etc.) to restart failed workers
+- **Graceful shutdown**: Always handle `SIGINT`/`SIGTERM` to allow jobs to complete
+
+### Scaling
+
+- **Horizontal scaling**: Add more worker processes to handle increased load
+- **Vertical scaling**: Increase resources for individual workers if needed
+- **Load balancing**: Jobs are automatically distributed across available workers
+
+## Troubleshooting
+
+### Jobs Not Being Processed
+
+If jobs aren't being processed:
+
+1. **Check worker status**: Verify workers are running and connected to the database
+2. **Check sync pattern**: Ensure workers have `syncPattern: 'hybrid'` or `'pull'`
+3. **Check database connection**: Verify all processes can connect to the database
+4. **Check logs**: Look for errors in worker logs
+
+### Jobs Stuck in Active Status
+
+If jobs remain in `active` status:
+
+1. **Enable multi-process mode**: Set `multiProcessMode: true` on all workers
+2. **Check process timeout**: Ensure `processTimeout` is appropriate for your deployment
+3. **Manual recovery**: Use `client.recoverJobs()` to manually recover stuck jobs
+
+### Duplicate Job Processing
+
+If jobs are processed multiple times:
+
+1. **Check worker IDs**: Ensure each worker has a unique ID
+2. **Check database isolation**: Verify database connection isolation
+3. **Check concurrency limits**: Review group concurrency limits
+
+## Environment Variables
+
+Common environment variables for multi-worker setups:
+
+```bash
+# Database connection
+DATABASE_URL=postgres://user:password@localhost:5432/duron
+
+# Server configuration
+PORT=3000
+
+# Worker configuration
+WORKER_COUNT=2
+WORKER_ID=worker-1  # Set automatically for each worker
+
+# Process timeout (milliseconds)
+PROCESS_TIMEOUT=300000
+```
+
+## See Also
+
+- [Client API](/docs/client-api) - Complete client configuration reference
+- [Examples](/docs/examples) - More code examples
+- [Adapters](/docs/adapters) - Database adapter configuration

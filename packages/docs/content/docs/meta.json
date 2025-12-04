@@ -9,6 +9,7 @@
     "adapters",
     "retries",
     "error-handling",
+    "multi-worker",
     "examples"
   ]
 }

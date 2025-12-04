@@ -97,9 +97,9 @@ const BaseOptionsSchema = z.object({
    * Timeout in milliseconds to wait for process ping responses in multi-process mode.
    * Processes that don't respond within this timeout will have their jobs recovered.
    *
-   * @default 300000 (5 minutes)
+   * @default 5000 (5 seconds)
    */
-  processTimeout: z.number().default(5 * 60 * 1000),
+  processTimeout: z.number().default(5 * 1000), // 5 seconds
 })
 
 /**

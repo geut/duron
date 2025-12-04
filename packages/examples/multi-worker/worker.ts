@@ -19,7 +19,7 @@ const client = duron({
   logger: 'debug',
   recoverJobsOnStart: true,
   multiProcessMode: true, // Enable multi-process mode for job recovery
-  processTimeout: 5 * 60 * 1000, // 5 minutes
+  processTimeout: 5 * 1000, // 5 seconds
 })
 
 await client.start()

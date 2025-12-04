@@ -194,17 +194,14 @@ export default async function pRetry<TResult>(
 
       return result
     } catch (error) {
-      if (
-        await onAttemptFailure({
-          error: error as Error,
-          attemptNumber,
-          retriesConsumed,
-          startTime,
-          options,
-        })
-      ) {
-        retriesConsumed++
-      }
+      await onAttemptFailure({
+        error: error as Error,
+        attemptNumber,
+        retriesConsumed,
+        startTime,
+        options,
+      })
+      retriesConsumed++
     }
   }
 

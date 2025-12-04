@@ -44,7 +44,7 @@
     },
     "packages/duron": {
       "name": "duron",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "dependencies": {
         "elysia": "^1.4.16",
         "fastq": "^1.19.1",

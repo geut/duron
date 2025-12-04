@@ -13,6 +13,7 @@
     "typescript": "^5"
   },
   "scripts": {
-    "basic": "bun --hot basic/start.ts"
+    "basic": "bun --hot basic/start.ts",
+    "multi-worker": "bun multi-worker/parent.ts"
   }
 }

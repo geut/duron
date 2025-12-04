@@ -1,6 +1,6 @@
 import { serve } from 'bun'
 
-import { sendEmail, variables } from '@shared-actions/index'
+import { sendEmail, variables } from '@shared-actions/index.js'
 import { duron } from 'duron'
 import { postgresAdapter } from 'duron/adapters/postgres'
 import { createServer } from 'duron/server'

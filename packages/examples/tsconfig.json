@@ -27,7 +27,8 @@
     "noPropertyAccessFromIndexSignature": false,
     "customConditions": ["dev-source"],
     "paths": {
-      "@shared-actions/*": ["../shared-actions/*"]
+      "@shared-actions/*": ["../shared-actions/*"],
+      "duron/*": ["../duron/src/*"]
     }
   },
   "exclude": ["**/dist/**", "**/node_modules/**"]

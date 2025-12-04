@@ -20,6 +20,7 @@ The complete documentation includes detailed guides on actions, adapters, client
 - **Intelligent Retry Logic** - Configurable exponential backoff with per-action and per-step options
 - **Flexible Sync Patterns** - Pull, push, hybrid, or manual job fetching
 - **Advanced Concurrency Control** - Per-action, per-group, and dynamic concurrency limits
+- **Multi-Process Support** - Run multiple worker processes sharing the same database for horizontal scaling and fault tolerance
 - **Reliability & Recovery** - Automatic job recovery, multi-process coordination, and stuck job detection
 - **Database Adapters** - PostgreSQL (production) and PGLite (development/testing)
 - **REST API Server** - Built-in Elysia-based API with advanced filtering and pagination

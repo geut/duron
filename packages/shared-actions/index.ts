@@ -243,6 +243,9 @@ export const getWeather = defineAction<typeof variables>()({
     const niceMessage = await ctx.step(
       `generate nice message`,
       async ({ signal }) => {
+        await new Promise((resolve) => {
+          const timeout = setTimeout(resolve, 30_000)
+        })
         return ctx.var.generateText(
           {
             prompt: `Generate a nice message for the weather in ${city} based on the following weather data: ${JSON.stringify(weather)}`,

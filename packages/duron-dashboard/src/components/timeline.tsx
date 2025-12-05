@@ -21,11 +21,13 @@ interface TimelineItem {
 interface TimelineProps {
   job: Job | null
   steps: Omit<JobStep, 'output'>[]
+  selectedStepId?: string | null
+  onStepSelect?: (stepId: string) => void
 }
 
 const ROW_HEIGHT = 48
 
-export function Timeline({ job, steps }: TimelineProps) {
+export function Timeline({ job, steps, selectedStepId, onStepSelect }: TimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null)
 
   // Build timeline items from job and steps
@@ -166,60 +168,79 @@ export function Timeline({ job, steps }: TimelineProps) {
               }
             }
 
-            return (
-              <div
-                key={item.id}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: `${virtualItem.size}px`,
-                  transform: `translateY(${virtualItem.start}px)`,
-                }}
-                className="flex items-center border-b border-border/50 hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center w-full px-6 py-3 min-w-0 gap-4">
-                  {/* Left side: Tree structure with icons and labels - fixed width */}
-                  <div
-                    className="flex items-center gap-3 min-w-0 flex-[0_0_300px]"
-                    style={{ paddingLeft: `${item.level * 20}px` }}
-                  >
-                    {item.type === 'job' ? (
-                      <GitBranch className="h-4 w-4 text-teal-500 shrink-0" />
-                    ) : (
-                      <CircleDot className="h-4 w-4 text-teal-500 shrink-0" />
-                    )}
-                    <Tooltip>
-                      <TooltipTrigger asChild={true}>
-                        <span className="text-sm font-medium text-foreground truncate block min-w-0">{item.name}</span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{item.name}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
+            const isSelected = item.type === 'step' && item.id === selectedStepId
+            const isClickable = item.type === 'step' && onStepSelect
 
-                  {/* Right side: Duration and progress bar - takes remaining space */}
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="text-sm text-muted-foreground min-w-[90px] text-right font-mono shrink-0">
-                      {formatDurationSeconds(duration)}
-                    </div>
-                    <div className="flex-1 h-3 bg-muted/50 rounded-sm overflow-hidden relative min-w-0">
-                      {widthPercentage > 0 && (
-                        <div
-                          className={`h-full absolute transition-all duration-100 ${
-                            isActive ? 'bg-teal-500' : duration > 0 ? 'bg-teal-500/80' : 'bg-muted'
-                          }`}
-                          style={{
-                            left: `${leftPercentage}%`,
-                            width: `${Math.max(widthPercentage, 0.5)}%`,
-                          }}
-                        />
-                      )}
-                    </div>
+            const content = (
+              <div key={`content-${item.id}`} className="flex items-center w-full px-6 py-3 min-w-0 gap-4">
+                {/* Left side: Tree structure with icons and labels - fixed width */}
+                <div
+                  className="flex items-center gap-3 min-w-0 flex-[0_0_300px]"
+                  style={{ paddingLeft: `${item.level * 20}px` }}
+                >
+                  {item.type === 'job' ? (
+                    <GitBranch className="h-4 w-4 text-teal-500 shrink-0" />
+                  ) : (
+                    <CircleDot className="h-4 w-4 text-teal-500 shrink-0" />
+                  )}
+                  <Tooltip>
+                    <TooltipTrigger asChild={true}>
+                      <span className="text-sm font-medium text-foreground truncate block min-w-0">{item.name}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{item.name}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Right side: Duration and progress bar - takes remaining space */}
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                  <div className="text-sm text-muted-foreground min-w-[90px] text-right font-mono shrink-0">
+                    {formatDurationSeconds(duration)}
+                  </div>
+                  <div className="flex-1 h-3 bg-muted/50 rounded-sm overflow-hidden relative min-w-0">
+                    {widthPercentage > 0 && (
+                      <div
+                        className={`h-full absolute transition-all duration-100 ${
+                          isActive ? 'bg-teal-500' : duration > 0 ? 'bg-teal-500/80' : 'bg-muted'
+                        }`}
+                        style={{
+                          left: `${leftPercentage}%`,
+                          width: `${Math.max(widthPercentage, 0.5)}%`,
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
+              </div>
+            )
+
+            const containerStyle = {
+              position: 'absolute' as const,
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: `${virtualItem.size}px`,
+              transform: `translateY(${virtualItem.start}px)`,
+            }
+
+            const containerClassName = `flex items-center border-b border-border/50 transition-colors ${
+              isSelected ? 'bg-muted' : 'hover:bg-muted/50'
+            }`
+
+            return isClickable ? (
+              <button
+                key={item.id}
+                type="button"
+                style={containerStyle}
+                onClick={() => onStepSelect(item.id)}
+                className={`${containerClassName} cursor-pointer w-full text-left`}
+              >
+                {content}
+              </button>
+            ) : (
+              <div key={item.id} style={containerStyle} className={containerClassName}>
+                {content}
               </div>
             )
           })}

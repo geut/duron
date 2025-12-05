@@ -105,11 +105,11 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                   const stepNumber = (page - 1) * pageSize + index + 1
                   return (
                     <AccordionItem key={step.id} value={step.id} className="border-b">
-                      <AccordionTrigger className="hover:no-underline">
-                        <div className="flex items-center justify-between w-full pr-4">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-mono text-muted-foreground">#{stepNumber}</span>
-                            <span className="font-medium">{step.name}</span>
+                      <AccordionTrigger className="hover:no-underline w-full">
+                        <div className="flex items-center justify-between w-full pr-4 min-w-0 overflow-hidden">
+                          <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                            <span className="text-sm font-mono text-muted-foreground shrink-0">#{stepNumber}</span>
+                            <span className="font-medium truncate min-w-0">{step.name}</span>
                           </div>
                           <BadgeStatus status={step.status} />
                         </div>

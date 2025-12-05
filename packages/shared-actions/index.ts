@@ -243,9 +243,6 @@ export const getWeather = defineAction<typeof variables>()({
     const niceMessage = await ctx.step(
       `generate nice message`,
       async ({ signal }) => {
-        await new Promise((resolve) => {
-          const timeout = setTimeout(resolve, 30_000)
-        })
         return ctx.var.generateText(
           {
             prompt: `Generate a nice message for the weather in ${city} based on the following weather data: ${JSON.stringify(weather)}`,
@@ -259,6 +256,38 @@ export const getWeather = defineAction<typeof variables>()({
         expire: 60_000, // 60 seconds for AI generation
       },
     )
+
+    // Create 10 example steps representing parts of this action for illustrative or logging purposes.
+
+    const exampleSteps = [
+      { step: 1, description: `Received request for weather in "${city}"` },
+      { step: 2, description: `Validated city name input` },
+      { step: 3, description: `Started step: get weather for ${city}` },
+      { step: 4, description: `Called external weather service API` },
+      { step: 5, description: `Received weather data from API` },
+      { step: 6, description: `Parsed weather data: ${JSON.stringify(weather)}` },
+      { step: 7, description: `Started step: generate nice message` },
+      { step: 8, description: `Called AI model with prompt and weather info` },
+      { step: 9, description: `Received generated nice message from AI` },
+      { step: 10, description: `Returning weather info and nice message to client` },
+    ]
+
+    for (const step of exampleSteps) {
+      await ctx.step(
+        step.description,
+        async () => {
+          await new Promise((resolve) => {
+            const timeout = setTimeout(resolve, 3_000)
+          })
+          return {
+            description: step.description,
+          }
+        },
+        {
+          expire: 10_000,
+        },
+      )
+    }
 
     return {
       niceMessage: niceMessage.text,

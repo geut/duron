@@ -39,6 +39,11 @@ export function TimelineModal({ jobId, open, onOpenChange }: TimelineModalProps)
     onOpenChange(newOpen)
   }
 
+  // Toggle step selection - if clicking the same step, deselect it
+  const handleStepSelect = (stepId: string) => {
+    setSelectedStepId((current) => (current === stepId ? null : stepId))
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-[98vw]! sm:max-w-[98vw]! w-[98vw]! max-h-[98vh]! h-[98vh]! flex flex-col p-0 gap-0">
@@ -50,7 +55,7 @@ export function TimelineModal({ jobId, open, onOpenChange }: TimelineModalProps)
         </DialogHeader>
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           {/* Timeline Section */}
-          <div className={`overflow-hidden p-6 min-h-0 ${selectedStepId ? 'max-h-[50%] border-b' : 'flex-1'}`}>
+          <ScrollArea className={`overflow-hidden p-6 min-h-0 ${selectedStepId ? 'max-h-[50%] border-b' : 'flex-1'}`}>
             {isLoading ? (
               <div className="flex items-center justify-center h-full text-muted-foreground">Loading timeline...</div>
             ) : (
@@ -58,10 +63,11 @@ export function TimelineModal({ jobId, open, onOpenChange }: TimelineModalProps)
                 job={job ?? null}
                 steps={steps}
                 selectedStepId={selectedStepId}
-                onStepSelect={setSelectedStepId}
+                onStepSelect={handleStepSelect}
               />
             )}
-          </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
 
           {/* Step Details Section */}
           {selectedStepId && (

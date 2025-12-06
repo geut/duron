@@ -87,7 +87,7 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
         </div>
 
         <div className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>:first-child]:block!">
             <div className="p-4">
               {stepsLoading ? (
                 <div className="p-4 text-center text-muted-foreground">Loading steps...</div>
@@ -105,14 +105,14 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                   {steps.map((step, index) => {
                     const stepNumber = (page - 1) * pageSize + index + 1
                     return (
-                      <AccordionItem key={step.id} value={step.id} className="border-b w-full">
+                      <AccordionItem key={step.id} value={step.id} className="border-b">
                         <AccordionTrigger className="hover:no-underline w-full">
                           <div className="flex items-center justify-between w-full pr-4 min-w-0 overflow-hidden">
                             <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                               <span className="text-sm font-mono text-muted-foreground shrink-0">#{stepNumber}</span>
-                              <span className="font-medium truncate min-w-0">{step.name}</span>
+                              <span className="font-medium truncate w-0 grow">{step.name}</span>
                             </div>
-                            <BadgeStatus status={step.status} />
+                            <BadgeStatus status={step.status} justIcon={true} />
                           </div>
                         </AccordionTrigger>
                         <AccordionContent>
@@ -124,7 +124,6 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                 </Accordion>
               )}
             </div>
-            <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </div>
         {stepsData && stepsData.total > pageSize && (

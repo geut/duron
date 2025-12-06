@@ -99,7 +99,7 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
               </TooltipContent>
             </Tooltip>
           </div>
-          <div>
+          <div className="text-wrap break-all">
             <span className="font-medium">Step:</span> {step.name}
           </div>
           <div>

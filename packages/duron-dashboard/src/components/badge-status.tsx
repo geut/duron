@@ -1,6 +1,7 @@
 import { Ban, CheckCircle2, Clock, Play, XCircle } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
+import { cn } from '../lib/utils'
 
 const icons = {
   created: Clock,
@@ -18,9 +19,15 @@ const colors = {
   cancelled: 'bg-yellow-100 text-yellow-800 border-yellow-800',
 }
 
-export function BadgeStatus({ status }: { status: string }) {
+export function BadgeStatus({ status, justIcon = false }: { status: string; justIcon?: boolean }) {
   const Icon = icons[status as keyof typeof icons]
   const color = colors[status as keyof typeof colors]
+  if (justIcon) {
+    return (
+      <Badge className={cn(color, 'size-4 p-0 border-none')}>{Icon && <Icon height={'100%'} width={'100%'} />}</Badge>
+    )
+  }
+
   return (
     <Badge variant="outline" className={color}>
       {Icon && <Icon className="mr-1 h-3 w-3" />}

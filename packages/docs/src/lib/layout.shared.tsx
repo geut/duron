@@ -7,5 +7,6 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: <Logo className="h-10" />,
     },
+    githubUrl: 'https://github.com/geut/duron',
   }
 }

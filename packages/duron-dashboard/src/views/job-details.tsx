@@ -1,6 +1,6 @@
 'use client'
 
-import { List, MoreVertical, Play, X } from 'lucide-react'
+import { MoreVertical, Play, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -15,10 +15,9 @@ import { isExpiring } from '../lib/is-expiring'
 
 interface JobDetailsProps {
   jobId: string | null
-  onOpenStepList?: () => void
 }
 
-export function JobDetails({ jobId, onOpenStepList }: JobDetailsProps) {
+export function JobDetails({ jobId }: JobDetailsProps) {
   const { data: job, isLoading: jobLoading } = useJob(jobId)
 
   // Enable polling for job status updates - refetches entire job detail when status changes
@@ -117,13 +116,8 @@ export function JobDetails({ jobId, onOpenStepList }: JobDetailsProps) {
     <ScrollArea className="h-full flex flex-col">
       <div className="p-4 pt-5 space-y-4">
         <div className="flex items-center justify-end">
-          {/* Mobile: Dropdown menu and Step List button */}
+          {/* Mobile: Dropdown menu */}
           <div className="md:hidden flex items-center gap-2">
-            {onOpenStepList && (
-              <Button variant="outline" size="sm" onClick={onOpenStepList} title="View Steps">
-                <List className="h-4 w-4" />
-              </Button>
-            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild={true}>
                 <Button variant="outline" size="sm" disabled={retryMutation.isPending || cancelMutation.isPending}>

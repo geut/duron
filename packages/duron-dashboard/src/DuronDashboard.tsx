@@ -3,6 +3,7 @@ import { NuqsAdapter } from 'nuqs/adapters/react'
 
 import { ApiProvider } from './contexts/api-context'
 import { AuthProvider, useAuth } from './contexts/auth-context'
+import { StepViewProvider } from './contexts/step-view-context'
 import { ThemeProvider } from './contexts/theme-context'
 import { Dashboard } from './views/dashboard'
 import Login from './views/login'
@@ -54,11 +55,13 @@ export function DuronDashboard({ url, enableLogin = false, showLogo = true }: Du
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <ApiProvider baseUrl={url}>
-          <AuthProvider>
-            <AppContent enableLogin={enableLogin} showLogo={showLogo} />
-          </AuthProvider>
-        </ApiProvider>
+        <StepViewProvider>
+          <ApiProvider baseUrl={url}>
+            <AuthProvider>
+              <AppContent enableLogin={enableLogin} showLogo={showLogo} />
+            </AuthProvider>
+          </ApiProvider>
+        </StepViewProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )

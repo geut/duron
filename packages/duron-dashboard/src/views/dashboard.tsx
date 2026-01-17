@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, LogOut, MoreVertical, Plus, Trash2, X } from 'lucide-react'
+import { LogOut, MoreVertical, Plus, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { CreateJobDialog } from '@/components/create-job-dialog'
@@ -31,10 +31,8 @@ interface DashboardProps {
 export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProps) {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
-  const [stepListFullScreenVisible, setStepListFullScreenVisible] = useState(false)
   const [createJobDialogOpen, setCreateJobDialogOpen] = useState(false)
   const [jobDetailsVisible, setJobDetailsVisible] = useState(false)
-  const [stepListVisible, setStepListVisible] = useState(false)
   const isMobile = useIsMobile()
   const { logout } = useAuth()
 
@@ -43,23 +41,17 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
   }, [])
 
   useEffect(() => {
-    if (!jobDetailsVisible && !stepListVisible) {
+    if (!jobDetailsVisible) {
       handleJobSelect(null)
     }
-  }, [jobDetailsVisible, stepListVisible, handleJobSelect])
+  }, [jobDetailsVisible, handleJobSelect])
 
   useEffect(() => {
     if (!selectedJobId) {
       setSelectedStepId(null)
     }
-
-    if (isMobile) {
-      setJobDetailsVisible(!!selectedJobId)
-    } else {
-      setJobDetailsVisible(!!selectedJobId)
-      setStepListVisible(!!selectedJobId)
-    }
-  }, [selectedJobId, isMobile])
+    setJobDetailsVisible(!!selectedJobId)
+  }, [selectedJobId])
 
   const handleJobCreated = useCallback((jobId: string) => {
     setSelectedJobId(jobId)
@@ -161,71 +153,55 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
           </DropdownMenu>
         </div>
       </header>
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-        {/* Desktop: Three Horizontal Views with Collapse */}
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Desktop Layout: Top row (Jobs | Details), Bottom row (Steps) */}
         {!isMobile && (
-          <div className="flex-1 flex flex-row h-full min-w-0">
-            {/* Jobs Section */}
+          <div className="flex-1 flex flex-col h-full min-w-0">
+            {/* Top Row: Jobs and Job Details */}
             <div
-              className={`${
-                !jobDetailsVisible && !stepListVisible
-                  ? 'w-full'
-                  : !jobDetailsVisible || !stepListVisible
-                    ? 'w-1/2'
-                    : 'flex-1'
-              } border-r flex flex-col overflow-hidden transition-all duration-200 min-w-0`}
+              className={`flex flex-row border-b transition-all duration-200 ${selectedJobId ? 'h-1/2' : 'flex-1'} min-w-0`}
             >
-              <div className="p-2 border-b shrink-0 flex items-center justify-between">
-                <h2 className="font-medium">Jobs</h2>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
-              </div>
-            </div>
-
-            {/* Job Details Section */}
-            {jobDetailsVisible && (
+              {/* Jobs Section */}
               <div
                 className={`${
-                  stepListVisible ? 'flex-1' : 'w-1/2'
+                  jobDetailsVisible ? 'w-1/2' : 'w-full'
                 } border-r flex flex-col overflow-hidden transition-all duration-200 min-w-0`}
               >
                 <div className="p-2 border-b shrink-0 flex items-center justify-between">
-                  <h2 className="font-medium">Job Details</h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setJobDetailsVisible(false)}
-                    className="h-6 w-6 p-0"
-                    title="Hide Job Details"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                  <h2 className="font-medium">Jobs</h2>
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <JobDetails jobId={selectedJobId} onOpenStepList={() => setStepListFullScreenVisible(true)} />
+                  <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
                 </div>
               </div>
-            )}
 
-            {/* Step List Section */}
-            {stepListVisible && (
-              <div
-                className={`${
-                  jobDetailsVisible ? 'flex-1' : 'w-1/2'
-                } flex flex-col overflow-hidden transition-all duration-200 min-w-0`}
-              >
+              {/* Job Details Section */}
+              {jobDetailsVisible && (
+                <div className="w-1/2 flex flex-col overflow-hidden transition-all duration-200 min-w-0">
+                  <div className="p-2 border-b shrink-0 flex items-center justify-between">
+                    <h2 className="font-medium">Job Details</h2>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setJobDetailsVisible(false)}
+                      className="h-6 w-6 p-0"
+                      title="Hide Job Details"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <JobDetails jobId={selectedJobId} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Row: Steps (full width) */}
+            {selectedJobId && (
+              <div className="h-1/2 flex flex-col overflow-hidden min-w-0">
                 <div className="p-2 border-b shrink-0 flex items-center justify-between">
                   <h2 className="font-medium">Steps</h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setStepListVisible(false)}
-                    className="h-6 w-6 p-0"
-                    title="Hide Steps"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <StepList jobId={selectedJobId} selectedStepId={selectedStepId} onStepSelect={setSelectedStepId} />
@@ -235,56 +211,43 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
           </div>
         )}
 
-        {/* Mobile: Vertical Layout - Jobs and Job Details 50% each */}
+        {/* Mobile: Vertical Layout - Jobs, Job Details, and Steps */}
         {isMobile && (
-          <>
-            <div className="flex-1 flex flex-col h-full">
-              {/* Jobs Section */}
-              <div className={`${selectedJobId ? 'h-1/2' : 'h-full'} border-b flex flex-col overflow-hidden`}>
-                <div className="p-2 border-b shrink-0">
-                  <h2 className="font-medium">Jobs</h2>
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
-                </div>
+          <div className="flex-1 flex flex-col h-full">
+            {/* Jobs Section */}
+            <div className={`${selectedJobId ? 'h-1/3' : 'h-full'} border-b flex flex-col overflow-hidden`}>
+              <div className="p-2 border-b shrink-0">
+                <h2 className="font-medium">Jobs</h2>
               </div>
-
-              {/* Job Details Section */}
-              {selectedJobId && (
-                <div className="h-1/2 flex flex-col overflow-hidden">
-                  <div className="p-2 border-b shrink-0">
-                    <h2 className="font-medium">Job Details</h2>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <JobDetails jobId={selectedJobId} onOpenStepList={() => setStepListFullScreenVisible(true)} />
-                  </div>
-                </div>
-              )}
+              <div className="flex-1 overflow-hidden">
+                <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
+              </div>
             </div>
 
-            {/* Step List Overlay - Mobile */}
-            {stepListFullScreenVisible && (
-              <div className="absolute inset-0 z-50 bg-background flex flex-col">
-                <div className="p-2 border-b flex items-center justify-between shrink-0">
+            {/* Job Details Section */}
+            {selectedJobId && (
+              <div className="h-1/3 border-b flex flex-col overflow-hidden">
+                <div className="p-2 border-b shrink-0">
+                  <h2 className="font-medium">Job Details</h2>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <JobDetails jobId={selectedJobId} />
+                </div>
+              </div>
+            )}
+
+            {/* Steps Section */}
+            {selectedJobId && (
+              <div className="h-1/3 flex flex-col overflow-hidden">
+                <div className="p-2 border-b shrink-0">
                   <h2 className="font-medium">Steps</h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setStepListFullScreenVisible(false)
-                      setSelectedStepId(null)
-                    }}
-                    className="h-6 w-6 p-0"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <StepList jobId={selectedJobId} selectedStepId={selectedStepId} onStepSelect={setSelectedStepId} />
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
       <CreateJobDialog

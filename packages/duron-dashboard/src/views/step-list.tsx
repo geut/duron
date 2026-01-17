@@ -1,14 +1,15 @@
 'use client'
 
-import { ChevronRight, Clock, GitBranch, History, Search } from 'lucide-react'
+import { ChevronRight, Clock, GitBranch, History, List, Search } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 
-import { TimelineModal } from '@/components/timeline-modal'
+import { Timeline } from '@/components/timeline'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useStepView } from '@/contexts/step-view-context'
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { useStepsPolling } from '@/hooks/use-steps-polling'
 import { type GetJobStepsResponse, useJob, useJobSteps, useTimeTravelJob } from '@/lib/api'
@@ -84,7 +85,7 @@ function flattenStepTree(nodes: StepNode[]): Array<{ step: JobStepWithoutOutput;
 export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps) {
   const [inputValue, setInputValue] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [timelineOpen, setTimelineOpen] = useState(false)
+  const { viewType, setViewType } = useStepView()
 
   // Debounce the search term update with 1000ms delay
   const debouncedSetSearchTerm = useDebouncedCallback((value: string) => {
@@ -106,6 +107,10 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
 
   const { data: job } = useJob(jobId)
   const timeTravelMutation = useTimeTravelJob()
+
+  const toggleViewType = useCallback(() => {
+    setViewType(viewType === 'list' ? 'timeline' : 'list')
+  }, [viewType, setViewType])
 
   // Check if job is in a terminal state (can time travel)
   const canTimeTravel = job?.status === 'completed' || job?.status === 'failed' || job?.status === 'cancelled'
@@ -138,34 +143,46 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
   }
 
   return (
-    <>
-      <div className="h-full flex flex-col overflow-hidden">
-        <div className="p-4 border-b shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search steps..."
-                value={inputValue}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setTimelineOpen(true)}
-              className="shrink-0"
-              title="View Timeline"
-            >
-              <Clock className="h-4 w-4" />
-              Timeline
-            </Button>
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="p-4 border-b shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search steps..."
+              value={inputValue}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-8"
+            />
           </div>
+          <Tooltip>
+            <TooltipTrigger asChild={true}>
+              <Button variant="outline" size="sm" onClick={toggleViewType} className="shrink-0">
+                {viewType === 'list' ? (
+                  <>
+                    <Clock className="h-4 w-4" />
+                    <span className="hidden sm:inline ml-1">Timeline</span>
+                  </>
+                ) : (
+                  <>
+                    <List className="h-4 w-4" />
+                    <span className="hidden sm:inline ml-1">List</span>
+                  </>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Switch to {viewType === 'list' ? 'timeline' : 'list'} view</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden">
+        {viewType === 'timeline' ? (
+          <Timeline job={job ?? null} steps={steps} selectedStepId={selectedStepId} onStepSelect={onStepSelect} />
+        ) : (
           <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>:first-child]:block!">
             <div className="p-4">
               {stepsLoading ? (
@@ -250,9 +267,8 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
               )}
             </div>
           </ScrollArea>
-        </div>
+        )}
       </div>
-      <TimelineModal jobId={jobId} open={timelineOpen} onOpenChange={setTimelineOpen} />
-    </>
+    </div>
   )
 }

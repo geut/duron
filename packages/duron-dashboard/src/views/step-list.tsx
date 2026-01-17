@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronRight, Clock, Search } from 'lucide-react'
+import { ChevronRight, Clock, GitBranch, History, Search } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 
 import { TimelineModal } from '@/components/timeline-modal'
@@ -8,13 +8,14 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { useStepsPolling } from '@/hooks/use-steps-polling'
-import { type GetJobStepsResponse, useJobSteps } from '@/lib/api'
+import { type GetJobStepsResponse, useJob, useJobSteps, useTimeTravelJob } from '@/lib/api'
 import { BadgeStatus } from '../components/badge-status'
 
 // Step type from the API response (without output field)
-type JobStepWithoutOutput = GetJobStepsResponse['steps'][number] & { parentStepId?: string | null }
+type JobStepWithoutOutput = GetJobStepsResponse['steps'][number] & { parentStepId?: string | null; branch?: boolean }
 
 import { StepDetailsContent } from './step-details-content'
 
@@ -83,14 +84,11 @@ function flattenStepTree(nodes: StepNode[]): Array<{ step: JobStepWithoutOutput;
 export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps) {
   const [inputValue, setInputValue] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [page, setPage] = useState(1)
   const [timelineOpen, setTimelineOpen] = useState(false)
-  const pageSize = 20
 
   // Debounce the search term update with 1000ms delay
   const debouncedSetSearchTerm = useDebouncedCallback((value: string) => {
     setSearchTerm(value)
-    setPage(1) // Reset to first page when searching
   }, 1000)
 
   const handleSearchChange = useCallback(
@@ -101,11 +99,25 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
     [debouncedSetSearchTerm],
   )
 
+  // Fetch all steps (no pagination)
   const { data: stepsData, isLoading: stepsLoading } = useJobSteps(jobId, {
-    page,
-    pageSize,
     search: searchTerm || undefined,
   })
+
+  const { data: job } = useJob(jobId)
+  const timeTravelMutation = useTimeTravelJob()
+
+  // Check if job is in a terminal state (can time travel)
+  const canTimeTravel = job?.status === 'completed' || job?.status === 'failed' || job?.status === 'cancelled'
+
+  const handleTimeTravel = useCallback(
+    (stepId: string, e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (!jobId || !canTimeTravel) return
+      timeTravelMutation.mutate({ jobId, stepId })
+    },
+    [jobId, canTimeTravel, timeTravelMutation],
+  )
 
   // Enable polling for step updates
   useStepsPolling(jobId, true)
@@ -170,8 +182,9 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                   onValueChange={onStepSelect}
                 >
                   {orderedSteps.map(({ step, depth }, index) => {
-                    const stepNumber = (page - 1) * pageSize + index + 1
+                    const stepNumber = index + 1
                     const isNested = depth > 0
+                    const isBranch = (step as any).branch === true
                     // Calculate left padding based on depth (16px per level)
                     const paddingLeft = depth * 16
 
@@ -186,10 +199,45 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                           <div className="flex items-center justify-between w-full pr-4 min-w-0 overflow-hidden">
                             <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                               {isNested && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0 -ml-1" />}
+                              {isBranch && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild={true}>
+                                    <GitBranch className="h-3 w-3 text-blue-500 shrink-0" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Branch step (independent from siblings)</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                               <span className="text-sm font-mono text-muted-foreground shrink-0">#{stepNumber}</span>
                               <span className="font-medium truncate w-0 grow">{step.name}</span>
                             </div>
-                            <BadgeStatus status={step.status} justIcon={true} />
+                            <div className="flex items-center gap-2 shrink-0">
+                              {canTimeTravel && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild={true}>
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
+                                      className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                                      onClick={(e) => handleTimeTravel(step.id, e)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                          handleTimeTravel(step.id, e as unknown as React.MouseEvent)
+                                        }
+                                      }}
+                                      aria-disabled={timeTravelMutation.isPending}
+                                    >
+                                      <History className="h-3 w-3" />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Time travel: restart from this step</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                              <BadgeStatus status={step.status} justIcon={true} />
+                            </div>
                           </div>
                         </AccordionTrigger>
                         <AccordionContent>
@@ -203,32 +251,6 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
             </div>
           </ScrollArea>
         </div>
-        {stepsData && stepsData.total > pageSize && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t">
-            <div className="text-sm text-muted-foreground">
-              Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, stepsData.total)} of {stepsData.total}{' '}
-              steps
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1 text-sm border rounded disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={page * pageSize >= stepsData.total}
-                className="px-3 py-1 text-sm border rounded disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
       </div>
       <TimelineModal jobId={jobId} open={timelineOpen} onOpenChange={setTimelineOpen} />
     </>

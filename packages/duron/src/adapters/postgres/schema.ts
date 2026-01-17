@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, jsonb, pgSchema, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core'
+import { boolean, check, index, integer, jsonb, pgSchema, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core'
 
 import { JOB_STATUSES, type JobStatus, STEP_STATUS_ACTIVE, STEP_STATUSES, type StepStatus } from '../../constants.js'
 import type { SerializableError } from '../../errors.js'
@@ -67,6 +67,7 @@ export default function createSchema(schemaName: string) {
         .notNull()
         .references(() => jobsTable.id, { onDelete: 'cascade' }),
       parent_step_id: uuid('parent_step_id'),
+      branch: boolean('branch').notNull().default(false),
       name: text('name').notNull(),
       status: text('status').$type<StepStatus>().notNull().default(STEP_STATUS_ACTIVE),
       output: jsonb('output'),

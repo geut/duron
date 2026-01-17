@@ -56,6 +56,7 @@ export const JobStepSchema = z.object({
   id: z.string(),
   jobId: z.string(),
   parentStepId: z.string().nullable().default(null),
+  branch: z.boolean().default(false),
   name: z.string(),
   output: z.any().nullable().default(null),
   status: StepStatusSchema,
@@ -114,8 +115,6 @@ export const GetJobsOptionsSchema = z.object({
 
 export const GetJobStepsOptionsSchema = z.object({
   jobId: z.string(),
-  page: z.number().int().positive().optional(),
-  pageSize: z.number().int().positive().optional(),
   search: z.string().optional(),
   updatedAfter: DateSchema.optional(),
 })
@@ -184,6 +183,13 @@ export const DeleteJobOptionsSchema = z.object({
 
 export const DeleteJobsOptionsSchema = GetJobsOptionsSchema.optional()
 
+export const TimeTravelJobOptionsSchema = z.object({
+  /** The ID of the job to time travel */
+  jobId: z.string(),
+  /** The ID of the step to restart from */
+  stepId: z.string(),
+})
+
 // ============================================================================
 // Step Option Schemas
 // ============================================================================
@@ -193,6 +199,8 @@ export const CreateOrRecoverJobStepOptionsSchema = z.object({
   jobId: z.string(),
   /** The ID of the parent step (null for root steps) */
   parentStepId: z.string().nullable().default(null),
+  /** Whether this step is a branch (independent from siblings during time travel) */
+  branch: z.boolean().default(false),
   /** The name of the step */
   name: z.string(),
   /** Timeout in milliseconds for the step */
@@ -261,8 +269,6 @@ export const GetJobsResultSchema = z.object({
 export const GetJobStepsResultSchema = z.object({
   steps: z.array(JobStepWithoutOutputSchema),
   total: z.number().int().nonnegative(),
-  page: z.number().int().positive(),
-  pageSize: z.number().int().positive(),
 })
 
 export const ActionStatsSchema = z.object({
@@ -316,9 +322,10 @@ export type CancelJobOptions = z.infer<typeof CancelJobOptionsSchema>
 export type RetryJobOptions = z.infer<typeof RetryJobOptionsSchema>
 export type DeleteJobOptions = z.infer<typeof DeleteJobOptionsSchema>
 export type DeleteJobsOptions = z.infer<typeof DeleteJobsOptionsSchema>
-export type CreateOrRecoverJobStepOptions = z.infer<typeof CreateOrRecoverJobStepOptionsSchema>
+export type CreateOrRecoverJobStepOptions = z.input<typeof CreateOrRecoverJobStepOptionsSchema>
 export type CompleteJobStepOptions = z.infer<typeof CompleteJobStepOptionsSchema>
 export type FailJobStepOptions = z.infer<typeof FailJobStepOptionsSchema>
 export type DelayJobStepOptions = z.infer<typeof DelayJobStepOptionsSchema>
 export type CancelJobStepOptions = z.infer<typeof CancelJobStepOptionsSchema>
 export type CreateOrRecoverJobStepResult = z.infer<typeof CreateOrRecoverJobStepResultSchema>
+export type TimeTravelJobOptions = z.infer<typeof TimeTravelJobOptionsSchema>

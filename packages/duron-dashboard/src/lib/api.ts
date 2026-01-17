@@ -344,8 +344,6 @@ export function useDeleteJobs() {
 export function useJobSteps(jobId: string | null, params: GetJobStepsParams = {}) {
   const apiRequest = useApiRequest()
   const queryParams = new URLSearchParams()
-  if (params.page) queryParams.set('page', params.page.toString())
-  if (params.pageSize) queryParams.set('pageSize', params.pageSize.toString())
   if (params.search) queryParams.set('search', params.search)
   if (params.fUpdatedAfter) {
     const dateObj =
@@ -398,6 +396,24 @@ export function useRetryJob() {
     },
     onSuccess: (_, jobId) => {
       queryClient.invalidateQueries({ queryKey: ['job', jobId] })
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+  })
+}
+
+export function useTimeTravelJob() {
+  const apiRequest = useApiRequest()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ jobId, stepId }: { jobId: string; stepId: string }) => {
+      return apiRequest<{ success: boolean; message: string }>(`/jobs/${jobId}/time-travel`, {
+        method: 'POST',
+        body: JSON.stringify({ stepId }),
+      })
+    },
+    onSuccess: (_, { jobId }) => {
+      queryClient.invalidateQueries({ queryKey: ['job', jobId] })
+      queryClient.invalidateQueries({ queryKey: ['job-steps', jobId] })
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
     },
   })

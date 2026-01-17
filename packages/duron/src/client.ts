@@ -362,6 +362,21 @@ export class Client<
   }
 
   /**
+   * Time travel a job to restart from a specific step.
+   * The job must be in completed, failed, or cancelled status.
+   * Resets the job and ancestor steps to active status, deletes subsequent steps,
+   * and preserves completed branch siblings.
+   *
+   * @param jobId - The ID of the job to time travel
+   * @param stepId - The ID of the step to restart from
+   * @returns Promise resolving to `true` if time travel succeeded, `false` otherwise
+   */
+  async timeTravelJob(jobId: string, stepId: string): Promise<boolean> {
+    await this.start()
+    return this.#database.timeTravelJob({ jobId, stepId })
+  }
+
+  /**
    * Delete a job by its ID.
    * Active jobs cannot be deleted.
    *

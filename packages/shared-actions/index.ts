@@ -515,86 +515,90 @@ export const processOrder = defineAction<typeof variables>()({
       { expire: 15_000 },
     )
 
-    // =========================================================================
-    // Step 5: Post-Order Processing (Promise.all of steps with nested steps)
-    // This demonstrates running multiple parent steps in parallel,
-    // where each parent step has its own nested child steps.
-    // =========================================================================
-    const [analytics, loyalty, partnerSync] = await Promise.all([
-      // Parent step 1: Analytics Tracking (with nested steps)
-      ctx.step(
-        'analytics-tracking',
-        async ({ step: analyticsStep }) => {
-          // Nested child: Track purchase event
-          const purchase = await analyticsStep('track-purchase', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 40))
-            addTimeline('track-purchase', 'success', `Tracked order ${orderId}`)
-            return { eventId: `EVT-${Date.now()}`, type: 'purchase' }
-          })
+    const { analytics, loyalty, partnerSync } = await ctx.step('post-order-processing', async (ctx) => {
+      // =========================================================================
+      // Step 5: Post-Order Processing (Promise.all of steps with nested steps)
+      // This demonstrates running multiple parent steps in parallel,
+      // where each parent step has its own nested child steps.
+      // =========================================================================
+      const [analytics, loyalty, partnerSync] = await Promise.all([
+        // Parent step 1: Analytics Tracking (with nested steps)
+        ctx.step(
+          'analytics-tracking',
+          async ({ step: analyticsStep }) => {
+            // Nested child: Track purchase event
+            const purchase = await analyticsStep('track-purchase', async () => {
+              await new Promise((resolve) => setTimeout(resolve, 40))
+              addTimeline('track-purchase', 'success', `Tracked order ${orderId}`)
+              return { eventId: `EVT-${Date.now()}`, type: 'purchase' }
+            })
 
-          // Nested child: Update product recommendations
-          const recommendations = await analyticsStep('update-recommendations', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 60))
-            addTimeline('update-recommendations', 'success', `Updated for ${items.length} products`)
-            return { updated: true, productsAnalyzed: items.length }
-          })
+            // Nested child: Update product recommendations
+            const recommendations = await analyticsStep('update-recommendations', async () => {
+              await new Promise((resolve) => setTimeout(resolve, 60))
+              addTimeline('update-recommendations', 'success', `Updated for ${items.length} products`)
+              return { updated: true, productsAnalyzed: items.length }
+            })
 
-          addTimeline('analytics-tracking', 'success', 'Analytics updated')
-          return { purchase, recommendations }
-        },
-        { expire: 10_000 },
-      ),
+            addTimeline('analytics-tracking', 'success', 'Analytics updated')
+            return { purchase, recommendations }
+          },
+          { expire: 10_000, branch: true },
+        ),
 
-      // Parent step 2: Loyalty Program Update (with nested steps)
-      ctx.step(
-        'loyalty-update',
-        async ({ step: loyaltyStep }) => {
-          // Nested child: Calculate loyalty points
-          const points = await loyaltyStep('calculate-points', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 50))
-            const earnedPoints = Math.floor(totalAmount * 10) // 10 points per dollar
-            addTimeline('calculate-points', 'success', `Earned ${earnedPoints} points`)
-            return { earnedPoints, multiplier: 1.0 }
-          })
+        // Parent step 2: Loyalty Program Update (with nested steps)
+        ctx.step(
+          'loyalty-update',
+          async ({ step: loyaltyStep }) => {
+            // Nested child: Calculate loyalty points
+            const points = await loyaltyStep('calculate-points', async () => {
+              await new Promise((resolve) => setTimeout(resolve, 50))
+              const earnedPoints = Math.floor(totalAmount * 10) // 10 points per dollar
+              addTimeline('calculate-points', 'success', `Earned ${earnedPoints} points`)
+              return { earnedPoints, multiplier: 1.0 }
+            })
 
-          // Nested child: Update customer tier
-          const tier = await loyaltyStep('update-tier', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 45))
-            const newTier = totalAmount > 500 ? 'gold' : totalAmount > 100 ? 'silver' : 'bronze'
-            addTimeline('update-tier', 'success', `Tier: ${newTier}`)
-            return { tier: newTier, upgraded: totalAmount > 500 }
-          })
+            // Nested child: Update customer tier
+            const tier = await loyaltyStep('update-tier', async () => {
+              await new Promise((resolve) => setTimeout(resolve, 45))
+              const newTier = totalAmount > 500 ? 'gold' : totalAmount > 100 ? 'silver' : 'bronze'
+              addTimeline('update-tier', 'success', `Tier: ${newTier}`)
+              return { tier: newTier, upgraded: totalAmount > 500 }
+            })
 
-          addTimeline('loyalty-update', 'success', `${points.earnedPoints} points, tier: ${tier.tier}`)
-          return { points, tier }
-        },
-        { expire: 10_000 },
-      ),
+            addTimeline('loyalty-update', 'success', `${points.earnedPoints} points, tier: ${tier.tier}`)
+            return { points, tier }
+          },
+          { expire: 10_000, branch: true },
+        ),
 
-      // Parent step 3: Partner Sync (with nested steps)
-      ctx.step(
-        'partner-sync',
-        async ({ step: syncStep }) => {
-          // Nested child: Sync with supplier
-          const supplier = await syncStep('sync-supplier', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 80))
-            addTimeline('sync-supplier', 'success', 'Supplier inventory updated')
-            return { synced: true, supplierId: 'SUP-001' }
-          })
+        // Parent step 3: Partner Sync (with nested steps)
+        ctx.step(
+          'partner-sync',
+          async ({ step: syncStep }) => {
+            // Nested child: Sync with supplier
+            const supplier = await syncStep('sync-supplier', async () => {
+              await new Promise((resolve) => setTimeout(resolve, 80))
+              addTimeline('sync-supplier', 'success', 'Supplier inventory updated')
+              return { synced: true, supplierId: 'SUP-001' }
+            })
 
-          // Nested child: Sync with warehouse
-          const warehouse = await syncStep('sync-warehouse', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 70))
-            addTimeline('sync-warehouse', 'success', 'Warehouse notified for picking')
-            return { synced: true, warehouseId: 'WH-MAIN' }
-          })
+            // Nested child: Sync with warehouse
+            const warehouse = await syncStep('sync-warehouse', async () => {
+              await new Promise((resolve) => setTimeout(resolve, 70))
+              addTimeline('sync-warehouse', 'success', 'Warehouse notified for picking')
+              return { synced: true, warehouseId: 'WH-MAIN' }
+            })
 
-          addTimeline('partner-sync', 'success', 'All partners synced')
-          return { supplier, warehouse }
-        },
-        { expire: 10_000 },
-      ),
-    ])
+            addTimeline('partner-sync', 'success', 'All partners synced')
+            return { supplier, warehouse }
+          },
+          { expire: 10_000, branch: true },
+        ),
+      ])
+
+      return { analytics, loyalty, partnerSync }
+    })
 
     addTimeline(
       'post-order-processing',

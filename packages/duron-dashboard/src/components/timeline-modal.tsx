@@ -20,10 +20,7 @@ interface TimelineModalProps {
 export function TimelineModal({ jobId, open, onOpenChange }: TimelineModalProps) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   const { data: job, isLoading: jobLoading } = useJob(jobId)
-  const { data: stepsData, isLoading: stepsLoading } = useJobSteps(jobId, {
-    page: 1,
-    pageSize: 1000, // Get all steps for timeline
-  })
+  const { data: stepsData, isLoading: stepsLoading } = useJobSteps(jobId, {})
 
   // Enable polling for step updates
   useStepsPolling(jobId, open)

@@ -39,6 +39,7 @@ import {
   type JobStepStatusResult,
   type RecoverJobsOptions,
   type RetryJobOptions,
+  type TimeTravelJobOptions,
 } from '../adapter.js'
 import createSchema from './schema.js'
 
@@ -317,6 +318,144 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   }
 
   /**
+   * Internal method to time travel a job to restart from a specific step.
+   * The job must be in completed, failed, or cancelled status.
+   * Resets the job and ancestor steps to active status, deletes subsequent steps,
+   * and preserves completed branch siblings.
+   *
+   * Algorithm:
+   * 1. Validate job is in terminal state (completed/failed/cancelled)
+   * 2. Find the target step and all its ancestors (using parent_step_id)
+   * 3. Determine which steps to keep:
+   *    - Steps completed BEFORE the target step (by created_at)
+   *    - Branch siblings that are completed (independent)
+   * 4. Delete steps that should not be kept
+   * 5. Reset ancestor steps to active status (they need to re-run)
+   * 6. Reset the target step to active status
+   * 7. Reset job to created status
+   *
+   * @returns Promise resolving to `true` if time travel succeeded, `false` otherwise
+   */
+  protected async _timeTravelJob({ jobId, stepId }: TimeTravelJobOptions): Promise<boolean> {
+    const result = this._map(
+      await this.db.execute<{ success: boolean }>(sql`
+      WITH RECURSIVE
+      -- Lock and validate the job
+      locked_job AS (
+        SELECT j.id
+        FROM ${this.tables.jobsTable} j
+        WHERE j.id = ${jobId}
+          AND j.status IN (${JOB_STATUS_COMPLETED}, ${JOB_STATUS_FAILED}, ${JOB_STATUS_CANCELLED})
+        FOR UPDATE OF j
+      ),
+      -- Validate target step exists and belongs to job
+      target_step AS (
+        SELECT s.id, s.parent_step_id, s.created_at
+        FROM ${this.tables.jobStepsTable} s
+        WHERE s.id = ${stepId}
+          AND s.job_id = ${jobId}
+          AND EXISTS (SELECT 1 FROM locked_job)
+      ),
+      -- Find all ancestor steps recursively (from target up to root)
+      ancestors AS (
+        SELECT s.id, s.parent_step_id, 0 AS depth
+        FROM ${this.tables.jobStepsTable} s
+        WHERE s.id = (SELECT parent_step_id FROM target_step)
+          AND EXISTS (SELECT 1 FROM target_step)
+        UNION ALL
+        SELECT s.id, s.parent_step_id, a.depth + 1
+        FROM ${this.tables.jobStepsTable} s
+        INNER JOIN ancestors a ON s.id = a.parent_step_id
+      ),
+      -- Steps to keep: completed steps created before target + completed branch siblings
+      steps_to_keep AS (
+        -- Steps created before target that are completed (siblings or unrelated)
+        SELECT s.id
+        FROM ${this.tables.jobStepsTable} s
+        CROSS JOIN target_step ts
+        WHERE s.job_id = ${jobId}
+          AND s.created_at < ts.created_at
+          AND s.status = ${STEP_STATUS_COMPLETED}
+          AND s.id NOT IN (SELECT id FROM ancestors)
+          AND s.id != ts.id
+        UNION
+        -- Completed branch siblings at same level as target (same parent, branch=true, completed)
+        SELECT s.id
+        FROM ${this.tables.jobStepsTable} s
+        CROSS JOIN target_step ts
+        WHERE s.job_id = ${jobId}
+          AND s.id != ts.id
+          AND s.branch = true
+          AND s.status = ${STEP_STATUS_COMPLETED}
+          AND (
+            (s.parent_step_id IS NULL AND ts.parent_step_id IS NULL)
+            OR s.parent_step_id = ts.parent_step_id
+          )
+      ),
+      -- Delete steps that are not in the keep list and are not ancestors/target
+      deleted_steps AS (
+        DELETE FROM ${this.tables.jobStepsTable}
+        WHERE job_id = ${jobId}
+          AND id NOT IN (SELECT id FROM steps_to_keep)
+          AND id NOT IN (SELECT id FROM ancestors)
+          AND id != (SELECT id FROM target_step)
+        RETURNING id
+      ),
+      -- Reset ancestor steps to active
+      reset_ancestors AS (
+        UPDATE ${this.tables.jobStepsTable}
+        SET
+          status = ${STEP_STATUS_ACTIVE},
+          output = NULL,
+          error = NULL,
+          finished_at = NULL,
+          started_at = now(),
+          expires_at = now() + (timeout_ms || ' milliseconds')::interval,
+          retries_count = 0,
+          delayed_ms = NULL,
+          history_failed_attempts = '{}'::jsonb
+        WHERE id IN (SELECT id FROM ancestors)
+        RETURNING id
+      ),
+      -- Reset target step to active
+      reset_target AS (
+        UPDATE ${this.tables.jobStepsTable}
+        SET
+          status = ${STEP_STATUS_ACTIVE},
+          output = NULL,
+          error = NULL,
+          finished_at = NULL,
+          started_at = now(),
+          expires_at = now() + (timeout_ms || ' milliseconds')::interval,
+          retries_count = 0,
+          delayed_ms = NULL,
+          history_failed_attempts = '{}'::jsonb
+        WHERE id = (SELECT id FROM target_step)
+        RETURNING id
+      ),
+      -- Reset job to created status
+      reset_job AS (
+        UPDATE ${this.tables.jobsTable}
+        SET
+          status = ${JOB_STATUS_CREATED},
+          output = NULL,
+          error = NULL,
+          started_at = NULL,
+          finished_at = NULL,
+          client_id = NULL,
+          expires_at = NULL
+        WHERE id = ${jobId}
+          AND EXISTS (SELECT 1 FROM target_step)
+        RETURNING id
+      )
+      SELECT EXISTS(SELECT 1 FROM reset_job) AS success
+    `),
+    )
+
+    return result.length > 0 && result[0]!.success === true
+  }
+
+  /**
    * Internal method to delete a job by its ID.
    * Active jobs cannot be deleted.
    *
@@ -571,6 +710,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     timeoutMs,
     retriesLimit,
     parentStepId,
+    branch = false,
   }: CreateOrRecoverJobStepOptions): Promise<CreateOrRecoverJobStepResult | null> {
     type StepResult = CreateOrRecoverJobStepResult
 
@@ -593,6 +733,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         INSERT INTO ${this.tables.jobStepsTable} (
           job_id,
           parent_step_id,
+          branch,
           name,
           timeout_ms,
           retries_limit,
@@ -605,6 +746,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         SELECT
           ${jobId},
           ${parentStepId},
+          ${branch},
           ${name},
           ${timeoutMs},
           ${retriesLimit},
@@ -826,12 +968,12 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   }
 
   /**
-   * Internal method to get steps for a job with pagination and fuzzy search.
+   * Internal method to get all steps for a job with optional fuzzy search.
    * Steps are always ordered by created_at ASC.
    * Steps do not include output data.
    */
   protected async _getJobSteps(options: GetJobStepsOptions): Promise<GetJobStepsResult> {
-    const { jobId, page = 1, pageSize = 10, search } = options
+    const { jobId, search } = options
 
     const jobStepsTable = this.tables.jobStepsTable
 
@@ -850,23 +992,12 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         : undefined,
     )
 
-    // Get total count
-    const total = await this.db.$count(jobStepsTable, where)
-
-    if (!total) {
-      return {
-        steps: [],
-        total: 0,
-        page,
-        pageSize,
-      }
-    }
-
     const steps = await this.db
       .select({
         id: jobStepsTable.id,
         jobId: jobStepsTable.job_id,
         parentStepId: jobStepsTable.parent_step_id,
+        branch: jobStepsTable.branch,
         name: jobStepsTable.name,
         status: jobStepsTable.status,
         error: jobStepsTable.error,
@@ -884,14 +1015,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .from(jobStepsTable)
       .where(where)
       .orderBy(asc(jobStepsTable.created_at))
-      .limit(pageSize)
-      .offset((page - 1) * pageSize)
 
     return {
       steps,
-      total,
-      page,
-      pageSize,
+      total: steps.length,
     }
   }
 
@@ -1059,6 +1186,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         id: this.tables.jobStepsTable.id,
         jobId: this.tables.jobStepsTable.job_id,
         parentStepId: this.tables.jobStepsTable.parent_step_id,
+        branch: this.tables.jobStepsTable.branch,
         name: this.tables.jobStepsTable.name,
         output: this.tables.jobStepsTable.output,
         status: this.tables.jobStepsTable.status,

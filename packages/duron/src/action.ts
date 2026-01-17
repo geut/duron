@@ -132,6 +132,15 @@ export const StepOptionsSchema = z.object({
     .number()
     .default(5 * 60 * 1000)
     .describe('The expire time for the step (milliseconds)'),
+
+  /**
+   * Whether this step is a branch.
+   * Branch steps are independent from siblings during time travel.
+   * When time traveling to a step, completed branch siblings are preserved.
+   *
+   * @default false
+   */
+  branch: z.boolean().default(false).describe('Whether this step is a branch (independent from siblings)'),
 })
 
 /**

@@ -61,14 +61,10 @@ export class UnauthorizedError extends Error {
 
 export const GetJobStepsQuerySchema = z
   .object({
-    page: z.coerce.number().int().min(1).optional(),
-    pageSize: z.coerce.number().int().min(1).max(1000).optional(),
     search: z.string().optional(),
     fUpdatedAfter: z.coerce.date().optional(),
   })
   .transform((data) => ({
-    page: data.page,
-    pageSize: data.pageSize,
     search: data.search,
     updatedAfter: data.fUpdatedAfter,
   }))
@@ -199,6 +195,15 @@ export const RetryJobResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   newJobId: z.string(),
+})
+
+export const TimeTravelJobBodySchema = z.object({
+  stepId: z.uuid(),
+})
+
+export const TimeTravelJobResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
 })
 
 // ============================================================================
@@ -345,8 +350,6 @@ export function createServer<P extends string>({ client, prefix, login }: Create
       async ({ params, query }) => {
         const options: GetJobStepsOptions = {
           jobId: params.id,
-          page: query.page,
-          pageSize: query.pageSize,
           search: query.search,
           updatedAfter: query.updatedAfter,
         }
@@ -483,6 +486,32 @@ export function createServer<P extends string>({ client, prefix, login }: Create
         params: JobIdParamsSchema,
         response: {
           200: RetryJobResponseSchema,
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+        auth: true,
+      },
+    )
+    .post(
+      '/jobs/:id/time-travel',
+      async ({ params, body }) => {
+        const success = await client.timeTravelJob(params.id, body.stepId)
+        if (!success) {
+          throw new Error(
+            `Could not time travel job ${params.id}. The job may not be in a terminal state or the step may not exist.`,
+          )
+        }
+        return {
+          success: true,
+          message: `Job ${params.id} has been time traveled to step ${body.stepId}`,
+        }
+      },
+      {
+        params: JobIdParamsSchema,
+        body: TimeTravelJobBodySchema,
+        response: {
+          200: TimeTravelJobResponseSchema,
           400: ErrorResponseSchema,
           500: ErrorResponseSchema,
           401: ErrorResponseSchema,

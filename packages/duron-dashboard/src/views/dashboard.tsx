@@ -167,12 +167,7 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
                   jobDetailsVisible ? 'w-1/2' : 'w-full'
                 } border-r flex flex-col overflow-hidden transition-all duration-200 min-w-0`}
               >
-                <div className="p-2 border-b shrink-0 flex items-center justify-between">
-                  <h2 className="font-medium">Jobs</h2>
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
-                </div>
+                <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
               </div>
 
               {/* Job Details Section */}
@@ -216,12 +211,7 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
           <div className="flex-1 flex flex-col h-full">
             {/* Jobs Section */}
             <div className={`${selectedJobId ? 'h-1/3' : 'h-full'} border-b flex flex-col overflow-hidden`}>
-              <div className="p-2 border-b shrink-0">
-                <h2 className="font-medium">Jobs</h2>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
-              </div>
+              <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
             </div>
 
             {/* Job Details Section */}

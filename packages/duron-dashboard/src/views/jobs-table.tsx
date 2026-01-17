@@ -9,7 +9,6 @@ import { DataTableColumnHeader } from '@/components/data-table/data-table-column
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDataTable } from '@/hooks/use-data-table'
 import { useJobParams } from '@/hooks/use-job-params'
@@ -250,15 +249,18 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
 
   return (
     <div className="h-full flex flex-col">
-      <ScrollArea className="h-full w-full [&_[data-radix-scroll-area-viewport]>:first-child]:block!">
-        <div className="flex-1 p-4">
-          <DataTable table={table}>
-            <DataTableToolbar table={table}>
-              <DataTableSortList table={table} />
-            </DataTableToolbar>
-          </DataTable>
-        </div>
-      </ScrollArea>
+      {/* Header with title and toolbar */}
+      <div className="p-2 border-b shrink-0 flex items-center justify-between gap-2">
+        <h2 className="font-medium shrink-0">Jobs</h2>
+        <DataTableToolbar table={table} className="flex-1 justify-end">
+          <DataTableSortList table={table} />
+        </DataTableToolbar>
+      </div>
+
+      {/* Table content */}
+      <div className="flex-1 overflow-hidden p-2">
+        <DataTable table={table} fillHeight={true} />
+      </div>
     </div>
   )
 }

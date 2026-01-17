@@ -1,5 +1,5 @@
 import { and, asc, between, desc, eq, gt, gte, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm'
-import type { PgColumn, PgDatabase } from 'drizzle-orm/pg-core'
+import type { PgAsyncDatabase, PgColumn } from 'drizzle-orm/pg-core'
 
 import {
   JOB_STATUS_ACTIVE,
@@ -47,7 +47,7 @@ type Schema = ReturnType<typeof createSchema>
 // Re-export types for backward compatibility
 export type { Job, JobStep } from '../adapter.js'
 
-type DrizzleDatabase = PgDatabase<any, Schema>
+type DrizzleDatabase = PgAsyncDatabase<any, Schema>
 
 export interface AdapterOptions<Connection> {
   connection: Connection
@@ -570,6 +570,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     name,
     timeoutMs,
     retriesLimit,
+    parentStepId,
   }: CreateOrRecoverJobStepOptions): Promise<CreateOrRecoverJobStepResult | null> {
     type StepResult = CreateOrRecoverJobStepResult
 
@@ -591,6 +592,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       upserted_step AS (
         INSERT INTO ${this.tables.jobStepsTable} (
           job_id,
+          parent_step_id,
           name,
           timeout_ms,
           retries_limit,
@@ -602,6 +604,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         )
         SELECT
           ${jobId},
+          ${parentStepId},
           ${name},
           ${timeoutMs},
           ${retriesLimit},
@@ -863,6 +866,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .select({
         id: jobStepsTable.id,
         jobId: jobStepsTable.job_id,
+        parentStepId: jobStepsTable.parent_step_id,
         name: jobStepsTable.name,
         status: jobStepsTable.status,
         error: jobStepsTable.error,
@@ -1054,6 +1058,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .select({
         id: this.tables.jobStepsTable.id,
         jobId: this.tables.jobStepsTable.job_id,
+        parentStepId: this.tables.jobStepsTable.parent_step_id,
         name: this.tables.jobStepsTable.name,
         output: this.tables.jobStepsTable.output,
         status: this.tables.jobStepsTable.status,

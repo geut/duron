@@ -263,3 +263,351 @@ export const getWeather = defineAction<typeof variables>()({
     }
   },
 })
+
+/**
+ * Example action demonstrating nested steps feature.
+ * This simulates an e-commerce order processing workflow with:
+ * - Parent steps that contain child steps
+ * - Deep nesting (3 levels)
+ * - Shared abort signal propagation
+ * - Parent-child step tracking in the database
+ * - Promise.all of parent steps, each with their own nested children
+ *
+ * The workflow:
+ * 1. validate-order (parent)
+ *    ├── check-inventory (child)
+ *    └── verify-customer (child)
+ *
+ * 2. process-payment (parent)
+ *    ├── authorize-payment (child)
+ *    │   └── fraud-check (grandchild - 3 levels deep!)
+ *    └── capture-payment (child)
+ *
+ * 3. fulfill-order (parent)
+ *    ├── reserve-inventory (child)
+ *    └── create-shipment (child)
+ *
+ * 4. send-notifications (parent)
+ *    ├── email-confirmation (child) ─┐
+ *    └── sms-notification (child)  ──┴── concurrent child steps
+ *
+ * 5. post-order-processing (Promise.all of 3 parent steps with nested children)
+ *    ├── analytics-tracking (parent) ─────┐
+ *    │   ├── track-purchase (child)       │
+ *    │   └── update-recommendations       │
+ *    ├── loyalty-update (parent) ─────────┼── all 3 run in parallel
+ *    │   ├── calculate-points (child)     │
+ *    │   └── update-tier (child)          │
+ *    └── partner-sync (parent) ───────────┘
+ *        ├── sync-supplier (child)
+ *        └── sync-warehouse (child)
+ */
+export const processOrder = defineAction<typeof variables>()({
+  name: 'processOrder',
+  input: z.object({
+    orderId: z.string().min(1).describe('The order ID to process'),
+    customerId: z.string().min(1).describe('The customer ID'),
+    items: z
+      .array(
+        z.object({
+          productId: z.string(),
+          quantity: z.number().min(1),
+          price: z.number().min(0),
+        }),
+      )
+      .min(1)
+      .describe('Order items'),
+    paymentMethod: z.enum(['credit_card', 'paypal', 'bank_transfer']).default('credit_card'),
+    shippingAddress: z.object({
+      street: z.string(),
+      city: z.string(),
+      country: z.string(),
+      postalCode: z.string(),
+    }),
+  }),
+  output: z.object({
+    orderId: z.string(),
+    status: z.enum(['completed', 'failed']),
+    transactionId: z.string().nullable(),
+    shipmentId: z.string().nullable(),
+    timeline: z.array(
+      z.object({
+        step: z.string(),
+        status: z.enum(['success', 'failed']),
+        timestamp: z.string(),
+        details: z.string().optional(),
+      }),
+    ),
+  }),
+  handler: async (ctx) => {
+    const { orderId, customerId, items, paymentMethod, shippingAddress } = ctx.input
+    const timeline: Array<{ step: string; status: 'success' | 'failed'; timestamp: string; details?: string }> = []
+    const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+    // Helper to add timeline entry
+    const addTimeline = (step: string, status: 'success' | 'failed', details?: string) => {
+      timeline.push({ step, status, timestamp: new Date().toISOString(), details })
+    }
+
+    // =========================================================================
+    // Step 1: Validate Order (with nested child steps)
+    // =========================================================================
+    const validation = await ctx.step(
+      'validate-order',
+      async ({ step: nestedStep }) => {
+        // Child step: Check inventory for all items
+        const inventoryCheck = await nestedStep('check-inventory', async () => {
+          // Simulate inventory check
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          const allInStock = items.every((item) => item.quantity <= 10) // Mock: max 10 per item
+          addTimeline('check-inventory', allInStock ? 'success' : 'failed', `Checked ${items.length} items`)
+          return { allInStock, checkedItems: items.length }
+        })
+
+        // Child step: Verify customer
+        const customerVerification = await nestedStep('verify-customer', async () => {
+          // Simulate customer verification
+          await new Promise((resolve) => setTimeout(resolve, 80))
+          const isValid = customerId.length > 0
+          addTimeline('verify-customer', isValid ? 'success' : 'failed', `Customer: ${customerId}`)
+          return { isValid, customerId }
+        })
+
+        addTimeline(
+          'validate-order',
+          inventoryCheck.allInStock && customerVerification.isValid ? 'success' : 'failed',
+          `Inventory: ${inventoryCheck.allInStock}, Customer: ${customerVerification.isValid}`,
+        )
+
+        return {
+          isValid: inventoryCheck.allInStock && customerVerification.isValid,
+          inventoryCheck,
+          customerVerification,
+        }
+      },
+      { expire: 30_000 },
+    )
+
+    if (!validation.isValid) {
+      return {
+        orderId,
+        status: 'failed' as const,
+        transactionId: null,
+        shipmentId: null,
+        timeline,
+      }
+    }
+
+    // =========================================================================
+    // Step 2: Process Payment (with deeply nested steps - 3 levels)
+    // =========================================================================
+    const payment = await ctx.step(
+      'process-payment',
+      async ({ step: paymentStep }) => {
+        // Child step: Authorize payment (contains grandchild step)
+        const authorization = await paymentStep('authorize-payment', async ({ step: authStep }) => {
+          // Grandchild step: Fraud check (3 levels deep!)
+          const fraudCheck = await authStep('fraud-check', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 150))
+            const isSafe = totalAmount < 10000 // Mock: flag large orders
+            addTimeline('fraud-check', isSafe ? 'success' : 'failed', `Amount: $${totalAmount.toFixed(2)}`)
+            return { isSafe, riskScore: isSafe ? 0.1 : 0.9 }
+          })
+
+          if (!fraudCheck.isSafe) {
+            addTimeline('authorize-payment', 'failed', 'Fraud check failed')
+            return { authorized: false, authCode: null, fraudCheck }
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          const authCode = `AUTH-${Date.now()}`
+          addTimeline('authorize-payment', 'success', `Auth code: ${authCode}`)
+          return { authorized: true, authCode, fraudCheck }
+        })
+
+        if (!authorization.authorized) {
+          addTimeline('process-payment', 'failed', 'Authorization failed')
+          return { success: false, transactionId: null, authorization }
+        }
+
+        // Child step: Capture payment
+        const capture = await paymentStep('capture-payment', async () => {
+          await new Promise((resolve) => setTimeout(resolve, 120))
+          const transactionId = `TXN-${Date.now()}`
+          addTimeline('capture-payment', 'success', `Transaction: ${transactionId}, Method: ${paymentMethod}`)
+          return { captured: true, transactionId }
+        })
+
+        addTimeline('process-payment', 'success', `Transaction ID: ${capture.transactionId}`)
+        return {
+          success: true,
+          transactionId: capture.transactionId,
+          authorization,
+        }
+      },
+      { expire: 60_000 },
+    )
+
+    if (!payment.success) {
+      return {
+        orderId,
+        status: 'failed' as const,
+        transactionId: null,
+        shipmentId: null,
+        timeline,
+      }
+    }
+
+    // =========================================================================
+    // Step 3: Fulfill Order (with nested steps)
+    // =========================================================================
+    const fulfillment = await ctx.step(
+      'fulfill-order',
+      async ({ step: fulfillStep }) => {
+        // Child step: Reserve inventory
+        const reservation = await fulfillStep('reserve-inventory', async () => {
+          await new Promise((resolve) => setTimeout(resolve, 90))
+          const reservationId = `RES-${Date.now()}`
+          addTimeline('reserve-inventory', 'success', `Reserved ${items.length} items`)
+          return { reserved: true, reservationId }
+        })
+
+        // Child step: Create shipment
+        const shipment = await fulfillStep('create-shipment', async () => {
+          await new Promise((resolve) => setTimeout(resolve, 110))
+          const shipmentId = `SHIP-${Date.now()}`
+          addTimeline('create-shipment', 'success', `Shipment to ${shippingAddress.city}, ${shippingAddress.country}`)
+          return { shipmentId, carrier: 'FastShip', estimatedDays: 3 }
+        })
+
+        addTimeline('fulfill-order', 'success', `Shipment: ${shipment.shipmentId}`)
+        return { reservation, shipment }
+      },
+      { expire: 30_000 },
+    )
+
+    // =========================================================================
+    // Step 4: Send Notifications (with concurrent nested steps)
+    // =========================================================================
+    await ctx.step(
+      'send-notifications',
+      async ({ step: notifyStep }) => {
+        // Run notification child steps concurrently
+        const [emailResult, smsResult] = await Promise.all([
+          // Child step: Send email confirmation
+          notifyStep('email-confirmation', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 70))
+            addTimeline('email-confirmation', 'success', `Sent to customer ${customerId}`)
+            return { sent: true, type: 'email' }
+          }),
+
+          // Child step: Send SMS notification
+          notifyStep('sms-notification', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 50))
+            addTimeline('sms-notification', 'success', 'Order confirmation SMS sent')
+            return { sent: true, type: 'sms' }
+          }),
+        ])
+
+        addTimeline('send-notifications', 'success', `Email: ${emailResult.sent}, SMS: ${smsResult.sent}`)
+        return { email: emailResult, sms: smsResult }
+      },
+      { expire: 15_000 },
+    )
+
+    // =========================================================================
+    // Step 5: Post-Order Processing (Promise.all of steps with nested steps)
+    // This demonstrates running multiple parent steps in parallel,
+    // where each parent step has its own nested child steps.
+    // =========================================================================
+    const [analytics, loyalty, partnerSync] = await Promise.all([
+      // Parent step 1: Analytics Tracking (with nested steps)
+      ctx.step(
+        'analytics-tracking',
+        async ({ step: analyticsStep }) => {
+          // Nested child: Track purchase event
+          const purchase = await analyticsStep('track-purchase', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 40))
+            addTimeline('track-purchase', 'success', `Tracked order ${orderId}`)
+            return { eventId: `EVT-${Date.now()}`, type: 'purchase' }
+          })
+
+          // Nested child: Update product recommendations
+          const recommendations = await analyticsStep('update-recommendations', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 60))
+            addTimeline('update-recommendations', 'success', `Updated for ${items.length} products`)
+            return { updated: true, productsAnalyzed: items.length }
+          })
+
+          addTimeline('analytics-tracking', 'success', 'Analytics updated')
+          return { purchase, recommendations }
+        },
+        { expire: 10_000 },
+      ),
+
+      // Parent step 2: Loyalty Program Update (with nested steps)
+      ctx.step(
+        'loyalty-update',
+        async ({ step: loyaltyStep }) => {
+          // Nested child: Calculate loyalty points
+          const points = await loyaltyStep('calculate-points', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 50))
+            const earnedPoints = Math.floor(totalAmount * 10) // 10 points per dollar
+            addTimeline('calculate-points', 'success', `Earned ${earnedPoints} points`)
+            return { earnedPoints, multiplier: 1.0 }
+          })
+
+          // Nested child: Update customer tier
+          const tier = await loyaltyStep('update-tier', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 45))
+            const newTier = totalAmount > 500 ? 'gold' : totalAmount > 100 ? 'silver' : 'bronze'
+            addTimeline('update-tier', 'success', `Tier: ${newTier}`)
+            return { tier: newTier, upgraded: totalAmount > 500 }
+          })
+
+          addTimeline('loyalty-update', 'success', `${points.earnedPoints} points, tier: ${tier.tier}`)
+          return { points, tier }
+        },
+        { expire: 10_000 },
+      ),
+
+      // Parent step 3: Partner Sync (with nested steps)
+      ctx.step(
+        'partner-sync',
+        async ({ step: syncStep }) => {
+          // Nested child: Sync with supplier
+          const supplier = await syncStep('sync-supplier', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 80))
+            addTimeline('sync-supplier', 'success', 'Supplier inventory updated')
+            return { synced: true, supplierId: 'SUP-001' }
+          })
+
+          // Nested child: Sync with warehouse
+          const warehouse = await syncStep('sync-warehouse', async () => {
+            await new Promise((resolve) => setTimeout(resolve, 70))
+            addTimeline('sync-warehouse', 'success', 'Warehouse notified for picking')
+            return { synced: true, warehouseId: 'WH-MAIN' }
+          })
+
+          addTimeline('partner-sync', 'success', 'All partners synced')
+          return { supplier, warehouse }
+        },
+        { expire: 10_000 },
+      ),
+    ])
+
+    addTimeline(
+      'post-order-processing',
+      'success',
+      `Analytics: done, Loyalty: ${loyalty.points.earnedPoints}pts, Partners: ${analytics && partnerSync ? 'synced' : 'pending'}`,
+    )
+
+    return {
+      orderId,
+      status: 'completed' as const,
+      transactionId: payment.transactionId,
+      shipmentId: fulfillment.shipment.shipmentId,
+      timeline,
+    }
+  },
+})

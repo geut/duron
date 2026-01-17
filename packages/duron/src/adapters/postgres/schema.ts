@@ -66,6 +66,7 @@ export default function createSchema(schemaName: string) {
       job_id: uuid('job_id')
         .notNull()
         .references(() => jobsTable.id, { onDelete: 'cascade' }),
+      parent_step_id: uuid('parent_step_id'),
       name: text('name').notNull(),
       status: text('status').$type<StepStatus>().notNull().default(STEP_STATUS_ACTIVE),
       output: jsonb('output'),
@@ -98,6 +99,7 @@ export default function createSchema(schemaName: string) {
       index('idx_job_steps_status').on(table.status),
       index('idx_job_steps_name').on(table.name),
       index('idx_job_steps_expires_at').on(table.expires_at),
+      index('idx_job_steps_parent_step_id').on(table.parent_step_id),
       // Composite indexes
       index('idx_job_steps_job_status').on(table.job_id, table.status),
       index('idx_job_steps_job_name').on(table.job_id, table.name),

@@ -12,6 +12,7 @@ Duron is a modern, type-safe background job processing system built with TypeScr
 
 - **Type-Safe Actions** - Define actions with Zod schemas for input/output validation
 - **Step-Based Execution** - Break down complex workflows into manageable, retryable steps
+- **Nested Steps** - Steps can create child steps with proper parent-child tracking and abort signal propagation
 - **Intelligent Retry Logic** - Configurable exponential backoff with per-action and per-step options
 - **Flexible Sync Patterns** - Pull, push, hybrid, or manual job fetching
 - **Advanced Concurrency Control** - Per-action, per-group, and dynamic concurrency limits
@@ -198,6 +199,49 @@ const sendEmail = defineAction<typeof variables>()({
 })
 ```
 
+### Nested Steps
+
+Steps can create child steps using the `step()` method available in the step handler context. Child steps share abort signals with their parent and are tracked with `parentStepId` in the database.
+
+```typescript
+const processOrder = defineAction<typeof variables>()({
+  name: 'process-order',
+  input: z.object({ orderId: z.string() }),
+  output: z.object({ success: z.boolean() }),
+  handler: async (ctx) => {
+    const result = await ctx.step('process', async ({ step, signal, stepId }) => {
+      // stepId is available for the current step
+      console.log('Processing step:', stepId)
+
+      // Create child steps - they inherit the parent's abort signal
+      const validation = await step('validate', async ({ parentStepId }) => {
+        // parentStepId links back to the 'process' step
+        return { valid: true }
+      })
+
+      // Child steps can also be nested further
+      const payment = await step('charge', async ({ step: nestedStep }) => {
+        const auth = await nestedStep('authorize', async () => {
+          return { authCode: '123' }
+        })
+        return { charged: true, authCode: auth.authCode }
+      })
+
+      return { success: validation.valid && payment.charged }
+    })
+
+    return result
+  },
+})
+```
+
+**Important:** All child steps MUST be awaited before the parent step returns. If a parent step completes with unawaited children, Duron will:
+1. Abort all pending child steps
+2. Wait for them to settle
+3. Throw an `UnhandledChildStepsError`
+
+This prevents orphaned processes and ensures proper async patterns.
+
 ### Creating a Client
 
 ```typescript
@@ -340,6 +384,7 @@ Uses Bun's bundler mode with:
 | `packages/duron/src/server.ts` | REST API server |
 | `packages/duron/src/adapters/adapter.ts` | Base adapter class |
 | `packages/duron/src/adapters/postgres/` | PostgreSQL adapter |
+| `packages/duron/src/step-manager.ts` | Step execution and nested step handling |
 | `packages/duron-dashboard/src/DuronDashboard.tsx` | Dashboard root |
 | `packages/duron-dashboard/src/views/` | Dashboard pages |
 | `packages/examples/basic/start.ts` | Basic example |
@@ -368,15 +413,22 @@ Uses Bun's bundler mode with:
 ## Error Handling
 
 - Use `NonRetriableError` for errors that should not be retried
+- Use `UnhandledChildStepsError` is thrown when parent steps complete with unawaited children
 - Steps have built-in retry logic with exponential backoff
 - Jobs have timeout/expiration settings
 
 ```typescript
-import { NonRetriableError } from 'duron'
+import { NonRetriableError, UnhandledChildStepsError } from 'duron'
 
+// For errors that should not be retried
 if (!apiKey) {
   throw new NonRetriableError('API key is required')
 }
+
+// UnhandledChildStepsError is thrown automatically when:
+// - A parent step returns before all child steps are awaited
+// - The parent step's callback completes but children are still pending
+// This error is non-retriable and will fail the entire job
 ```
 
 ## Environment Variables

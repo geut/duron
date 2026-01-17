@@ -55,6 +55,7 @@ export const JobSchema = z.object({
 export const JobStepSchema = z.object({
   id: z.string(),
   jobId: z.string(),
+  parentStepId: z.string().nullable().default(null),
   name: z.string(),
   output: z.any().nullable().default(null),
   status: StepStatusSchema,
@@ -190,6 +191,8 @@ export const DeleteJobsOptionsSchema = GetJobsOptionsSchema.optional()
 export const CreateOrRecoverJobStepOptionsSchema = z.object({
   /** The ID of the job this step belongs to */
   jobId: z.string(),
+  /** The ID of the parent step (null for root steps) */
+  parentStepId: z.string().nullable().default(null),
   /** The name of the step */
   name: z.string(),
   /** Timeout in milliseconds for the step */

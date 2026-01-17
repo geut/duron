@@ -3,7 +3,7 @@ import { Client, type ClientOptions } from './client.js'
 
 export { defineAction } from './action.js'
 export * from './constants.js'
-export { NonRetriableError } from './errors.js'
+export { NonRetriableError, UnhandledChildStepsError } from './errors.js'
 export * from './server.js'
 
 export const duron = <

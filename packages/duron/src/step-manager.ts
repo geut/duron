@@ -19,6 +19,7 @@ import {
   StepAlreadyExecutedError,
   StepTimeoutError,
   serializeError,
+  UnhandledChildStepsError,
 } from './errors.js'
 import pRetry from './utils/p-retry.js'
 import waitForAbort from './utils/wait-for-abort.js'
@@ -28,6 +29,7 @@ export interface TaskStep {
   cb: (ctx: StepHandlerContext) => Promise<any>
   options: StepOptions
   abortSignal: AbortSignal
+  parentStepId: string | null
 }
 
 /**
@@ -61,16 +63,24 @@ export class StepStore {
    * @param name - The name of the step
    * @param timeoutMs - Timeout in milliseconds for the step
    * @param retriesLimit - Maximum number of retries for the step
+   * @param parentStepId - The ID of the parent step (null for root steps)
    * @returns Promise resolving to the created step ID
    * @throws Error if step creation fails
    */
-  async getOrCreate(jobId: string, name: string, timeoutMs: number, retriesLimit: number) {
+  async getOrCreate(
+    jobId: string,
+    name: string,
+    timeoutMs: number,
+    retriesLimit: number,
+    parentStepId: string | null = null,
+  ) {
     try {
       return await this.#adapter.createOrRecoverJobStep({
         jobId,
         name,
         timeoutMs,
         retriesLimit,
+        parentStepId,
       })
     } catch (error) {
       throw new NonRetriableError(`Failed to get or create step "${name}" for job "${jobId}"`, { cause: error })
@@ -151,7 +161,7 @@ export class StepManager {
         throw new StepAlreadyExecutedError(task.name, this.#jobId, this.#actionName)
       }
       this.#historySteps.add(task.name)
-      return this.#executeStep(task.name, task.cb, task.options, task.abortSignal)
+      return this.#executeStep(task.name, task.cb, task.options, task.abortSignal, task.parentStepId)
     }, options.concurrencyLimit)
   }
 
@@ -206,9 +216,11 @@ export class StepManager {
    * @param cb - The step handler function
    * @param options - Step options including concurrency, retry, and expire settings
    * @param abortSignal - Abort signal for cancelling the step
+   * @param parentStepId - The ID of the parent step (null for root steps)
    * @returns Promise resolving to the step result
    * @throws StepTimeoutError if the step times out
    * @throws StepCancelError if the step is cancelled
+   * @throws UnhandledChildStepsError if child steps are not awaited
    * @throws Error if the step fails
    */
   async #executeStep<TResult>(
@@ -216,6 +228,7 @@ export class StepManager {
     cb: (ctx: StepHandlerContext) => Promise<TResult>,
     options: StepOptions,
     abortSignal: AbortSignal,
+    parentStepId: string | null,
   ): Promise<TResult> {
     const expire = options.expire
     const retryOptions = options.retry
@@ -227,8 +240,8 @@ export class StepManager {
           throw new ActionCancelError(this.#actionName, this.#jobId, { cause: 'step cancelled before create step' })
         }
 
-        // Create step record
-        const newStep = await this.#stepStore.getOrCreate(this.#jobId, name, expire, retryOptions.limit)
+        // Create step record with parentStepId
+        const newStep = await this.#stepStore.getOrCreate(this.#jobId, name, expire, retryOptions.limit, parentStepId)
         if (!newStep) {
           throw new NonRetriableError(
             `Failed to create step "${name}" for job "${this.#jobId}" action "${this.#actionName}"`,
@@ -245,7 +258,7 @@ export class StepManager {
         if (step.status === STEP_STATUS_COMPLETED) {
           // this is how we recover a completed step
           this.#logger.debug(
-            { jobId: this.#jobId, actionName: this.#actionName, stepName: name, stepId: step.id },
+            { jobId: this.#jobId, actionName: this.#actionName, stepName: name, stepId: step.id, parentStepId },
             '[StepManager] Step recovered (already completed)',
           )
           return step.output as TResult
@@ -265,11 +278,12 @@ export class StepManager {
 
         // Log step start
         this.#logger.debug(
-          { jobId: this.#jobId, actionName: this.#actionName, stepName: name, stepId: step.id },
+          { jobId: this.#jobId, actionName: this.#actionName, stepName: name, stepId: step.id, parentStepId },
           '[StepManager] Step started executing',
         )
       }
 
+      // Create abort controller for this step's timeout
       const stepAbortController = new AbortController()
       const timeoutId = setTimeout(() => {
         const timeoutError = new StepTimeoutError(name, this.#jobId, expire)
@@ -278,18 +292,78 @@ export class StepManager {
 
       timeoutId?.unref?.()
 
-      // Combine abort signals
-      const signal = AbortSignal.any([abortSignal, stepAbortController.signal])
+      // Combine abort signals: parent chain + this step's timeout
+      const stepSignal = AbortSignal.any([abortSignal, stepAbortController.signal])
+
+      // Track child steps for enforcement
+      interface TrackedChildStep {
+        promise: Promise<any>
+        settled: boolean
+      }
+      const childSteps: TrackedChildStep[] = []
+
+      // Create abort controller for child steps (used when parent returns with pending children)
+      const childAbortController = new AbortController()
+      const childSignal = AbortSignal.any([stepSignal, childAbortController.signal])
+
+      // Create StepHandlerContext with nested step support
+      const stepContext: StepHandlerContext = {
+        signal: stepSignal,
+        stepId: step.id,
+        parentStepId,
+        step: <TChildResult>(
+          childName: string,
+          childCb: (ctx: StepHandlerContext) => Promise<TChildResult>,
+          childOptions: z.input<typeof StepOptionsSchema> = {},
+        ): Promise<TChildResult> => {
+          const parsedChildOptions = StepOptionsSchema.parse({
+            ...options, // Inherit parent step options as defaults
+            ...childOptions,
+          })
+
+          // Push child step with this step as parent
+          const childPromise = this.push({
+            name: childName,
+            cb: childCb,
+            options: parsedChildOptions,
+            abortSignal: childSignal, // Child uses composed signal
+            parentStepId: step!.id, // This step is the parent
+          })
+
+          // Track the child promise
+          const trackedChild: TrackedChildStep = {
+            promise: childPromise,
+            settled: false,
+          }
+          childSteps.push(trackedChild)
+
+          // Mark as settled when done (success or failure)
+          // Use .then/.catch instead of .finally to properly handle rejections
+          childPromise
+            .then(() => {
+              trackedChild.settled = true
+            })
+            .catch(() => {
+              trackedChild.settled = true
+              // Swallow the error here - it will be re-thrown to the caller via the returned promise
+            })
+
+          return childPromise
+        },
+      }
 
       try {
         // Race between abort signal and callback execution
-        const abortPromise = waitForAbort(signal)
-        const callbackPromise = cb({ signal })
+        const abortPromise = waitForAbort(stepSignal)
+        const callbackPromise = cb(stepContext)
 
         let result: any = null
+        let aborted = false
 
         await Promise.race([
-          abortPromise.promise,
+          abortPromise.promise.then(() => {
+            aborted = true
+          }),
           callbackPromise
             .then((res) => {
               if (res !== undefined && res !== null) {
@@ -300,6 +374,41 @@ export class StepManager {
               abortPromise.release()
             }),
         ])
+
+        // If aborted, wait for child steps to settle before propagating
+        if (aborted) {
+          // Wait for all child steps to settle (they'll be aborted via signal propagation)
+          if (childSteps.length > 0) {
+            await Promise.allSettled(childSteps.map((c) => c.promise))
+          }
+          // Re-throw the abort reason
+          throw stepSignal.reason
+        }
+
+        // After parent callback returns, check for pending children
+        const unsettledChildren = childSteps.filter((c) => !c.settled)
+        if (unsettledChildren.length > 0) {
+          this.#logger.warn(
+            {
+              jobId: this.#jobId,
+              actionName: this.#actionName,
+              stepName: name,
+              stepId: step.id,
+              pendingCount: unsettledChildren.length,
+            },
+            '[StepManager] Parent step completed with unhandled child steps - aborting children',
+          )
+
+          // Abort all pending children
+          const unhandledError = new UnhandledChildStepsError(name, unsettledChildren.length)
+          childAbortController.abort(unhandledError)
+
+          // Wait for all children to settle (they'll reject with cancellation)
+          await Promise.allSettled(unsettledChildren.map((c) => c.promise))
+
+          // Now throw the error
+          throw unhandledError
+        }
 
         // Update step as completed
         const completed = await this.#stepStore.updateStatus(step.id, 'completed', result)
@@ -452,6 +561,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
 
   /**
    * Execute a step within the action.
+   * This creates a root step (no parent).
    *
    * @param name - The name of the step
    * @param cb - The step handler function
@@ -467,6 +577,12 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
       ...this.#action.steps,
       ...options,
     })
-    return this.#stepManager.push({ name, cb, options: parsedOptions, abortSignal: this.#abortSignal })
+    return this.#stepManager.push({
+      name,
+      cb,
+      options: parsedOptions,
+      abortSignal: this.#abortSignal,
+      parentStepId: null, // Root steps have no parent
+    })
   }
 }

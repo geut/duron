@@ -1,6 +1,6 @@
 import { serve } from 'bun'
 
-import { getWeather, openaiChat, sendEmail, variables } from '@shared-actions/index'
+import { getWeather, openaiChat, processOrder, sendEmail, variables } from '@shared-actions/index'
 import { postgresAdapter } from 'duron/adapters/postgres/postgres'
 import { createServer, duron } from 'duron/index'
 
@@ -17,6 +17,7 @@ const client = duron({
     sendEmail,
     openaiChat,
     getWeather,
+    processOrder,
   },
   variables,
   logger: 'info',

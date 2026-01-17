@@ -470,6 +470,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
       it('should create a new job step', async () => {
         const step = await adapter.createOrRecoverJobStep({
           jobId,
+          parentStepId: null,
           name: 'step-1',
           timeoutMs: 3000,
           retriesLimit: 3,
@@ -486,6 +487,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
         // Create a step first
         const step1 = await adapter.createOrRecoverJobStep({
           jobId,
+          parentStepId: null,
           name: 'step-1',
           timeoutMs: 3000,
           retriesLimit: 3,
@@ -494,6 +496,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
         // Create it again - should recover the existing step
         const step2 = await adapter.createOrRecoverJobStep({
           jobId,
+          parentStepId: null,
           name: 'step-1',
           timeoutMs: 5000,
           retriesLimit: 5,
@@ -509,6 +512,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
       it('should complete a job step', async () => {
         const step = await adapter.createOrRecoverJobStep({
           jobId,
+          parentStepId: null,
           name: 'step-1',
           timeoutMs: 3000,
           retriesLimit: 3,
@@ -529,6 +533,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
       it('should fail a job step', async () => {
         const step = await adapter.createOrRecoverJobStep({
           jobId,
+          parentStepId: null,
           name: 'step-1',
           timeoutMs: 3000,
           retriesLimit: 3,
@@ -549,6 +554,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
       it('should delay a job step', async () => {
         const step = await adapter.createOrRecoverJobStep({
           jobId,
+          parentStepId: null,
           name: 'step-1',
           timeoutMs: 3000,
           retriesLimit: 3,
@@ -572,6 +578,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
       it('should cancel a job step', async () => {
         const step = await adapter.createOrRecoverJobStep({
           jobId,
+          parentStepId: null,
           name: 'step-1',
           timeoutMs: 3000,
           retriesLimit: 3,
@@ -710,6 +717,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
         for (let i = 0; i < 5; i++) {
           await adapter.createOrRecoverJobStep({
             jobId: jobId!,
+            parentStepId: null,
             name: `step-${i}`,
             timeoutMs: 3000,
             retriesLimit: 3,

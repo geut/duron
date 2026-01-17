@@ -21,7 +21,40 @@ export interface ActionHandlerContext<TInput extends z.ZodObject, TVariables = R
 }
 
 export interface StepHandlerContext {
+  /**
+   * The abort signal for this step.
+   * This signal will be aborted when:
+   * - The action is cancelled
+   * - The parent step times out
+   * - This step times out
+   */
   signal: AbortSignal
+
+  /**
+   * The unique ID of this step.
+   */
+  stepId: string
+
+  /**
+   * The ID of the parent step, or null if this is a root step.
+   */
+  parentStepId: string | null
+
+  /**
+   * Create a nested child step.
+   * Child steps inherit the abort signal chain from their parent.
+   * All child steps MUST be awaited before the parent step returns.
+   *
+   * @param name - The name of the child step (must be unique within the job)
+   * @param cb - The step handler callback
+   * @param options - Optional step configuration
+   * @returns Promise resolving to the step result
+   */
+  step: <TResult>(
+    name: string,
+    cb: (ctx: StepHandlerContext) => Promise<TResult>,
+    options?: z.input<typeof StepOptionsSchema>,
+  ) => Promise<TResult>
 }
 
 export interface ConcurrencyHandlerContext<TInput extends z.ZodObject, TVariables = Record<string, unknown>> {

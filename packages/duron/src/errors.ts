@@ -127,6 +127,38 @@ export class ActionCancelError extends DuronError {
 }
 
 /**
+ * Error thrown when a parent step completes with unhandled (non-awaited) child steps.
+ *
+ * This error indicates a bug in the action handler where child steps were started
+ * but not properly awaited. All child steps must be awaited before the parent returns.
+ */
+export class UnhandledChildStepsError extends NonRetriableError {
+  /**
+   * The name of the parent step that completed with unhandled children.
+   */
+  public readonly stepName: string
+
+  /**
+   * The number of unhandled child steps.
+   */
+  public readonly pendingCount: number
+
+  /**
+   * Create a new UnhandledChildStepsError.
+   *
+   * @param stepName - The name of the parent step
+   * @param pendingCount - The number of unhandled child steps
+   */
+  constructor(stepName: string, pendingCount: number) {
+    super(
+      `Parent step "${stepName}" completed with ${pendingCount} unhandled child step(s). All child steps must be awaited before the parent returns.`,
+    )
+    this.stepName = stepName
+    this.pendingCount = pendingCount
+  }
+}
+
+/**
  * Checks if an error is a DuronError instance.
  */
 export function isDuronError(error: unknown): error is DuronError {
@@ -137,7 +169,19 @@ export function isDuronError(error: unknown): error is DuronError {
  * Checks if an error is a NonRetriableError instance.
  */
 export function isNonRetriableError(error: unknown): error is NonRetriableError {
-  return error instanceof NonRetriableError || error instanceof ActionCancelError || error instanceof ActionTimeoutError
+  return (
+    error instanceof NonRetriableError ||
+    error instanceof ActionCancelError ||
+    error instanceof ActionTimeoutError ||
+    error instanceof UnhandledChildStepsError
+  )
+}
+
+/**
+ * Checks if an error is an UnhandledChildStepsError instance.
+ */
+export function isUnhandledChildStepsError(error: unknown): error is UnhandledChildStepsError {
+  return error instanceof UnhandledChildStepsError
 }
 
 /**

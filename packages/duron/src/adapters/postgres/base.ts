@@ -419,6 +419,28 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         -- All branch siblings and their descendants
         SELECT id FROM branch_descendants
       ),
+      -- Calculate time offset: shift preserved steps to start from "now"
+      time_offset AS (
+        SELECT
+          now() - MIN(s.started_at) AS offset_interval
+        FROM ${this.tables.jobStepsTable} s
+        WHERE s.id IN (SELECT id FROM steps_to_keep)
+      ),
+      -- Shift times of preserved steps to align with current time (only started_at/finished_at, NOT created_at to preserve ordering)
+      shift_preserved_times AS (
+        UPDATE ${this.tables.jobStepsTable}
+        SET
+          started_at = started_at + (SELECT offset_interval FROM time_offset),
+          finished_at = CASE
+            WHEN finished_at IS NOT NULL
+            THEN finished_at + (SELECT offset_interval FROM time_offset)
+            ELSE NULL
+          END,
+          updated_at = now()
+        WHERE id IN (SELECT id FROM steps_to_keep)
+          AND (SELECT offset_interval FROM time_offset) IS NOT NULL
+        RETURNING id
+      ),
       -- Delete steps that are not in the keep list and are not ancestors/target
       deleted_steps AS (
         DELETE FROM ${this.tables.jobStepsTable}

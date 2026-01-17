@@ -1,111 +1,397 @@
----
-description: Use Bun instead of Node.js, npm, pnpm, or vite.
-globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"
-alwaysApply: false
----
+# Duron Project Context
 
-Default to using Bun instead of Node.js.
+> A powerful, type-safe job queue system for Node.js and Bun
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Bun automatically loads .env, so don't use dotenv.
+## Project Overview
 
-## APIs
+Duron is a modern, type-safe background job processing system built with TypeScript. It provides a robust foundation for executing asynchronous tasks with built-in retry logic, concurrency control, step-based execution, and comprehensive observability.
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+**Documentation**: https://duron-docs.pages.dev/
 
-## Testing
+## Key Features
 
-Use `bun test` to run tests.
+- **Type-Safe Actions** - Define actions with Zod schemas for input/output validation
+- **Step-Based Execution** - Break down complex workflows into manageable, retryable steps
+- **Intelligent Retry Logic** - Configurable exponential backoff with per-action and per-step options
+- **Flexible Sync Patterns** - Pull, push, hybrid, or manual job fetching
+- **Advanced Concurrency Control** - Per-action, per-group, and dynamic concurrency limits
+- **Multi-Process Support** - Run multiple worker processes sharing the same database
+- **Database Adapters** - PostgreSQL (production) and PGLite (development/testing)
+- **REST API Server** - Built-in Elysia-based API with advanced filtering and pagination
+- **Dashboard UI** - Beautiful React dashboard for real-time job monitoring
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+## Runtime Environment
 
-test("hello world", () => {
-  expect(1).toBe(1);
-});
+**This project uses Bun exclusively.** Do not use Node.js, npm, pnpm, yarn, or vite.
+
+### Bun Commands
+
+```bash
+# Install dependencies
+bun install
+
+# Run a file
+bun <file>
+
+# Run tests
+bun test
+
+# Run scripts
+bun run <script>
+
+# Build
+bun build <file>
 ```
 
-## Frontend
+### Bun APIs to Prefer
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+- `Bun.serve()` - HTTP server with WebSocket support (not express)
+- `bun:sqlite` - SQLite (not better-sqlite3)
+- `Bun.redis` - Redis (not ioredis)
+- `Bun.sql` - Postgres (not pg or postgres.js)
+- `Bun.file` - File operations (not node:fs readFile/writeFile)
+- `Bun.$` - Shell commands (not execa)
+- `bun:test` - Testing framework (not jest or vitest)
 
-Server:
+### Environment Variables
 
-```ts#index.ts
-import index from "./index.html"
+Bun automatically loads `.env` files. Do not use dotenv.
 
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
+## Monorepo Structure
+
+```
+duron/
+├── packages/
+│   ├── duron/           # Core library (job queue, actions, adapters, server)
+│   ├── duron-dashboard/ # React dashboard UI
+│   ├── docs/            # Documentation site (Fumadocs)
+│   ├── examples/        # Example implementations
+│   ├── shared-actions/  # Shared action definitions for examples
+│   └── assets/          # Logo and images
+├── biome.jsonc          # Linting configuration
+├── package.json         # Workspace root
+└── docker-compose.yml   # PostgreSQL for development
+```
+
+## Package Details
+
+### `duron` (Core Library)
+
+The main library providing:
+
+- **Client** (`duron/client`) - Main entry point for job processing
+- **Actions** (`duron/action`) - Type-safe action definitions with Zod validation
+- **Server** (`duron/server`) - Elysia-based REST API server
+- **Adapters**:
+  - `duron/adapters/postgres` - PostgreSQL adapter for production
+  - `duron/adapters/pglite` - PGLite adapter for development/testing
+
+**Key Dependencies:**
+- `zod` - Schema validation
+- `drizzle-orm` - Database ORM
+- `elysia` - HTTP framework for the server
+- `pino` - Logging
+- `fastq` - Queue implementation
+- `jose` - JWT handling
+
+### `duron-dashboard` (React Dashboard)
+
+A standalone React dashboard for job monitoring with:
+
+- Real-time job list with filtering and sorting
+- Job details with step visualization
+- Action execution interface
+- Dark/light theme support
+- JWT authentication support
+
+**Key Technologies:**
+- React 19
+- Tailwind CSS 4
+- Shadcn/UI components
+- TanStack Query & Table
+- Motion for animations
+- Bun's HTML imports for bundling
+
+### `docs` (Documentation)
+
+Documentation site built with:
+- Fumadocs
+- TanStack Router
+- Vite (exception: docs use Vite for SSR support)
+
+## Development Workflow
+
+### Running the Project
+
+```bash
+# Install all dependencies
+bun install
+
+# Run tests (duron core)
+bun test
+
+# Development modes
+bun run dev:duron         # Watch mode for core library
+bun run dev:dashboard     # Dashboard dev server
+bun run dev:examples:basic # Basic example
+
+# Linting
+bun run lint              # Check
+bun run lint:fix          # Fix issues
+
+# Type checking
+bun run typecheck
+
+# Build all packages
+bun run build
+```
+
+### Database Setup
+
+Start PostgreSQL with Docker:
+
+```bash
+docker-compose up -d
+```
+
+Connection string: `postgres://duron:duron@localhost:5435/duron`
+
+### Database Migrations
+
+```bash
+# Generate migrations (duron package)
+cd packages/duron
+bun run generate:postgres
+```
+
+## Code Architecture
+
+### Defining Actions
+
+Actions are type-safe job handlers with Zod validation:
+
+```typescript
+import { defineAction } from 'duron'
+import { z } from 'zod'
+
+const sendEmail = defineAction<typeof variables>()({
+  name: 'send-email',
+  input: z.object({
+    email: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  output: z.object({
+    success: z.boolean(),
+  }),
+  handler: async (ctx) => {
+    const { email, subject, body } = ctx.input
+
+    // Steps are retryable units of work
+    const result = await ctx.step('send', async ({ signal }) => {
+      // Implementation with cancellation support
+      return { success: true }
+    })
+
+    return result
   },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
 })
 ```
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+### Creating a Client
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
+```typescript
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+
+const client = duron({
+  id: 'my-worker',
+  syncPattern: 'hybrid', // pull | push | hybrid | false
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL,
+  }),
+  actions: { sendEmail },
+  variables: { /* shared context */ },
+  logger: 'info',
+})
+
+await client.start()
+
+// Run an action
+const jobId = await client.runAction('send-email', {
+  email: 'user@example.com',
+  subject: 'Hello',
+  body: 'World',
+})
+
+// Wait for completion
+const job = await client.waitForJob(jobId)
 ```
 
-With the following `frontend.tsx`:
+### Creating a Server with Dashboard
 
-```tsx#frontend.tsx
-import React from "react";
+```typescript
+import { createServer } from 'duron/server'
+import { getHTML } from 'duron-dashboard/get-html'
 
-// import .css files directly and it works
-import './index.css';
+const app = createServer({
+  client,
+  prefix: '/api',
+  login: {
+    onLogin: async ({ email, password }) => {
+      // Validate credentials
+      return email === 'admin@example.com' && password === 'secret'
+    },
+    jwtSecret: process.env.JWT_SECRET,
+  },
+})
 
-import { createRoot } from "react-dom/client";
+// Serve dashboard
+app.get('/', async () => {
+  const html = await getHTML({ url: 'http://localhost:3000/api' })
+  return new Response(html, {
+    headers: { 'Content-Type': 'text/html' },
+  })
+})
 
-const root = createRoot(document.body);
+app.listen(3000)
+```
 
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
+## Testing
+
+Tests are in `packages/duron/test/` and use `bun:test`:
+
+```typescript
+import { describe, test, expect } from 'bun:test'
+
+describe('Feature', () => {
+  test('should work', () => {
+    expect(true).toBe(true)
+  })
+})
+```
+
+Run tests:
+
+```bash
+bun test                    # All tests
+bun test --watch           # Watch mode
+bun test specific.test.ts  # Single file
+```
+
+## Linting & Formatting
+
+Uses Biome with `biome-standard-mate` configuration:
+
+```bash
+bun run lint       # Check
+bun run lint:fix   # Auto-fix
+```
+
+Key rules:
+- Single quotes, semicolons
+- 120 character line width
+- Organize imports automatically
+- No console warnings (use logger instead)
+
+## Dashboard Development
+
+The dashboard uses Bun's HTML imports for development:
+
+```bash
+cd packages/duron-dashboard
+bun run dev   # Starts on http://localhost:3001
+```
+
+**Important:**
+- Do not modify files in `src/components/ui/` - these are managed by Shadcn UI
+- Use the existing UI components from `src/components/ui/`
+- Follow the established patterns in `src/views/` and `src/components/`
+
+## TypeScript Configuration
+
+### Backend (duron core)
+
+```json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true
+  }
 }
-
-root.render(<Frontend />);
 ```
 
-Then, run index.ts
+### Frontend (dashboard)
 
-```sh
-bun --hot ./index.ts
+Uses Bun's bundler mode with:
+- JSX for React
+- Path aliases: `@/*` → `./src/*`
+
+## Key Files Reference
+
+| Path | Description |
+|------|-------------|
+| `packages/duron/src/index.ts` | Main exports |
+| `packages/duron/src/client.ts` | Job queue client |
+| `packages/duron/src/action.ts` | Action definitions |
+| `packages/duron/src/server.ts` | REST API server |
+| `packages/duron/src/adapters/adapter.ts` | Base adapter class |
+| `packages/duron/src/adapters/postgres/` | PostgreSQL adapter |
+| `packages/duron-dashboard/src/DuronDashboard.tsx` | Dashboard root |
+| `packages/duron-dashboard/src/views/` | Dashboard pages |
+| `packages/examples/basic/start.ts` | Basic example |
+
+## Common Tasks
+
+### Adding a New Action
+
+1. Define the action with `defineAction()` including input/output schemas
+2. Add it to the client's `actions` object
+3. Generate migrations if needed
+
+### Adding a Dashboard Feature
+
+1. Create component in `packages/duron-dashboard/src/components/`
+2. Use existing UI components from `src/components/ui/`
+3. Add to appropriate view in `src/views/`
+4. Use TanStack Query for data fetching
+
+### Adding an API Endpoint
+
+1. Modify `packages/duron/src/server.ts`
+2. Add Zod schemas for validation
+3. Follow existing patterns for error handling
+
+## Error Handling
+
+- Use `NonRetriableError` for errors that should not be retried
+- Steps have built-in retry logic with exponential backoff
+- Jobs have timeout/expiration settings
+
+```typescript
+import { NonRetriableError } from 'duron'
+
+if (!apiKey) {
+  throw new NonRetriableError('API key is required')
+}
 ```
 
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.md`.
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | Secret for dashboard authentication |
+| `OPENAI_API_KEY` | For AI-powered examples |
+
+## Contributing Guidelines
+
+1. Use Bun for all operations
+2. Run `bun run lint:fix` before committing
+3. Ensure tests pass with `bun test`
+4. Follow existing code patterns
+5. Use TypeScript strict mode
+6. Document public APIs with JSDoc

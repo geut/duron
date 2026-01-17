@@ -404,8 +404,6 @@ function runClientTests(adapterFactory: AdapterFactory) {
         // Verify the step is also cancelled
         const steps = await client.getJobSteps({
           jobId,
-          page: 1,
-          pageSize: 10,
         })
 
         expect(steps.steps.length).toBeGreaterThan(0)
@@ -519,8 +517,6 @@ function runClientTests(adapterFactory: AdapterFactory) {
 
         const result = await client.getJobSteps({
           jobId,
-          page: 1,
-          pageSize: 10,
         })
 
         expect(result.steps.length).toBeGreaterThan(0)

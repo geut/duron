@@ -16,7 +16,7 @@ import { type GetJobStepsResponse, useJob, useJobSteps, useTimeTravelJob } from 
 import { BadgeStatus } from '../components/badge-status'
 
 // Step type from the API response (without output field)
-type JobStepWithoutOutput = GetJobStepsResponse['steps'][number] & { parentStepId?: string | null; branch?: boolean }
+type JobStepWithoutOutput = GetJobStepsResponse['steps'][number] & { parentStepId?: string | null; parallel?: boolean }
 
 import { StepDetailsContent } from './step-details-content'
 
@@ -201,7 +201,7 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                   {orderedSteps.map(({ step, depth }, index) => {
                     const stepNumber = index + 1
                     const isNested = depth > 0
-                    const isBranch = (step as any).branch === true
+                    const isParallel = (step as any).parallel === true
                     // Calculate left padding based on depth (16px per level)
                     const paddingLeft = depth * 16
 
@@ -216,13 +216,13 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                           <div className="flex items-center justify-between w-full pr-4 min-w-0 overflow-hidden">
                             <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                               {isNested && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0 -ml-1" />}
-                              {isBranch && (
+                              {isParallel && (
                                 <Tooltip>
                                   <TooltipTrigger asChild={true}>
                                     <GitBranch className="h-3 w-3 text-blue-500 shrink-0" />
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Branch step (independent from siblings)</p>
+                                    <p>Parallel step (independent from siblings)</p>
                                   </TooltipContent>
                                 </Tooltip>
                               )}

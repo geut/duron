@@ -67,7 +67,7 @@ export default function createSchema(schemaName: string) {
         .notNull()
         .references(() => jobsTable.id, { onDelete: 'cascade' }),
       parent_step_id: uuid('parent_step_id'),
-      branch: boolean('branch').notNull().default(false),
+      parallel: boolean('branch').notNull().default(false), // DB column is 'branch', TypeScript uses 'parallel'
       name: text('name').notNull(),
       status: text('status').$type<StepStatus>().notNull().default(STEP_STATUS_ACTIVE),
       output: jsonb('output'),

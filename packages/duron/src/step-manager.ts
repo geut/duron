@@ -30,7 +30,7 @@ export interface TaskStep {
   options: StepOptions
   abortSignal: AbortSignal
   parentStepId: string | null
-  branch: boolean
+  parallel: boolean
 }
 
 /**
@@ -65,7 +65,7 @@ export class StepStore {
    * @param timeoutMs - Timeout in milliseconds for the step
    * @param retriesLimit - Maximum number of retries for the step
    * @param parentStepId - The ID of the parent step (null for root steps)
-   * @param branch - Whether this step is a branch (independent from siblings during time travel)
+   * @param parallel - Whether this step runs in parallel (independent from siblings during time travel)
    * @returns Promise resolving to the created step ID
    * @throws Error if step creation fails
    */
@@ -75,7 +75,7 @@ export class StepStore {
     timeoutMs: number,
     retriesLimit: number,
     parentStepId: string | null = null,
-    branch: boolean = false,
+    parallel: boolean = false,
   ) {
     try {
       return await this.#adapter.createOrRecoverJobStep({
@@ -84,7 +84,7 @@ export class StepStore {
         timeoutMs,
         retriesLimit,
         parentStepId,
-        branch,
+        parallel,
       })
     } catch (error) {
       throw new NonRetriableError(`Failed to get or create step "${name}" for job "${jobId}"`, { cause: error })
@@ -165,7 +165,7 @@ export class StepManager {
         throw new StepAlreadyExecutedError(task.name, this.#jobId, this.#actionName)
       }
       this.#historySteps.add(task.name)
-      return this.#executeStep(task.name, task.cb, task.options, task.abortSignal, task.parentStepId, task.branch)
+      return this.#executeStep(task.name, task.cb, task.options, task.abortSignal, task.parentStepId, task.parallel)
     }, options.concurrencyLimit)
   }
 
@@ -233,7 +233,7 @@ export class StepManager {
     options: StepOptions,
     abortSignal: AbortSignal,
     parentStepId: string | null,
-    branch: boolean,
+    parallel: boolean,
   ): Promise<TResult> {
     const expire = options.expire
     const retryOptions = options.retry
@@ -245,14 +245,14 @@ export class StepManager {
           throw new ActionCancelError(this.#actionName, this.#jobId, { cause: 'step cancelled before create step' })
         }
 
-        // Create step record with parentStepId and branch
+        // Create step record with parentStepId and parallel
         const newStep = await this.#stepStore.getOrCreate(
           this.#jobId,
           name,
           expire,
           retryOptions.limit,
           parentStepId,
-          branch,
+          parallel,
         )
         if (!newStep) {
           throw new NonRetriableError(
@@ -328,8 +328,8 @@ export class StepManager {
           childCb: (ctx: StepHandlerContext) => Promise<TChildResult>,
           childOptions: z.input<typeof StepOptionsSchema> = {},
         ): Promise<TChildResult> => {
-          // Inherit parent step options EXCEPT branch (each step's branch status is independent)
-          const { branch: _parentBranch, ...inheritableOptions } = options
+          // Inherit parent step options EXCEPT parallel (each step's parallel status is independent)
+          const { parallel: _parentParallel, ...inheritableOptions } = options
           const parsedChildOptions = StepOptionsSchema.parse({
             ...inheritableOptions,
             ...childOptions,
@@ -342,7 +342,7 @@ export class StepManager {
             options: parsedChildOptions,
             abortSignal: childSignal, // Child uses composed signal
             parentStepId: step!.id, // This step is the parent
-            branch: parsedChildOptions.branch, // Pass branch option
+            parallel: parsedChildOptions.parallel, // Pass parallel option
           })
 
           // Track the child promise
@@ -598,7 +598,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
       options: parsedOptions,
       abortSignal: this.#abortSignal,
       parentStepId: null, // Root steps have no parent
-      branch: parsedOptions.branch, // Pass branch option
+      parallel: parsedOptions.parallel, // Pass parallel option
     })
   }
 }

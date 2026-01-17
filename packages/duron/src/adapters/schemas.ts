@@ -56,7 +56,7 @@ export const JobStepSchema = z.object({
   id: z.string(),
   jobId: z.string(),
   parentStepId: z.string().nullable().default(null),
-  branch: z.boolean().default(false),
+  parallel: z.boolean().default(false),
   name: z.string(),
   output: z.any().nullable().default(null),
   status: StepStatusSchema,
@@ -199,8 +199,8 @@ export const CreateOrRecoverJobStepOptionsSchema = z.object({
   jobId: z.string(),
   /** The ID of the parent step (null for root steps) */
   parentStepId: z.string().nullable().default(null),
-  /** Whether this step is a branch (independent from siblings during time travel) */
-  branch: z.boolean().default(false),
+  /** Whether this step runs in parallel (independent from siblings during time travel) */
+  parallel: z.boolean().default(false),
   /** The name of the step */
   name: z.string(),
   /** Timeout in milliseconds for the step */

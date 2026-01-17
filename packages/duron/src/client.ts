@@ -365,7 +365,7 @@ export class Client<
    * Time travel a job to restart from a specific step.
    * The job must be in completed, failed, or cancelled status.
    * Resets the job and ancestor steps to active status, deletes subsequent steps,
-   * and preserves completed branch siblings.
+   * and preserves completed parallel siblings.
    *
    * @param jobId - The ID of the job to time travel
    * @param stepId - The ID of the step to restart from

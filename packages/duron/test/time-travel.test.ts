@@ -111,7 +111,7 @@ const nestedAction = defineAction()({
 })
 
 /**
- * Action with branch steps for testing branch preservation during time travel
+ * Action with parallel steps for testing parallel step preservation during time travel
  */
 const branchAction = defineAction()({
   name: 'branch-action',
@@ -130,7 +130,7 @@ const branchAction = defineAction()({
   handler: async (ctx) => {
     const executed: string[] = []
 
-    // Two root-level branch steps
+    // Two root-level parallel steps
     await Promise.all([
       ctx.step(
         'branch-a',
@@ -138,7 +138,7 @@ const branchAction = defineAction()({
           executed.push('branch-a')
           return { result: 'a' }
         },
-        { branch: true },
+        { parallel: true },
       ),
       ctx.step(
         'branch-b',
@@ -147,7 +147,7 @@ const branchAction = defineAction()({
           executed.push('branch-b')
           return { result: 'b' }
         },
-        { branch: true },
+        { parallel: true },
       ),
     ])
 
@@ -162,9 +162,9 @@ const branchAction = defineAction()({
 })
 
 /**
- * Action with nested branches - branches that contain nested steps
- * This tests the edge case where time travel targets a step inside a branch
- * and sibling branches with their own children should be preserved
+ * Action with nested parallel steps - parallel steps that contain nested steps
+ * This tests the edge case where time travel targets a step inside a parallel step
+ * and sibling parallel steps with their own children should be preserved
  */
 const nestedBranchAction = defineAction()({
   name: 'nested-branch-action',
@@ -183,7 +183,7 @@ const nestedBranchAction = defineAction()({
   handler: async (ctx) => {
     const executed: string[] = []
 
-    // Parent step with multiple branch children, each with nested steps
+    // Parent step with multiple parallel children, each with nested steps
     await ctx.step('parent', async (parentCtx) => {
       executed.push('parent-start')
 
@@ -204,7 +204,7 @@ const nestedBranchAction = defineAction()({
             executed.push('branch-a-end')
             return { result: 'a' }
           },
-          { branch: true },
+          { parallel: true },
         ),
         // Branch B with nested steps (target for time travel)
         parentCtx.step(
@@ -224,7 +224,7 @@ const nestedBranchAction = defineAction()({
             executed.push('branch-b-end')
             return { result: 'b' }
           },
-          { branch: true },
+          { parallel: true },
         ),
         // Branch C with nested steps
         parentCtx.step(
@@ -238,7 +238,7 @@ const nestedBranchAction = defineAction()({
             executed.push('branch-c-end')
             return { result: 'c' }
           },
-          { branch: true },
+          { parallel: true },
         ),
       ])
 
@@ -449,7 +449,7 @@ function runTests(name: string, factory: AdapterFactory) {
     // =========================================================================
 
     describe('Branch Steps Time Travel', () => {
-      it('should preserve completed branch siblings during time travel', async () => {
+      it('should preserve completed parallel siblings during time travel', async () => {
         // Run a job that fails at final-step
         const jobId = await client.runAction('branchAction', { failAtStep: 'final-step' })
         await client.fetch({ batchSize: 1 })
@@ -475,7 +475,7 @@ function runTests(name: string, factory: AdapterFactory) {
         const branchBAfter = stepsAfter.find((s) => s.name === 'branch-b')
         const finalStepAfter = stepsAfter.find((s) => s.name === 'final-step')
 
-        // Both branch steps should be preserved (completed before final-step)
+        // Both parallel steps should be preserved (completed before final-step)
         expectToBeDefined(branchAAfter)
         expect(branchAAfter?.status).toBe(STEP_STATUS_COMPLETED)
         expectToBeDefined(branchBAfter)
@@ -486,7 +486,7 @@ function runTests(name: string, factory: AdapterFactory) {
         expect(finalStepAfter?.status).toBe(STEP_STATUS_ACTIVE)
       })
 
-      it('should keep branch sibling when time traveling to another branch', async () => {
+      it('should keep parallel sibling when time traveling to another parallel step', async () => {
         // Run a job that fails at branch-b
         const jobId = await client.runAction('branchAction', { failAtStep: 'branch-b' })
         await client.fetch({ batchSize: 1 })
@@ -512,7 +512,7 @@ function runTests(name: string, factory: AdapterFactory) {
         const branchAAfter = stepsAfter.find((s) => s.name === 'branch-a')
         const branchBAfter = stepsAfter.find((s) => s.name === 'branch-b')
 
-        // branch-a should be preserved (completed branch sibling)
+        // branch-a should be preserved (completed parallel sibling)
         expectToBeDefined(branchAAfter)
         expect(branchAAfter?.status).toBe(STEP_STATUS_COMPLETED)
 
@@ -521,9 +521,9 @@ function runTests(name: string, factory: AdapterFactory) {
         expect(branchBAfter?.status).toBe(STEP_STATUS_ACTIVE)
       })
 
-      it('should preserve sibling branches AND their children when time traveling to nested step in a branch', async () => {
+      it('should preserve sibling parallel steps AND their children when time traveling to nested step in a parallel step', async () => {
         // This tests the edge case from processOrder: time traveling to a step inside
-        // a branch should preserve sibling branches AND all their nested children
+        // a parallel step should preserve sibling parallel steps AND all their nested children
         const jobId = await client.runAction('nestedBranchAction', { failAtStep: 'child-b-2' })
         await client.fetch({ batchSize: 1 })
         const job = await client.waitForJob(jobId, { timeout: 10000 })
@@ -533,7 +533,7 @@ function runTests(name: string, factory: AdapterFactory) {
         // Get steps before time travel
         const { steps } = await client.getJobSteps({ jobId })
 
-        // Verify initial state: branch-a and branch-c completed with children, branch-b failed
+        // Verify initial state: parallel step a and c completed with children, parallel step b failed
         const branchA = steps.find((s) => s.name === 'branch-a')
         const childA1 = steps.find((s) => s.name === 'child-a-1')
         const childA2 = steps.find((s) => s.name === 'child-a-2')
@@ -550,7 +550,7 @@ function runTests(name: string, factory: AdapterFactory) {
         expectToBeDefined(childB1)
         expectToBeDefined(childB2)
 
-        // Time travel to child-b-2 (nested inside branch-b)
+        // Time travel to child-b-2 (nested inside parallel step b)
         const success = await client.timeTravelJob(jobId, childB2!.id)
         expect(success).toBe(true)
 
@@ -583,7 +583,7 @@ function runTests(name: string, factory: AdapterFactory) {
         expectToBeDefined(branchBAfter)
         expect(branchBAfter?.status).toBe(STEP_STATUS_ACTIVE)
 
-        // child-b-1 should be preserved (sibling before target in same branch, completed)
+        // child-b-1 should be preserved (sibling before target in same parallel step, completed)
         const childB1After = stepsAfter.find((s) => s.name === 'child-b-1')
         expectToBeDefined(childB1After)
         expect(childB1After?.status).toBe(STEP_STATUS_COMPLETED)

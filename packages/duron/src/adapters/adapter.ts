@@ -407,7 +407,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    * Time travel a job to restart from a specific step.
    * The job must be in completed, failed, or cancelled status.
    * Resets the job and ancestor steps to active status, deletes subsequent steps,
-   * and preserves completed branch siblings.
+   * and preserves completed parallel siblings.
    *
    * @returns Promise resolving to `true` if time travel succeeded, `false` otherwise
    */
@@ -690,7 +690,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    * Internal method to time travel a job to restart from a specific step.
    * The job must be in completed, failed, or cancelled status.
    * Resets the job and ancestor steps to active status, deletes subsequent steps,
-   * and preserves completed branch siblings.
+   * and preserves completed parallel siblings.
    *
    * @param options - Validated time travel options
    * @returns Promise resolving to `true` if time travel succeeded, `false` otherwise

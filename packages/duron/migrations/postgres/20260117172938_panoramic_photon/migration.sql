@@ -1,1 +1,0 @@
-ALTER TABLE "duron"."job_steps" ADD COLUMN "branch" boolean DEFAULT false NOT NULL;

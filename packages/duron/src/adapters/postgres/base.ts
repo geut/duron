@@ -321,7 +321,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Internal method to time travel a job to restart from a specific step.
    * The job must be in completed, failed, or cancelled status.
    * Resets the job and ancestor steps to active status, deletes subsequent steps,
-   * and preserves completed branch siblings.
+   * and preserves completed parallel siblings.
    *
    * Algorithm:
    * 1. Validate job is in terminal state (completed/failed/cancelled)
@@ -367,9 +367,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         FROM ${this.tables.jobStepsTable} s
         INNER JOIN ancestors a ON s.id = a.parent_step_id
       ),
-      -- Steps to keep: completed steps created before target + completed branch siblings of target and ancestors + their descendants
-      branch_siblings AS (
-        -- Completed branch siblings of target step
+      -- Steps to keep: completed steps created before target + completed parallel siblings of target and ancestors + their descendants
+      parallel_siblings AS (
+        -- Completed parallel siblings of target step
         SELECT s.id
         FROM ${this.tables.jobStepsTable} s
         CROSS JOIN target_step ts
@@ -382,7 +382,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
             OR s.parent_step_id = ts.parent_step_id
           )
         UNION
-        -- Completed branch siblings of each ancestor
+        -- Completed parallel siblings of each ancestor
         SELECT s.id
         FROM ${this.tables.jobStepsTable} s
         INNER JOIN ancestors a ON (
@@ -394,15 +394,15 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           AND s.branch = true
           AND s.status = ${STEP_STATUS_COMPLETED}
       ),
-      -- Find all descendants of branch siblings (to keep their children too)
-      branch_descendants AS (
+      -- Find all descendants of parallel siblings (to keep their children too)
+      parallel_descendants AS (
         SELECT s.id
         FROM ${this.tables.jobStepsTable} s
-        WHERE s.id IN (SELECT id FROM branch_siblings)
+        WHERE s.id IN (SELECT id FROM parallel_siblings)
         UNION ALL
         SELECT s.id
         FROM ${this.tables.jobStepsTable} s
-        INNER JOIN branch_descendants bd ON s.parent_step_id = bd.id
+        INNER JOIN parallel_descendants pd ON s.parent_step_id = pd.id
         WHERE s.job_id = ${jobId}
       ),
       steps_to_keep AS (
@@ -416,8 +416,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           AND s.id NOT IN (SELECT id FROM ancestors)
           AND s.id != ts.id
         UNION
-        -- All branch siblings and their descendants
-        SELECT id FROM branch_descendants
+        -- All parallel siblings and their descendants
+        SELECT id FROM parallel_descendants
       ),
       -- Calculate time offset: shift preserved steps to start from "now"
       time_offset AS (
@@ -759,7 +759,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     timeoutMs,
     retriesLimit,
     parentStepId,
-    branch = false,
+    parallel = false,
   }: CreateOrRecoverJobStepOptions): Promise<CreateOrRecoverJobStepResult | null> {
     type StepResult = CreateOrRecoverJobStepResult
 
@@ -795,7 +795,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         SELECT
           ${jobId},
           ${parentStepId},
-          ${branch},
+          ${parallel},
           ${name},
           ${timeoutMs},
           ${retriesLimit},
@@ -1046,7 +1046,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         id: jobStepsTable.id,
         jobId: jobStepsTable.job_id,
         parentStepId: jobStepsTable.parent_step_id,
-        branch: jobStepsTable.branch,
+        parallel: jobStepsTable.parallel,
         name: jobStepsTable.name,
         status: jobStepsTable.status,
         error: jobStepsTable.error,
@@ -1235,7 +1235,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         id: this.tables.jobStepsTable.id,
         jobId: this.tables.jobStepsTable.job_id,
         parentStepId: this.tables.jobStepsTable.parent_step_id,
-        branch: this.tables.jobStepsTable.branch,
+        parallel: this.tables.jobStepsTable.parallel,
         name: this.tables.jobStepsTable.name,
         output: this.tables.jobStepsTable.output,
         status: this.tables.jobStepsTable.status,

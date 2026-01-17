@@ -543,7 +543,7 @@ export const processOrder = defineAction<typeof variables>()({
             addTimeline('analytics-tracking', 'success', 'Analytics updated')
             return { purchase, recommendations }
           },
-          { expire: 10_000, branch: true },
+          { expire: 10_000, parallel: true },
         ),
 
         // Parent step 2: Loyalty Program Update (with nested steps)
@@ -569,7 +569,7 @@ export const processOrder = defineAction<typeof variables>()({
             addTimeline('loyalty-update', 'success', `${points.earnedPoints} points, tier: ${tier.tier}`)
             return { points, tier }
           },
-          { expire: 10_000, branch: true },
+          { expire: 10_000, parallel: true },
         ),
 
         // Parent step 3: Partner Sync (with nested steps)
@@ -593,7 +593,7 @@ export const processOrder = defineAction<typeof variables>()({
             addTimeline('partner-sync', 'success', 'All partners synced')
             return { supplier, warehouse }
           },
-          { expire: 10_000, branch: true },
+          { expire: 10_000, parallel: true },
         ),
       ])
 

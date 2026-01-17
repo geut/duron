@@ -367,19 +367,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         FROM ${this.tables.jobStepsTable} s
         INNER JOIN ancestors a ON s.id = a.parent_step_id
       ),
-      -- Steps to keep: completed steps created before target + completed branch siblings
-      steps_to_keep AS (
-        -- Steps created before target that are completed (siblings or unrelated)
-        SELECT s.id
-        FROM ${this.tables.jobStepsTable} s
-        CROSS JOIN target_step ts
-        WHERE s.job_id = ${jobId}
-          AND s.created_at < ts.created_at
-          AND s.status = ${STEP_STATUS_COMPLETED}
-          AND s.id NOT IN (SELECT id FROM ancestors)
-          AND s.id != ts.id
-        UNION
-        -- Completed branch siblings at same level as target (same parent, branch=true, completed)
+      -- Steps to keep: completed steps created before target + completed branch siblings of target and ancestors + their descendants
+      branch_siblings AS (
+        -- Completed branch siblings of target step
         SELECT s.id
         FROM ${this.tables.jobStepsTable} s
         CROSS JOIN target_step ts
@@ -391,6 +381,43 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
             (s.parent_step_id IS NULL AND ts.parent_step_id IS NULL)
             OR s.parent_step_id = ts.parent_step_id
           )
+        UNION
+        -- Completed branch siblings of each ancestor
+        SELECT s.id
+        FROM ${this.tables.jobStepsTable} s
+        INNER JOIN ancestors a ON (
+          (s.parent_step_id IS NULL AND a.parent_step_id IS NULL)
+          OR s.parent_step_id = a.parent_step_id
+        )
+        WHERE s.job_id = ${jobId}
+          AND s.id NOT IN (SELECT id FROM ancestors)
+          AND s.branch = true
+          AND s.status = ${STEP_STATUS_COMPLETED}
+      ),
+      -- Find all descendants of branch siblings (to keep their children too)
+      branch_descendants AS (
+        SELECT s.id
+        FROM ${this.tables.jobStepsTable} s
+        WHERE s.id IN (SELECT id FROM branch_siblings)
+        UNION ALL
+        SELECT s.id
+        FROM ${this.tables.jobStepsTable} s
+        INNER JOIN branch_descendants bd ON s.parent_step_id = bd.id
+        WHERE s.job_id = ${jobId}
+      ),
+      steps_to_keep AS (
+        -- Steps created before target that are completed (non-ancestor, non-target)
+        SELECT s.id
+        FROM ${this.tables.jobStepsTable} s
+        CROSS JOIN target_step ts
+        WHERE s.job_id = ${jobId}
+          AND s.created_at < ts.created_at
+          AND s.status = ${STEP_STATUS_COMPLETED}
+          AND s.id NOT IN (SELECT id FROM ancestors)
+          AND s.id != ts.id
+        UNION
+        -- All branch siblings and their descendants
+        SELECT id FROM branch_descendants
       ),
       -- Delete steps that are not in the keep list and are not ancestors/target
       deleted_steps AS (

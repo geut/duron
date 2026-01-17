@@ -161,6 +161,95 @@ const branchAction = defineAction()({
   },
 })
 
+/**
+ * Action with nested branches - branches that contain nested steps
+ * This tests the edge case where time travel targets a step inside a branch
+ * and sibling branches with their own children should be preserved
+ */
+const nestedBranchAction = defineAction()({
+  name: 'nested-branch-action',
+  version: '1.0.0',
+  input: z.object({
+    failAtStep: z.string().optional(),
+  }),
+  output: z.object({
+    executed: z.array(z.string()),
+  }),
+  steps: {
+    concurrency: 10,
+    retry: { limit: 0, factor: 2, minTimeout: 100, maxTimeout: 500 },
+    expire: 60000,
+  },
+  handler: async (ctx) => {
+    const executed: string[] = []
+
+    // Parent step with multiple branch children, each with nested steps
+    await ctx.step('parent', async (parentCtx) => {
+      executed.push('parent-start')
+
+      await Promise.all([
+        // Branch A with nested steps
+        parentCtx.step(
+          'branch-a',
+          async (branchACtx) => {
+            executed.push('branch-a-start')
+            await branchACtx.step('child-a-1', async () => {
+              executed.push('child-a-1')
+              return { done: true }
+            })
+            await branchACtx.step('child-a-2', async () => {
+              executed.push('child-a-2')
+              return { done: true }
+            })
+            executed.push('branch-a-end')
+            return { result: 'a' }
+          },
+          { branch: true },
+        ),
+        // Branch B with nested steps (target for time travel)
+        parentCtx.step(
+          'branch-b',
+          async (branchBCtx) => {
+            executed.push('branch-b-start')
+            await branchBCtx.step('child-b-1', async () => {
+              if (ctx.input.failAtStep === 'child-b-1') throw new Error('child-b-1 failed')
+              executed.push('child-b-1')
+              return { done: true }
+            })
+            await branchBCtx.step('child-b-2', async () => {
+              if (ctx.input.failAtStep === 'child-b-2') throw new Error('child-b-2 failed')
+              executed.push('child-b-2')
+              return { done: true }
+            })
+            executed.push('branch-b-end')
+            return { result: 'b' }
+          },
+          { branch: true },
+        ),
+        // Branch C with nested steps
+        parentCtx.step(
+          'branch-c',
+          async (branchCCtx) => {
+            executed.push('branch-c-start')
+            await branchCCtx.step('child-c-1', async () => {
+              executed.push('child-c-1')
+              return { done: true }
+            })
+            executed.push('branch-c-end')
+            return { result: 'c' }
+          },
+          { branch: true },
+        ),
+      ])
+
+      executed.push('parent-end')
+      return { completed: true }
+    })
+
+    return { executed }
+  },
+})
+
 // =============================================================================
 // Test Suite Runner
 // =============================================================================
@@ -174,7 +263,7 @@ function runTests(name: string, factory: AdapterFactory) {
       adapterInstance = await factory.create()
       client = new Client({
         database: adapterInstance.adapter,
-        actions: { linearAction, nestedAction, branchAction },
+        actions: { linearAction, nestedAction, branchAction, nestedBranchAction },
         syncPattern: false, // Manual fetching for tests
         logger: 'silent',
       })
@@ -430,6 +519,84 @@ function runTests(name: string, factory: AdapterFactory) {
         // branch-b should be reset (target)
         expectToBeDefined(branchBAfter)
         expect(branchBAfter?.status).toBe(STEP_STATUS_ACTIVE)
+      })
+
+      it('should preserve sibling branches AND their children when time traveling to nested step in a branch', async () => {
+        // This tests the edge case from processOrder: time traveling to a step inside
+        // a branch should preserve sibling branches AND all their nested children
+        const jobId = await client.runAction('nestedBranchAction', { failAtStep: 'child-b-2' })
+        await client.fetch({ batchSize: 1 })
+        const job = await client.waitForJob(jobId, { timeout: 10000 })
+        expectToBeDefined(job)
+        expect(job?.status).toBe(JOB_STATUS_FAILED)
+
+        // Get steps before time travel
+        const { steps } = await client.getJobSteps({ jobId })
+
+        // Verify initial state: branch-a and branch-c completed with children, branch-b failed
+        const branchA = steps.find((s) => s.name === 'branch-a')
+        const childA1 = steps.find((s) => s.name === 'child-a-1')
+        const childA2 = steps.find((s) => s.name === 'child-a-2')
+        const branchC = steps.find((s) => s.name === 'branch-c')
+        const childC1 = steps.find((s) => s.name === 'child-c-1')
+        const childB1 = steps.find((s) => s.name === 'child-b-1')
+        const childB2 = steps.find((s) => s.name === 'child-b-2')
+
+        expectToBeDefined(branchA)
+        expectToBeDefined(childA1)
+        expectToBeDefined(childA2)
+        expectToBeDefined(branchC)
+        expectToBeDefined(childC1)
+        expectToBeDefined(childB1)
+        expectToBeDefined(childB2)
+
+        // Time travel to child-b-2 (nested inside branch-b)
+        const success = await client.timeTravelJob(jobId, childB2!.id)
+        expect(success).toBe(true)
+
+        // Check steps after time travel
+        const { steps: stepsAfter } = await client.getJobSteps({ jobId })
+
+        // branch-a should be preserved WITH its children
+        const branchAAfter = stepsAfter.find((s) => s.name === 'branch-a')
+        const childA1After = stepsAfter.find((s) => s.name === 'child-a-1')
+        const childA2After = stepsAfter.find((s) => s.name === 'child-a-2')
+
+        expectToBeDefined(branchAAfter)
+        expect(branchAAfter?.status).toBe(STEP_STATUS_COMPLETED)
+        expectToBeDefined(childA1After)
+        expect(childA1After?.status).toBe(STEP_STATUS_COMPLETED)
+        expectToBeDefined(childA2After)
+        expect(childA2After?.status).toBe(STEP_STATUS_COMPLETED)
+
+        // branch-c should be preserved WITH its children
+        const branchCAfter = stepsAfter.find((s) => s.name === 'branch-c')
+        const childC1After = stepsAfter.find((s) => s.name === 'child-c-1')
+
+        expectToBeDefined(branchCAfter)
+        expect(branchCAfter?.status).toBe(STEP_STATUS_COMPLETED)
+        expectToBeDefined(childC1After)
+        expect(childC1After?.status).toBe(STEP_STATUS_COMPLETED)
+
+        // branch-b should be reset to active (ancestor of target)
+        const branchBAfter = stepsAfter.find((s) => s.name === 'branch-b')
+        expectToBeDefined(branchBAfter)
+        expect(branchBAfter?.status).toBe(STEP_STATUS_ACTIVE)
+
+        // child-b-1 should be preserved (sibling before target in same branch, completed)
+        const childB1After = stepsAfter.find((s) => s.name === 'child-b-1')
+        expectToBeDefined(childB1After)
+        expect(childB1After?.status).toBe(STEP_STATUS_COMPLETED)
+
+        // child-b-2 should be reset (target)
+        const childB2After = stepsAfter.find((s) => s.name === 'child-b-2')
+        expectToBeDefined(childB2After)
+        expect(childB2After?.status).toBe(STEP_STATUS_ACTIVE)
+
+        // parent should be reset (ancestor of target)
+        const parentAfter = stepsAfter.find((s) => s.name === 'parent')
+        expectToBeDefined(parentAfter)
+        expect(parentAfter?.status).toBe(STEP_STATUS_ACTIVE)
       })
     })
 

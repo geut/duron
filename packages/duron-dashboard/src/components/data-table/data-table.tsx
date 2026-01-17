@@ -34,7 +34,7 @@ export function DataTable<TData>({
         {children && <div className="shrink-0">{children}</div>}
 
         {/* Scrollable table container */}
-        <div className="flex-1 overflow-hidden rounded-md border">
+        <div className="flex-1 overflow-hidden border-y">
           <ScrollArea className="h-full">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">

@@ -258,7 +258,7 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
       </div>
 
       {/* Table content */}
-      <div className="flex-1 overflow-hidden p-2">
+      <div className="flex-1 overflow-hidden">
         <DataTable table={table} fillHeight={true} />
       </div>
     </div>

@@ -726,14 +726,11 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
 
         const result = await adapter.getJobSteps({
           jobId: jobId!,
-          page: 1,
-          pageSize: 2,
         })
 
-        expect(result.steps.length).toBe(2)
+        // All steps returned (no pagination)
+        expect(result.steps.length).toBe(5)
         expect(result.total).toBe(5)
-        expect(result.page).toBe(1)
-        expect(result.pageSize).toBe(2)
       })
 
       it('should get action statistics', async () => {

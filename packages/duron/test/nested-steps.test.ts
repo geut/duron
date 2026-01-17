@@ -357,7 +357,7 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         expectToBeDefined(job)
 
         // Get all steps for the job
-        const stepsResult = await client.getJobSteps({ jobId, pageSize: 100 })
+        const stepsResult = await client.getJobSteps({ jobId })
         const steps = stepsResult.steps
 
         expect(steps.length).toBe(2) // parent + child
@@ -432,7 +432,7 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         expect(output.childResults.sort()).toEqual([0, 1, 2, 3, 4])
 
         // Verify all steps exist in database
-        const stepsResult = await client.getJobSteps({ jobId, pageSize: 100 })
+        const stepsResult = await client.getJobSteps({ jobId })
         expect(stepsResult.steps.length).toBe(6) // 1 parent + 5 children
 
         const parentStep = stepsResult.steps.find((s) => s.name === 'parent-step')
@@ -461,7 +461,7 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         expect(job.error.name).toBe('UnhandledChildStepsError')
 
         // The orphaned child step should be cancelled
-        const stepsResult = await client.getJobSteps({ jobId, pageSize: 100 })
+        const stepsResult = await client.getJobSteps({ jobId })
         const orphanedChild = stepsResult.steps.find((s) => s.name === 'orphaned-child')
         expectToBeDefined(orphanedChild)
         expect(orphanedChild.status).toBe(STEP_STATUS_CANCELLED)
@@ -482,7 +482,7 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         expect(job.error.name).toBe('StepTimeoutError')
 
         // Get steps
-        const stepsResult = await client.getJobSteps({ jobId, pageSize: 100 })
+        const stepsResult = await client.getJobSteps({ jobId })
 
         // Parent step should be present and failed
         const parentStep = stepsResult.steps.find((s) => s.name === 'parent-step')

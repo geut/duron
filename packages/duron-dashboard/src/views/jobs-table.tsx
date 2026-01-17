@@ -250,7 +250,7 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
   return (
     <div className="h-full flex flex-col">
       {/* Header with title and toolbar */}
-      <div className="p-2 border-b shrink-0 flex items-center justify-between gap-2">
+      <div className="px-4 min-h-12 border-b shrink-0 flex items-center justify-between gap-2">
         <h2 className="font-medium shrink-0">Jobs</h2>
         <DataTableToolbar table={table} className="flex-1 justify-end">
           <DataTableSortList table={table} />

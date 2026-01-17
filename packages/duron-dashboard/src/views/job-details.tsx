@@ -15,9 +15,10 @@ import { isExpiring } from '../lib/is-expiring'
 
 interface JobDetailsProps {
   jobId: string | null
+  onClose?: () => void
 }
 
-export function JobDetails({ jobId }: JobDetailsProps) {
+export function JobDetails({ jobId, onClose }: JobDetailsProps) {
   const { data: job, isLoading: jobLoading } = useJob(jobId)
 
   // Enable polling for job status updates - refetches entire job detail when status changes
@@ -113,96 +114,65 @@ export function JobDetails({ jobId }: JobDetailsProps) {
   }
 
   return (
-    <ScrollArea className="h-full flex flex-col">
-      <div className="p-4 pt-5 space-y-4">
-        <div className="flex items-center justify-end">
-          {/* Mobile: Dropdown menu */}
-          <div className="md:hidden flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild={true}>
-                <Button variant="outline" size="sm" disabled={retryMutation.isPending || cancelMutation.isPending}>
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleRetry} disabled={retryMutation.isPending || cancelMutation.isPending}>
-                  <Play className="h-4 w-4 mr-2" />
-                  Retry
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleCancel}
-                  disabled={
-                    cancelMutation.isPending ||
-                    retryMutation.isPending ||
-                    job.status === 'completed' ||
-                    job.status === 'failed' ||
-                    job.status === 'cancelled'
-                  }
-                  variant="destructive"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleDelete}
-                  disabled={
-                    job.status === 'active' ||
-                    cancelMutation.isPending ||
-                    retryMutation.isPending ||
-                    deleteMutation.isPending
-                  }
-                  variant="destructive"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          {/* Desktop: Individual buttons */}
-          <div className="hidden md:flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRetry}
-              disabled={retryMutation.isPending || cancelMutation.isPending}
-            >
-              <Play className="h-4 w-4 mr-1" />
-              Retry
+    <div className="h-full flex flex-col">
+      {/* Header with title and action buttons */}
+      <div className="px-4 min-h-12 border-b shrink-0 flex items-center justify-between gap-2">
+        <h2 className="font-medium shrink-0">Job Details</h2>
+        <div className="flex items-center gap-2">
+          {/* Action buttons dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild={true}>
+              <Button variant="outline" size="sm" disabled={retryMutation.isPending || cancelMutation.isPending}>
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleRetry} disabled={retryMutation.isPending || cancelMutation.isPending}>
+                <Play className="h-4 w-4 mr-2" />
+                Retry
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleCancel}
+                disabled={
+                  cancelMutation.isPending ||
+                  retryMutation.isPending ||
+                  job.status === 'completed' ||
+                  job.status === 'failed' ||
+                  job.status === 'cancelled'
+                }
+                variant="destructive"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleDelete}
+                disabled={
+                  job.status === 'active' ||
+                  cancelMutation.isPending ||
+                  retryMutation.isPending ||
+                  deleteMutation.isPending
+                }
+                variant="destructive"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {/* Close button */}
+          {onClose && (
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-6 w-6 p-0" title="Hide Job Details">
+              <X className="h-4 w-4" />
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCancel}
-              disabled={
-                cancelMutation.isPending ||
-                retryMutation.isPending ||
-                job.status === 'completed' ||
-                job.status === 'failed' ||
-                job.status === 'cancelled'
-              }
-            >
-              <X className="h-4 w-4 mr-1" />
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDelete}
-              disabled={
-                job.status === 'active' ||
-                cancelMutation.isPending ||
-                retryMutation.isPending ||
-                deleteMutation.isPending
-              }
-            >
-              <X className="h-4 w-4 mr-1" />
-              Delete
-            </Button>
-          </div>
+          )}
         </div>
+      </div>
 
-        <div className="space-y-2 text-sm">
+      {/* Scrollable content */}
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-4">
+          <div className="space-y-2 text-sm">
           <div>
             <span className="font-medium">ID:</span> <span className="font-mono text-xs break-all">{job.id}</span>
           </div>
@@ -302,8 +272,9 @@ export function JobDetails({ jobId }: JobDetailsProps) {
 
           {!job.output && <div className="text-sm text-muted-foreground italic">No output available</div>}
         </div>
-      </div>
-      <ScrollBar orientation="horizontal" />
-    </ScrollArea>
+        </div>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
+    </div>
   )
 }

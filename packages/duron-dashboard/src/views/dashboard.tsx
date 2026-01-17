@@ -173,21 +173,7 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
               {/* Job Details Section */}
               {jobDetailsVisible && (
                 <div className="w-1/2 flex flex-col overflow-hidden transition-all duration-200 min-w-0">
-                  <div className="p-2 border-b shrink-0 flex items-center justify-between">
-                    <h2 className="font-medium">Job Details</h2>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setJobDetailsVisible(false)}
-                      className="h-6 w-6 p-0"
-                      title="Hide Job Details"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <JobDetails jobId={selectedJobId} />
-                  </div>
+                  <JobDetails jobId={selectedJobId} onClose={() => setJobDetailsVisible(false)} />
                 </div>
               )}
             </div>
@@ -195,7 +181,7 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
             {/* Bottom Row: Steps (full width) */}
             {selectedJobId && (
               <div className="h-1/2 flex flex-col overflow-hidden min-w-0">
-                <div className="p-2 border-b shrink-0 flex items-center justify-between">
+                <div className="px-4 min-h-12 border-b shrink-0 flex items-center justify-between">
                   <h2 className="font-medium">Steps</h2>
                 </div>
                 <div className="flex-1 overflow-hidden">
@@ -217,19 +203,14 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
             {/* Job Details Section */}
             {selectedJobId && (
               <div className="h-1/3 border-b flex flex-col overflow-hidden">
-                <div className="p-2 border-b shrink-0">
-                  <h2 className="font-medium">Job Details</h2>
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <JobDetails jobId={selectedJobId} />
-                </div>
+                <JobDetails jobId={selectedJobId} />
               </div>
             )}
 
             {/* Steps Section */}
             {selectedJobId && (
               <div className="h-1/3 flex flex-col overflow-hidden">
-                <div className="p-2 border-b shrink-0">
+                <div className="px-4 min-h-12 border-b shrink-0 flex items-center">
                   <h2 className="font-medium">Steps</h2>
                 </div>
                 <div className="flex-1 overflow-hidden">

@@ -144,7 +144,7 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="p-4 border-b shrink-0">
+      <div className="px-4 min-h-12 border-b shrink-0 flex items-center">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />

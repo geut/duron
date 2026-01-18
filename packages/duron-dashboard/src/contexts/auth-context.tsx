@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useEffect, useState } from 'react'
+import { createContext, type ReactNode, useContext, useState } from 'react'
 
 interface AuthContextType {
   isAuthenticated: boolean
@@ -14,36 +14,38 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const ACCESS_TOKEN_KEY = 'auth_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(null)
-  const [refreshToken, setRefreshToken] = useState<string | null>(null)
+function getInitialAuthState(): { token: string | null; refreshToken: string | null } {
+  if (typeof window === 'undefined') {
+    return { token: null, refreshToken: null }
+  }
+  const storedToken = localStorage.getItem(ACCESS_TOKEN_KEY)
+  const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+  if (storedToken && storedRefreshToken) {
+    return { token: storedToken, refreshToken: storedRefreshToken }
+  }
+  return { token: null, refreshToken: null }
+}
 
-  useEffect(() => {
-    const storedToken = localStorage.getItem(ACCESS_TOKEN_KEY)
-    const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
-    if (storedToken && storedRefreshToken) {
-      setToken(storedToken)
-      setRefreshToken(storedRefreshToken)
-    }
-  }, [])
+export function AuthProvider({ children }: { children: ReactNode }) {
+  // Load auth state synchronously to avoid flash of login page
+  const [authState, setAuthState] = useState(() => getInitialAuthState())
+  const { token, refreshToken } = authState
 
   const login = (newToken: string, newRefreshToken: string) => {
     localStorage.setItem(ACCESS_TOKEN_KEY, newToken)
     localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken)
-    setToken(newToken)
-    setRefreshToken(newRefreshToken)
+    setAuthState({ token: newToken, refreshToken: newRefreshToken })
   }
 
   const updateAccessToken = (newToken: string) => {
     localStorage.setItem(ACCESS_TOKEN_KEY, newToken)
-    setToken(newToken)
+    setAuthState((prev) => ({ ...prev, token: newToken }))
   }
 
   const logout = () => {
     localStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
-    setToken(null)
-    setRefreshToken(null)
+    setAuthState({ token: null, refreshToken: null })
   }
 
   return (

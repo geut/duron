@@ -24,6 +24,7 @@ import {
   type DelayJobStepOptions,
   type DeleteJobOptions,
   type DeleteJobsOptions,
+  type DeleteMetricsOptions,
   type FailJobOptions,
   type FailJobStepOptions,
   type FetchOptions,
@@ -32,11 +33,15 @@ import {
   type GetJobStepsResult,
   type GetJobsOptions,
   type GetJobsResult,
+  type GetMetricsOptions,
+  type GetMetricsResult,
+  type InsertMetricOptions,
   type Job,
   type JobSort,
   type JobStatusResult,
   type JobStep,
   type JobStepStatusResult,
+  type MetricSort,
   type RecoverJobsOptions,
   type RetryJobOptions,
   type TimeTravelJobOptions,
@@ -1347,6 +1352,128 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         lastJobCreated: action.lastJobCreated ?? null,
       })),
     }
+  }
+
+  // ============================================================================
+  // Metrics Methods
+  // ============================================================================
+
+  /**
+   * Internal method to insert a metric record.
+   */
+  protected async _insertMetric(options: InsertMetricOptions): Promise<string> {
+    const [result] = await this.db
+      .insert(this.tables.metricsTable)
+      .values({
+        job_id: options.jobId,
+        step_id: options.stepId ?? null,
+        name: options.name,
+        value: options.value,
+        attributes: options.attributes ?? {},
+        type: options.type,
+      })
+      .returning({ id: this.tables.metricsTable.id })
+
+    return result!.id
+  }
+
+  /**
+   * Internal method to get metrics for a job or step.
+   */
+  protected async _getMetrics(options: GetMetricsOptions): Promise<GetMetricsResult> {
+    const metricsTable = this.tables.metricsTable
+    const page = options.page ?? 1
+    const pageSize = options.pageSize ?? 100
+    const filters = options.filters ?? {}
+
+    // Build WHERE clause
+    const where = this._buildMetricsWhereClause(options.jobId, options.stepId, filters)
+
+    // Build sort
+    const sortInput = options.sort ?? { field: 'timestamp', order: 'desc' }
+    const sortFieldMap: Record<MetricSort['field'], any> = {
+      name: metricsTable.name,
+      value: metricsTable.value,
+      timestamp: metricsTable.timestamp,
+      createdAt: metricsTable.created_at,
+    }
+
+    // Get total count
+    const total = await this.db.$count(metricsTable, where)
+    if (!total) {
+      return {
+        metrics: [],
+        total: 0,
+        page,
+        pageSize,
+      }
+    }
+
+    const sortField = sortFieldMap[sortInput.field]
+    const orderByClause = sortInput.order === 'asc' ? asc(sortField) : desc(sortField)
+
+    const metrics = await this.db
+      .select({
+        id: metricsTable.id,
+        jobId: metricsTable.job_id,
+        stepId: metricsTable.step_id,
+        name: metricsTable.name,
+        value: metricsTable.value,
+        attributes: metricsTable.attributes,
+        type: metricsTable.type,
+        timestamp: metricsTable.timestamp,
+        createdAt: metricsTable.created_at,
+      })
+      .from(metricsTable)
+      .where(where)
+      .orderBy(orderByClause)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize)
+
+    return {
+      metrics,
+      total,
+      page,
+      pageSize,
+    }
+  }
+
+  /**
+   * Internal method to delete all metrics for a job.
+   */
+  protected async _deleteMetrics(options: DeleteMetricsOptions): Promise<number> {
+    const result = await this.db
+      .delete(this.tables.metricsTable)
+      .where(eq(this.tables.metricsTable.job_id, options.jobId))
+      .returning({ id: this.tables.metricsTable.id })
+
+    return result.length
+  }
+
+  /**
+   * Build WHERE clause for metrics queries.
+   */
+  protected _buildMetricsWhereClause(jobId?: string, stepId?: string, filters?: GetMetricsOptions['filters']) {
+    const metricsTable = this.tables.metricsTable
+
+    return and(
+      jobId ? eq(metricsTable.job_id, jobId) : undefined,
+      stepId ? eq(metricsTable.step_id, stepId) : undefined,
+      filters?.name
+        ? Array.isArray(filters.name)
+          ? or(...filters.name.map((n) => ilike(metricsTable.name, `%${n}%`)))
+          : ilike(metricsTable.name, `%${filters.name}%`)
+        : undefined,
+      filters?.type
+        ? inArray(metricsTable.type, Array.isArray(filters.type) ? filters.type : [filters.type])
+        : undefined,
+      filters?.timestampRange && filters.timestampRange.length === 2
+        ? between(metricsTable.timestamp, filters.timestampRange[0]!, filters.timestampRange[1]!)
+        : undefined,
+      ...(filters?.attributesFilter && Object.keys(filters.attributesFilter).length > 0
+        ? this.#buildJsonbWhereConditions(filters.attributesFilter, metricsTable.attributes)
+        : []),
+    )
   }
 
   // ============================================================================

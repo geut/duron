@@ -4,7 +4,6 @@ import { ChevronRight, Clock, GitBranch, History, List, Search } from 'lucide-re
 import { useCallback, useMemo, useState } from 'react'
 
 import { Timeline } from '@/components/timeline'
-import { calculateDurationSeconds, formatDurationSeconds } from '@/lib/duration'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +13,7 @@ import { useStepView } from '@/contexts/layout-context'
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { useStepsPolling } from '@/hooks/use-steps-polling'
 import { type GetJobStepsResponse, useJob, useJobSteps, useTimeTravelJob } from '@/lib/api'
+import { calculateDurationSeconds, formatDurationSeconds } from '@/lib/duration'
 import { BadgeStatus } from '../components/badge-status'
 
 // Step type from the API response (without output field)
@@ -232,7 +232,9 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                               <span className="font-medium truncate w-0 grow">{step.name}</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-xs font-mono text-muted-foreground">{formatDurationSeconds(duration)}</span>
+                              <span className="text-xs font-mono text-muted-foreground">
+                                {formatDurationSeconds(duration)}
+                              </span>
                               {canTimeTravel && (
                                 <Tooltip>
                                   <TooltipTrigger asChild={true}>

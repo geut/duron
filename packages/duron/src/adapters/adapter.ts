@@ -24,6 +24,7 @@ import type {
   DelayJobStepOptions,
   DeleteJobOptions,
   DeleteJobsOptions,
+  DeleteMetricsOptions,
   FailJobOptions,
   FailJobStepOptions,
   FetchOptions,
@@ -32,6 +33,9 @@ import type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
+  GetMetricsOptions,
+  GetMetricsResult,
+  InsertMetricOptions,
   Job,
   JobStatusResult,
   JobStep,
@@ -52,6 +56,7 @@ import {
   DelayJobStepOptionsSchema,
   DeleteJobOptionsSchema,
   DeleteJobsOptionsSchema,
+  DeleteMetricsOptionsSchema,
   FailJobOptionsSchema,
   FailJobStepOptionsSchema,
   FetchOptionsSchema,
@@ -60,6 +65,9 @@ import {
   GetJobStepsResultSchema,
   GetJobsOptionsSchema,
   GetJobsResultSchema,
+  GetMetricsOptionsSchema,
+  GetMetricsResultSchema,
+  InsertMetricOptionsSchema,
   JobIdResultSchema,
   JobSchema,
   JobStatusResultSchema,
@@ -85,6 +93,7 @@ export type {
   DelayJobStepOptions,
   DeleteJobOptions,
   DeleteJobsOptions,
+  DeleteMetricsOptions,
   FailJobOptions,
   FailJobStepOptions,
   FetchOptions,
@@ -93,6 +102,9 @@ export type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
+  GetMetricsOptions,
+  GetMetricsResult,
+  InsertMetricOptions,
   Job,
   JobFilters,
   JobSort,
@@ -100,6 +112,11 @@ export type {
   JobStatusResult,
   JobStep,
   JobStepStatusResult,
+  Metric,
+  MetricFilters,
+  MetricSort,
+  MetricSortField,
+  MetricType,
   RecoverJobsOptions,
   RetryJobOptions,
   SortOrder,
@@ -974,6 +991,99 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    * @returns Promise resolving to action statistics
    */
   protected abstract _getActions(): Promise<GetActionsResult>
+
+  // ============================================================================
+  // Metrics Methods
+  // ============================================================================
+
+  /**
+   * Insert a metric record.
+   * Note: This method bypasses telemetry tracing to prevent infinite loops.
+   *
+   * @param options - The metric data to insert
+   * @returns Promise resolving to the metric ID
+   */
+  async insertMetric(options: InsertMetricOptions): Promise<string> {
+    try {
+      await this.start()
+      const parsedOptions = InsertMetricOptionsSchema.parse(options)
+      const result = await this._insertMetric(parsedOptions)
+      return z.string().parse(result)
+    } catch (error) {
+      this.#logger?.error(error, 'Error in Adapter.insertMetric()')
+      throw error
+    }
+  }
+
+  /**
+   * Get metrics for a job or step.
+   * Note: This method bypasses telemetry tracing to prevent infinite loops.
+   *
+   * @param options - Query options including jobId/stepId, filters, sort, and pagination
+   * @returns Promise resolving to metrics result with pagination info
+   */
+  async getMetrics(options: GetMetricsOptions): Promise<GetMetricsResult> {
+    try {
+      await this.start()
+      const parsedOptions = GetMetricsOptionsSchema.parse(options)
+      // Validate that at least one of jobId or stepId is provided
+      if (!parsedOptions.jobId && !parsedOptions.stepId) {
+        throw new Error('At least one of jobId or stepId must be provided')
+      }
+      const result = await this._getMetrics(parsedOptions)
+      return GetMetricsResultSchema.parse(result)
+    } catch (error) {
+      this.#logger?.error(error, 'Error in Adapter.getMetrics()')
+      throw error
+    }
+  }
+
+  /**
+   * Delete all metrics for a job.
+   * Note: This method bypasses telemetry tracing to prevent infinite loops.
+   *
+   * @param options - Options containing the jobId
+   * @returns Promise resolving to the number of metrics deleted
+   */
+  async deleteMetrics(options: DeleteMetricsOptions): Promise<number> {
+    try {
+      await this.start()
+      const parsedOptions = DeleteMetricsOptionsSchema.parse(options)
+      const result = await this._deleteMetrics(parsedOptions)
+      return NumberResultSchema.parse(result)
+    } catch (error) {
+      this.#logger?.error(error, 'Error in Adapter.deleteMetrics()')
+      throw error
+    }
+  }
+
+  // ============================================================================
+  // Private Metrics Methods (to be implemented by adapters)
+  // ============================================================================
+
+  /**
+   * Internal method to insert a metric record.
+   *
+   * @param options - Validated metric data
+   * @returns Promise resolving to the metric ID
+   */
+  protected abstract _insertMetric(options: InsertMetricOptions): Promise<string>
+
+  /**
+   * Internal method to get metrics for a job or step.
+   *
+   * @param options - Validated query options
+   * @returns Promise resolving to metrics result with pagination info
+   */
+  protected abstract _getMetrics(options: GetMetricsOptions): Promise<GetMetricsResult>
+
+  /**
+   * Internal method to delete all metrics for a job.
+   *
+   * @param options - Validated options containing the jobId
+   * @returns Promise resolving to the number of metrics deleted
+   */
+  protected abstract _deleteMetrics(options: DeleteMetricsOptions): Promise<number>
 
   // ============================================================================
   // Protected Abstract Methods (to be implemented by adapters)

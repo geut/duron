@@ -21,6 +21,7 @@ import {
   serializeError,
   UnhandledChildStepsError,
 } from './errors.js'
+import type { ObserveContext, Span, TelemetryAdapter } from './telemetry/adapter.js'
 import pRetry from './utils/p-retry.js'
 import waitForAbort from './utils/wait-for-abort.js'
 
@@ -129,6 +130,7 @@ export interface StepManagerOptions {
   jobId: string
   actionName: string
   adapter: Adapter
+  telemetry: TelemetryAdapter
   logger: Logger
   concurrencyLimit: number
 }
@@ -141,10 +143,15 @@ export class StepManager {
   #jobId: string
   #actionName: string
   #stepStore: StepStore
+  #telemetry: TelemetryAdapter
   #queue: fastq.queueAsPromised<TaskStep, any>
   #logger: Logger
   // each step name should be executed only once per action job
   #historySteps = new Set<string>()
+  // Store step spans for nested step tracking
+  #stepSpans = new Map<string, Span>()
+  // Store the job span for creating step spans
+  #jobSpan: Span | null = null
 
   // ============================================================================
   // Constructor
@@ -159,6 +166,7 @@ export class StepManager {
     this.#jobId = options.jobId
     this.#actionName = options.actionName
     this.#logger = options.logger
+    this.#telemetry = options.telemetry
     this.#stepStore = new StepStore(options.adapter)
     this.#queue = fastq.promise(async (task: TaskStep) => {
       if (this.#historySteps.has(task.name)) {
@@ -167,6 +175,14 @@ export class StepManager {
       this.#historySteps.add(task.name)
       return this.#executeStep(task.name, task.cb, task.options, task.abortSignal, task.parentStepId, task.parallel)
     }, options.concurrencyLimit)
+  }
+
+  /**
+   * Set the job span for this step manager.
+   * Called from ActionJob after the job span is created.
+   */
+  setJobSpan(span: Span): void {
+    this.#jobSpan = span
   }
 
   // ============================================================================
@@ -182,6 +198,7 @@ export class StepManager {
    * @param variables - Variables available to the action
    * @param abortSignal - Abort signal for cancelling the action
    * @param logger - Pino child logger for this job
+   * @param observeContext - Observability context for telemetry
    * @returns ActionHandlerContext instance
    */
   createActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVariables = Record<string, unknown>>(
@@ -190,8 +207,35 @@ export class StepManager {
     variables: TVariables,
     abortSignal: AbortSignal,
     logger: Logger,
+    observeContext: ObserveContext,
   ): ActionHandlerContext<TInput, TVariables> {
-    return new ActionContext(this, job, action, variables, abortSignal, logger)
+    return new ActionContext(this, job, action, variables, abortSignal, logger, observeContext)
+  }
+
+  /**
+   * Create an observe context for a step.
+   */
+  createStepObserveContext(stepId: string): ObserveContext {
+    const stepSpan = this.#stepSpans.get(stepId)
+    if (stepSpan) {
+      return this.#telemetry.createObserveContext(this.#jobId, stepId, stepSpan)
+    }
+    // Fallback to job span if step span not found
+    if (this.#jobSpan) {
+      return this.#telemetry.createObserveContext(this.#jobId, stepId, this.#jobSpan)
+    }
+    // No-op observe context
+    return {
+      recordMetric: () => {
+        // No-op
+      },
+      addSpanAttribute: () => {
+        // No-op
+      },
+      addSpanEvent: () => {
+        // No-op
+      },
+    }
   }
 
   /**
@@ -263,6 +307,17 @@ export class StepManager {
 
         step = newStep
 
+        // Start step telemetry span
+        const parentSpan = parentStepId ? this.#stepSpans.get(parentStepId) : this.#jobSpan
+        const stepSpan = await this.#telemetry.startStepSpan({
+          jobId: this.#jobId,
+          stepId: step.id,
+          stepName: name,
+          parentSpan: parentSpan ?? undefined,
+          parentStepId,
+        })
+        this.#stepSpans.set(step.id, stepSpan)
+
         if (abortSignal.aborted) {
           throw new ActionCancelError(this.#actionName, this.#jobId, { cause: 'step cancelled after create step' })
         }
@@ -318,11 +373,15 @@ export class StepManager {
       const childAbortController = new AbortController()
       const childSignal = AbortSignal.any([stepSignal, childAbortController.signal])
 
+      // Create observe context for this step
+      const stepObserveContext = this.createStepObserveContext(step.id)
+
       // Create StepHandlerContext with nested step support
       const stepContext: StepHandlerContext = {
         signal: stepSignal,
         stepId: step.id,
         parentStepId,
+        observe: stepObserveContext,
         step: <TChildResult>(
           childName: string,
           childCb: (ctx: StepHandlerContext) => Promise<TChildResult>,
@@ -431,6 +490,13 @@ export class StepManager {
           throw new Error(`Failed to complete step "${name}" for job "${this.#jobId}" action "${this.#actionName}"`)
         }
 
+        // End step telemetry span successfully
+        const stepSpan = this.#stepSpans.get(step.id)
+        if (stepSpan) {
+          await this.#telemetry.endStepSpan(stepSpan, { status: 'ok' })
+          this.#stepSpans.delete(step.id)
+        }
+
         // Log step completion
         this.#logger.debug(
           { jobId: this.#jobId, actionName: this.#actionName, stepName: name, stepId: step.id },
@@ -471,6 +537,17 @@ export class StepManager {
       },
     }).catch(async (error) => {
       if (step) {
+        // End step telemetry span with error/cancelled status
+        const stepSpan = this.#stepSpans.get(step.id)
+        if (stepSpan) {
+          if (isCancelError(error)) {
+            await this.#telemetry.endStepSpan(stepSpan, { status: 'cancelled' })
+          } else {
+            await this.#telemetry.endStepSpan(stepSpan, { status: 'error', error })
+          }
+          this.#stepSpans.delete(step.id)
+        }
+
         if (isCancelError(error)) {
           await this.#stepStore.updateStatus(step.id, 'cancelled')
         } else {
@@ -501,6 +578,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
   #jobId: string
   #groupKey: string = '@default'
   #action: Action<TInput, TOutput, TVariables>
+  #observeContext: ObserveContext
 
   // ============================================================================
   // Constructor
@@ -513,6 +591,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
     variables: TVariables,
     abortSignal: AbortSignal,
     logger: Logger,
+    observeContext: ObserveContext,
   ) {
     this.#stepManager = stepManager
     this.#variables = variables
@@ -521,6 +600,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
     this.#action = action
     this.#jobId = job.id
     this.#groupKey = job.groupKey ?? '@default'
+    this.#observeContext = observeContext
     if (action.input) {
       this.#input = action.input.parse(job.input, {
         error: () => 'Error parsing action input',
@@ -572,6 +652,13 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
    */
   get logger(): Logger {
     return this.#logger
+  }
+
+  /**
+   * Get the observability context for recording metrics and span data.
+   */
+  get observe(): ObserveContext {
+    return this.#observeContext
   }
 
   /**

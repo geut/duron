@@ -11,11 +11,14 @@ import type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
+  GetMetricsOptions,
+  GetMetricsResult,
   Job,
   JobStep,
 } from './adapters/adapter.js'
 import type { JobStatusResult, JobStepStatusResult } from './adapters/schemas.js'
 import { JOB_STATUS_CANCELLED, JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, type JobStatus } from './constants.js'
+import { LocalTelemetryAdapter, noopTelemetryAdapter, type TelemetryAdapter } from './telemetry/index.js'
 
 const BaseOptionsSchema = z.object({
   /**
@@ -136,6 +139,17 @@ export interface ClientOptions<
    * These can be accessed in action handlers using `ctx.var`.
    */
   variables?: TVariables
+
+  /**
+   * Optional telemetry adapter for observability.
+   * When provided, traces job and step execution with spans and allows recording custom metrics.
+   *
+   * Available adapters:
+   * - `openTelemetryAdapter()` - Export traces to external systems (Jaeger, OTLP, etc.)
+   * - `localTelemetryAdapter({ database })` - Store metrics in the Duron database
+   * - `noopTelemetryAdapter()` - No-op adapter (default)
+   */
+  telemetry?: TelemetryAdapter
 }
 
 interface FetchOptions {
@@ -157,6 +171,7 @@ export class Client<
   #id: string
   #actions: TActions | null
   #database: Adapter
+  #telemetry: TelemetryAdapter
   #variables: Record<string, unknown>
   #logger: Logger
   #started: boolean = false
@@ -190,11 +205,14 @@ export class Client<
     this.#options = BaseOptionsSchema.parse(options)
     this.#id = options.id ?? globalThis.crypto.randomUUID()
     this.#database = options.database
+    this.#telemetry = options.telemetry ?? noopTelemetryAdapter()
     this.#actions = options.actions ?? null
     this.#variables = options?.variables ?? {}
     this.#logger = this.#normalizeLogger(options?.logger)
     this.#database.setId(this.#id)
     this.#database.setLogger(this.#logger)
+    this.#telemetry.setLogger(this.#logger)
+    this.#telemetry.setClient(this)
   }
 
   #normalizeLogger(logger?: Logger | 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent'): Logger {
@@ -215,6 +233,28 @@ export class Client<
 
   get logger() {
     return this.#logger
+  }
+
+  /**
+   * Get the telemetry adapter instance.
+   */
+  get telemetry(): TelemetryAdapter {
+    return this.#telemetry
+  }
+
+  /**
+   * Get the database adapter instance.
+   */
+  get database(): Adapter {
+    return this.#database
+  }
+
+  /**
+   * Check if local telemetry is enabled.
+   * Returns true if using LocalTelemetryAdapter.
+   */
+  get metricsEnabled(): boolean {
+    return this.#telemetry instanceof LocalTelemetryAdapter
   }
 
   /**
@@ -564,6 +604,22 @@ export class Client<
   }
 
   /**
+   * Get metrics for a job or step.
+   * Only available when using LocalTelemetryAdapter.
+   *
+   * @param options - Query options including jobId/stepId, filters, sort, and pagination
+   * @returns Promise resolving to metrics result with pagination info
+   * @throws Error if not using LocalTelemetryAdapter
+   */
+  async getMetrics(options: GetMetricsOptions): Promise<GetMetricsResult> {
+    await this.start()
+    if (!this.metricsEnabled) {
+      throw new Error('Metrics are only available when using LocalTelemetryAdapter')
+    }
+    return this.#database.getMetrics(options)
+  }
+
+  /**
    * Get action metadata including input schemas and mock data.
    * This is useful for generating UI forms or mock data.
    *
@@ -624,6 +680,9 @@ export class Client<
       if (!dbStarted) {
         return false
       }
+
+      // Start telemetry adapter
+      await this.#telemetry.start()
 
       if (this.#actions) {
         if (this.#options.recoverJobsOnStart) {
@@ -694,6 +753,9 @@ export class Client<
           await manager.stop()
         }),
       )
+
+      // Stop telemetry adapter
+      await this.#telemetry.stop()
 
       const dbStopped = await this.#database.stop()
       if (!dbStopped) {
@@ -810,6 +872,7 @@ export class Client<
       actionManager = new ActionManager({
         action,
         database: this.#database,
+        telemetry: this.#telemetry,
         variables: this.#variables,
         logger: this.#logger,
         concurrencyLimit: this.#options.actionConcurrencyLimit,

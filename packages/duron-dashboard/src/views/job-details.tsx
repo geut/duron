@@ -1,16 +1,18 @@
 'use client'
 
-import { MoreVertical, Play, X } from 'lucide-react'
+import { Activity, MoreVertical, Play, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import { useMetrics } from '@/contexts/metrics-context'
 import { useJobStatusPolling } from '@/hooks/use-job-status-polling'
 import { useCancelJob, useDeleteJob, useJob, useRetryJob } from '@/lib/api'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { JsonView } from '../components/json-view'
+import { JobMetricsPanel } from '../components/metrics-panel'
 import { isExpiring } from '../lib/is-expiring'
 
 interface JobDetailsProps {
@@ -20,6 +22,8 @@ interface JobDetailsProps {
 
 export function JobDetails({ jobId, onClose }: JobDetailsProps) {
   const { data: job, isLoading: jobLoading } = useJob(jobId)
+  const { metricsEnabled } = useMetrics()
+  const [showMetrics, setShowMetrics] = useState(false)
 
   // Enable polling for job status updates - refetches entire job detail when status changes
   useJobStatusPolling(jobId, true)
@@ -131,6 +135,12 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
                 <Play className="h-4 w-4 mr-2" />
                 Retry
               </DropdownMenuItem>
+              {metricsEnabled && (
+                <DropdownMenuItem onClick={() => setShowMetrics(!showMetrics)}>
+                  <Activity className="h-4 w-4 mr-2" />
+                  {showMetrics ? 'Hide Metrics' : 'Show Metrics'}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={handleCancel}
                 disabled={
@@ -272,6 +282,13 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
             )}
 
             {!job.output && <div className="text-sm text-muted-foreground italic">No output available</div>}
+
+            {/* Metrics Panel */}
+            {metricsEnabled && showMetrics && (
+              <div className="border-t pt-4">
+                <JobMetricsPanel jobId={job.id} />
+              </div>
+            )}
           </div>
         </div>
         <ScrollBar orientation="horizontal" />

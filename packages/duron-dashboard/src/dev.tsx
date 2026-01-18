@@ -3,6 +3,7 @@ import { serve } from 'bun'
 import { getWeather, openaiChat, processOrder, sendEmail, variables } from '@shared-actions/index'
 import { postgresAdapter } from 'duron/adapters/postgres/postgres'
 import { createServer, duron } from 'duron/index'
+import { localTelemetryAdapter } from 'duron/telemetry'
 
 import index from './index.html'
 
@@ -21,6 +22,7 @@ const client = duron({
   },
   variables,
   logger: 'info',
+  telemetry: localTelemetryAdapter(),
 })
 
 const app = createServer({
@@ -32,6 +34,7 @@ const app = createServer({
     jwtSecret: process.env.JWT_SECRET || 'dev-secret-key-change-in-production',
     expirationTime: '1d',
   },
+  metricsEnabled: true,
 })
 
 const server = serve({

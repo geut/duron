@@ -1,5 +1,17 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, index, integer, jsonb, pgSchema, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  check,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgSchema,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core'
 
 import { JOB_STATUSES, type JobStatus, STEP_STATUS_ACTIVE, STEP_STATUSES, type StepStatus } from '../../constants.js'
 import type { SerializableError } from '../../errors.js'
@@ -114,9 +126,42 @@ export default function createSchema(schemaName: string) {
     ],
   )
 
+  const metricsTable = schema.table(
+    'metrics',
+    {
+      id: uuid('id').primaryKey().defaultRandom(),
+      job_id: uuid('job_id')
+        .notNull()
+        .references(() => jobsTable.id, { onDelete: 'cascade' }),
+      step_id: uuid('step_id').references(() => jobStepsTable.id, { onDelete: 'cascade' }),
+      name: text('name').notNull(),
+      value: doublePrecision('value').notNull(),
+      attributes: jsonb('attributes').$type<Record<string, any>>().notNull().default({}),
+      type: text('type').$type<'metric' | 'span_event' | 'span_attribute'>().notNull(),
+      timestamp: timestamp('timestamp', { withTimezone: true }).notNull().defaultNow(),
+      created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+      // Single column indexes
+      index('idx_metrics_job_id').on(table.job_id),
+      index('idx_metrics_step_id').on(table.step_id),
+      index('idx_metrics_name').on(table.name),
+      index('idx_metrics_type').on(table.type),
+      index('idx_metrics_timestamp').on(table.timestamp),
+      // Composite indexes
+      index('idx_metrics_job_step').on(table.job_id, table.step_id),
+      index('idx_metrics_job_name').on(table.job_id, table.name),
+      index('idx_metrics_job_type').on(table.job_id, table.type),
+      // GIN index for JSONB attributes filtering
+      index('idx_metrics_attributes').using('gin', table.attributes),
+      check('metrics_type_check', sql`${table.type} IN ('metric', 'span_event', 'span_attribute')`),
+    ],
+  )
+
   return {
     schema,
     jobsTable,
     jobStepsTable,
+    metricsTable,
   }
 }

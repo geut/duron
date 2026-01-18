@@ -295,6 +295,67 @@ export const JobStepStatusResultSchema = z.object({
 })
 
 // ============================================================================
+// Metrics Schemas
+// ============================================================================
+
+export const MetricTypeSchema = z.enum(['metric', 'span_event', 'span_attribute'])
+
+export const MetricSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  stepId: z.string().nullable(),
+  name: z.string(),
+  value: z.number(),
+  attributes: z.record(z.string(), z.any()),
+  type: MetricTypeSchema,
+  timestamp: DateSchema,
+  createdAt: DateSchema,
+})
+
+export const MetricSortFieldSchema = z.enum(['name', 'value', 'timestamp', 'createdAt'])
+
+export const MetricSortSchema = z.object({
+  field: MetricSortFieldSchema,
+  order: SortOrderSchema,
+})
+
+export const MetricFiltersSchema = z.object({
+  name: z.union([z.string(), z.array(z.string())]).optional(),
+  type: z.union([MetricTypeSchema, z.array(MetricTypeSchema)]).optional(),
+  attributesFilter: z.record(z.string(), z.any()).optional(),
+  timestampRange: z.array(DateSchema).length(2).optional(),
+})
+
+export const InsertMetricOptionsSchema = z.object({
+  jobId: z.string(),
+  stepId: z.string().optional(),
+  name: z.string(),
+  value: z.number(),
+  attributes: z.record(z.string(), z.any()).optional(),
+  type: MetricTypeSchema,
+})
+
+export const GetMetricsOptionsSchema = z.object({
+  jobId: z.string().optional(),
+  stepId: z.string().optional(),
+  filters: MetricFiltersSchema.optional(),
+  sort: MetricSortSchema.optional(),
+  page: z.number().int().positive().optional(),
+  pageSize: z.number().int().positive().optional(),
+})
+
+export const GetMetricsResultSchema = z.object({
+  metrics: z.array(MetricSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive().optional(),
+  pageSize: z.number().int().positive().optional(),
+})
+
+export const DeleteMetricsOptionsSchema = z.object({
+  jobId: z.string(),
+})
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -329,3 +390,12 @@ export type DelayJobStepOptions = z.infer<typeof DelayJobStepOptionsSchema>
 export type CancelJobStepOptions = z.infer<typeof CancelJobStepOptionsSchema>
 export type CreateOrRecoverJobStepResult = z.infer<typeof CreateOrRecoverJobStepResultSchema>
 export type TimeTravelJobOptions = z.infer<typeof TimeTravelJobOptionsSchema>
+export type MetricType = z.infer<typeof MetricTypeSchema>
+export type Metric = z.infer<typeof MetricSchema>
+export type MetricSortField = z.infer<typeof MetricSortFieldSchema>
+export type MetricSort = z.infer<typeof MetricSortSchema>
+export type MetricFilters = z.infer<typeof MetricFiltersSchema>
+export type InsertMetricOptions = z.infer<typeof InsertMetricOptionsSchema>
+export type GetMetricsOptions = z.infer<typeof GetMetricsOptionsSchema>
+export type GetMetricsResult = z.infer<typeof GetMetricsResultSchema>
+export type DeleteMetricsOptions = z.infer<typeof DeleteMetricsOptionsSchema>

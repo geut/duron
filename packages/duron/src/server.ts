@@ -2,17 +2,20 @@ import { Elysia } from 'elysia'
 import { jwtVerify, SignJWT } from 'jose'
 import { z } from 'zod'
 
-import type { GetJobStepsOptions, GetJobsOptions } from './adapters/adapter.js'
+import type { GetJobStepsOptions, GetJobsOptions, GetMetricsOptions } from './adapters/adapter.js'
 import {
   GetActionsResultSchema,
   GetJobStepsResultSchema,
   GetJobsResultSchema,
+  GetMetricsResultSchema,
   JobSchema,
   JobSortFieldSchema,
   JobStatusResultSchema,
   JobStatusSchema,
   JobStepSchema,
   JobStepStatusResultSchema,
+  MetricSortFieldSchema,
+  MetricTypeSchema,
   SortOrderSchema,
 } from './adapters/schemas.js'
 import type { Client } from './client.js'
@@ -173,6 +176,56 @@ export const GetActionsMetadataResponseSchema = z.array(
 export type GetJobsQueryInput = z.input<typeof GetJobsQuerySchema>
 export type GetJobStepsQueryInput = z.input<typeof GetJobStepsQuerySchema>
 
+// Metrics query schema
+export const GetMetricsQuerySchema = z
+  .object({
+    // Pagination
+    page: z.coerce.number().int().min(1).optional(),
+    pageSize: z.coerce.number().int().min(1).max(1000).optional(),
+
+    // Filters
+    fName: z.union([z.string(), z.array(z.string())]).optional(),
+    fType: z.union([MetricTypeSchema, z.array(MetricTypeSchema)]).optional(),
+    fTimestampRange: z.array(z.coerce.date()).length(2).optional(),
+    fAttributesFilter: z.record(z.string(), z.any()).optional(),
+
+    // Sort - format: "field:asc" or "field:desc"
+    sort: z.string().optional(),
+  })
+  .transform((data) => {
+    const filters: any = {}
+
+    if (data.fName) filters.name = data.fName
+    if (data.fType) filters.type = data.fType
+    if (data.fTimestampRange) filters.timestampRange = data.fTimestampRange
+    if (data.fAttributesFilter) filters.attributesFilter = data.fAttributesFilter
+
+    // Parse sort string: "field:asc" -> { field: 'field', order: 'asc' }
+    let sort: { field: z.infer<typeof MetricSortFieldSchema>; order: z.infer<typeof SortOrderSchema> } | undefined
+    if (data.sort) {
+      const [field, order] = data.sort.split(':').map((s) => s.trim())
+      if (field && order) {
+        const fieldResult = MetricSortFieldSchema.safeParse(field)
+        const orderResult = SortOrderSchema.safeParse(order.toLowerCase())
+        if (fieldResult.success && orderResult.success) {
+          sort = {
+            field: fieldResult.data,
+            order: orderResult.data,
+          }
+        }
+      }
+    }
+
+    return {
+      page: data.page,
+      pageSize: data.pageSize,
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
+      sort,
+    }
+  })
+
+export type GetMetricsQueryInput = z.input<typeof GetMetricsQuerySchema>
+
 export const ErrorResponseSchema = z.object({
   error: z.string(),
   message: z.string().optional(),
@@ -221,6 +274,14 @@ export interface CreateServerOptions<P extends string> {
    */
   prefix?: P
 
+  /**
+   * Enable metrics endpoints (/jobs/:id/metrics, /steps/:id/metrics).
+   * Only works when client is configured with LocalTelemetryAdapter.
+   * When true, enables the dashboard to show metrics buttons.
+   * @default auto-detected from client.metricsEnabled
+   */
+  metricsEnabled?: boolean
+
   login?: {
     onLogin: (body: { email: string; password: string }) => Promise<boolean>
     jwtSecret: string | Uint8Array
@@ -242,11 +303,14 @@ export interface CreateServerOptions<P extends string> {
  * @param options - Configuration options
  * @returns Elysia server instance
  */
-export function createServer<P extends string>({ client, prefix, login }: CreateServerOptions<P>) {
+export function createServer<P extends string>({ client, prefix, login, metricsEnabled }: CreateServerOptions<P>) {
   // Convert string secret to Uint8Array if needed
   const secretKey = typeof login?.jwtSecret === 'string' ? new TextEncoder().encode(login?.jwtSecret) : login?.jwtSecret
 
   const routePrefix = (prefix ?? '/api') as P
+
+  // Auto-detect metricsEnabled from client if not explicitly set
+  const isMetricsEnabled = metricsEnabled ?? client.metricsEnabled
 
   return new Elysia({
     prefix: routePrefix,
@@ -601,6 +665,78 @@ export function createServer<P extends string>({ client, prefix, login }: Create
       {
         response: {
           200: GetActionsMetadataResponseSchema,
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+        auth: true,
+      },
+    )
+    .get(
+      '/config',
+      async () => {
+        return {
+          metricsEnabled: isMetricsEnabled,
+          authEnabled: !!login,
+        }
+      },
+      {
+        response: {
+          200: z.object({
+            metricsEnabled: z.boolean(),
+            authEnabled: z.boolean(),
+          }),
+          500: ErrorResponseSchema,
+        },
+      },
+    )
+    .get(
+      '/jobs/:id/metrics',
+      async ({ params, query }) => {
+        if (!isMetricsEnabled) {
+          throw new Error('Metrics are not enabled. Use LocalTelemetryAdapter to enable metrics.')
+        }
+        const options: GetMetricsOptions = {
+          jobId: params.id,
+          page: query.page,
+          pageSize: query.pageSize,
+          filters: query.filters,
+          sort: query.sort,
+        }
+        return client.getMetrics(options)
+      },
+      {
+        params: JobIdParamsSchema,
+        query: GetMetricsQuerySchema,
+        response: {
+          200: GetMetricsResultSchema,
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+        auth: true,
+      },
+    )
+    .get(
+      '/steps/:id/metrics',
+      async ({ params, query }) => {
+        if (!isMetricsEnabled) {
+          throw new Error('Metrics are not enabled. Use LocalTelemetryAdapter to enable metrics.')
+        }
+        const options: GetMetricsOptions = {
+          stepId: params.id,
+          page: query.page,
+          pageSize: query.pageSize,
+          filters: query.filters,
+          sort: query.sort,
+        }
+        return client.getMetrics(options)
+      },
+      {
+        params: StepIdParamsSchema,
+        query: GetMetricsQuerySchema,
+        response: {
+          200: GetMetricsResultSchema,
           400: ErrorResponseSchema,
           500: ErrorResponseSchema,
           401: ErrorResponseSchema,

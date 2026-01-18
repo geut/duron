@@ -1,6 +1,7 @@
 import type { Logger } from 'pino'
 import * as z from 'zod'
 
+import type { ObserveContext } from './telemetry/adapter.js'
 import generateChecksum from './utils/checksum.js'
 
 export type RetryOptions = z.infer<typeof RetryOptionsSchema>
@@ -13,6 +14,13 @@ export interface ActionHandlerContext<TInput extends z.ZodObject, TVariables = R
   groupKey: string
   var: TVariables
   logger: Logger
+
+  /**
+   * Observability context for recording metrics and span data.
+   * Allows recording custom metrics, span attributes, and events.
+   */
+  observe: ObserveContext
+
   step: <TResult>(
     name: string,
     cb: (ctx: StepHandlerContext) => Promise<TResult>,
@@ -39,6 +47,12 @@ export interface StepHandlerContext {
    * The ID of the parent step, or null if this is a root step.
    */
   parentStepId: string | null
+
+  /**
+   * Observability context for recording metrics and span data.
+   * Allows recording custom metrics, span attributes, and events.
+   */
+  observe: ObserveContext
 
   /**
    * Create a nested child step.

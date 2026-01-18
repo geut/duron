@@ -1,9 +1,13 @@
 'use client'
 
+import { Activity } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { JsonView } from '@/components/json-view'
+import { StepMetricsPanel } from '@/components/metrics-panel'
+import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useMetrics } from '@/contexts/metrics-context'
 import { useStepStatusPolling } from '@/hooks/use-step-status-polling'
 import { useStep } from '@/lib/api'
 import { formatDate } from '@/lib/format'
@@ -18,6 +22,8 @@ interface StepDetailsContentProps {
 export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
   // Fetch the full step data including output
   const { data: step, isLoading, error } = useStep(stepId)
+  const { metricsEnabled } = useMetrics()
+  const [showMetrics, setShowMetrics] = useState(false)
 
   // Enable polling for individual step status updates
   useStepStatusPolling(stepId, jobId, true)
@@ -193,6 +199,23 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Metrics Toggle Button */}
+      {metricsEnabled && (
+        <div>
+          <Button variant="outline" size="sm" onClick={() => setShowMetrics(!showMetrics)} className="w-full">
+            <Activity className="h-4 w-4 mr-2" />
+            {showMetrics ? 'Hide Metrics' : 'Show Metrics'}
+          </Button>
+        </div>
+      )}
+
+      {/* Metrics Panel */}
+      {metricsEnabled && showMetrics && (
+        <div className="border-t pt-4">
+          <StepMetricsPanel stepId={step.id} />
         </div>
       )}
     </div>

@@ -4,12 +4,14 @@ import type { Action } from './action.js'
 import type { Adapter } from './adapters/adapter.js'
 import { ActionCancelError, ActionTimeoutError, isCancelError, StepTimeoutError, serializeError } from './errors.js'
 import { StepManager } from './step-manager.js'
+import type { Span, TelemetryAdapter } from './telemetry/adapter.js'
 import waitForAbort from './utils/wait-for-abort.js'
 
 export interface ActionJobOptions<TAction extends Action<any, any, any>> {
   job: { id: string; input: any; groupKey: string; timeoutMs: number; actionName: string }
   action: TAction
   database: Adapter
+  telemetry: TelemetryAdapter
   variables: Record<string, unknown>
   logger: Logger
 }
@@ -24,6 +26,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
   #job: { id: string; input: any; groupKey: string; timeoutMs: number; actionName: string }
   #action: TAction
   #database: Adapter
+  #telemetry: TelemetryAdapter
   #variables: Record<string, unknown>
   #logger: Logger
   #stepManager: StepManager
@@ -31,6 +34,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
   #timeoutId: NodeJS.Timeout | null = null
   #done: Promise<void>
   #resolve: (() => void) | null = null
+  #jobSpan: Span | null = null
 
   // ============================================================================
   // Constructor
@@ -45,6 +49,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
     this.#job = options.job
     this.#action = options.action
     this.#database = options.database
+    this.#telemetry = options.telemetry
     this.#variables = options.variables
     this.#logger = options.logger
     this.#abortController = new AbortController()
@@ -54,6 +59,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       jobId: options.job.id,
       actionName: options.job.actionName,
       adapter: options.database,
+      telemetry: options.telemetry,
       logger: options.logger,
       concurrencyLimit: options.action.concurrency,
     })
@@ -78,12 +84,26 @@ export class ActionJob<TAction extends Action<any, any, any>> {
    * @throws Error if the job fails or output validation fails
    */
   async execute() {
+    // Start job telemetry span
+    this.#jobSpan = await this.#telemetry.startJobSpan({
+      jobId: this.#job.id,
+      actionName: this.#action.name,
+      groupKey: this.#job.groupKey,
+      input: this.#job.input,
+    })
+
+    // Set the job span on the step manager
+    this.#stepManager.setJobSpan(this.#jobSpan)
+
     try {
       // Create a child logger for this job
       const jobLogger = this.#logger.child({
         jobId: this.#job.id,
         actionName: this.#action.name,
       })
+
+      // Create observe context for the action handler
+      const observeContext = this.#telemetry.createObserveContext(this.#job.id, null, this.#jobSpan)
 
       // Create action context with step manager
       const ctx = this.#stepManager.createActionContext(
@@ -92,6 +112,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
         this.#variables as any,
         this.#abortController.signal,
         jobLogger,
+        observeContext,
       )
 
       this.#timeoutId = setTimeout(() => {
@@ -138,6 +159,9 @@ export class ActionJob<TAction extends Action<any, any, any>> {
         '[ActionJob] Action finished executing',
       )
 
+      // End job span successfully
+      await this.#telemetry.endJobSpan(this.#jobSpan, { status: 'ok' })
+
       return result
     } catch (error) {
       if (
@@ -146,6 +170,11 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       ) {
         this.#logger.warn({ jobId: this.#job.id, actionName: this.#action.name }, '[ActionJob] Job cancelled')
         await this.#database.cancelJob({ jobId: this.#job.id })
+
+        // End job span as cancelled
+        if (this.#jobSpan) {
+          await this.#telemetry.endJobSpan(this.#jobSpan, { status: 'cancelled' })
+        }
         return
       }
 
@@ -158,6 +187,12 @@ export class ActionJob<TAction extends Action<any, any, any>> {
 
       this.#logger.error({ jobId: this.#job.id, actionName: this.#action.name }, message)
       await this.#database.failJob({ jobId: this.#job.id, error: serializeError(error) })
+
+      // End job span with error
+      if (this.#jobSpan) {
+        await this.#telemetry.endJobSpan(this.#jobSpan, { status: 'error', error })
+      }
+
       throw error
     } finally {
       this.#clear()

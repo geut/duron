@@ -4,6 +4,7 @@ import { ChevronRight, Clock, GitBranch, History, List, Search } from 'lucide-re
 import { useCallback, useMemo, useState } from 'react'
 
 import { Timeline } from '@/components/timeline'
+import { calculateDurationSeconds, formatDurationSeconds } from '@/lib/duration'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -204,6 +205,7 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                     const isParallel = (step as any).parallel === true
                     // Calculate left padding based on depth (16px per level)
                     const paddingLeft = depth * 16
+                    const duration = calculateDurationSeconds(step.startedAt, step.finishedAt)
 
                     return (
                       <AccordionItem
@@ -230,6 +232,7 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                               <span className="font-medium truncate w-0 grow">{step.name}</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs font-mono text-muted-foreground">{formatDurationSeconds(duration)}</span>
                               {canTimeTravel && (
                                 <Tooltip>
                                   <TooltipTrigger asChild={true}>

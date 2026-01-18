@@ -1,13 +1,13 @@
 'use client'
 
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
 
 type StepViewType = 'list' | 'timeline'
 
 interface DesktopLayout {
-  /** Horizontal panel sizes: [jobs, details] as percentages */
+  /** Horizontal panel sizes: [details, steps] as percentages (bottom row) */
   horizontalSizes: number[]
-  /** Vertical panel sizes: [top, bottom] as percentages */
+  /** Vertical panel sizes: [jobs, bottom] as percentages */
   verticalSizes: number[]
 }
 
@@ -38,8 +38,8 @@ const STORAGE_KEY = 'duron-layout-config'
 const DEFAULT_CONFIG: LayoutConfig = {
   stepViewType: 'list',
   desktop: {
-    horizontalSizes: [50, 50],
-    verticalSizes: [50, 50],
+    horizontalSizes: [30, 70], // [details, steps] - details takes 30% by default
+    verticalSizes: [50, 50], // [jobs, bottom]
   },
   mobile: {
     verticalSizes: [33, 33, 34],

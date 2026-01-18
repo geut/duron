@@ -43,17 +43,18 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
     setSelectedJobId(jobId)
   }, [])
 
-  // Desktop layout config
+  // Desktop layout config (horizontal: [details, steps] in bottom row)
   const desktopHorizontalLayout = useMemo(() => {
-    const jobs = config.desktop?.horizontalSizes?.[0] ?? 50
-    const details = config.desktop?.horizontalSizes?.[1] ?? 50
-    return { jobs, details }
+    const details = config.desktop?.horizontalSizes?.[0] ?? 30
+    const steps = config.desktop?.horizontalSizes?.[1] ?? 70
+    return { details, steps }
   }, [config.desktop?.horizontalSizes])
 
+  // Desktop layout config (vertical: [jobs, bottom] where bottom has details|steps)
   const desktopVerticalLayout = useMemo(() => {
-    const top = config.desktop?.verticalSizes?.[0] ?? 50
+    const jobs = config.desktop?.verticalSizes?.[0] ?? 50
     const bottom = config.desktop?.verticalSizes?.[1] ?? 50
-    return { top, bottom }
+    return { jobs, bottom }
   }, [config.desktop?.verticalSizes])
 
   // Mobile layout config
@@ -64,28 +65,28 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
     return { jobs, details, steps }
   }, [config.mobile?.verticalSizes])
 
-  // Handle desktop horizontal panel resize (jobs/details)
+  // Handle desktop horizontal panel resize (details/steps in bottom row)
   const handleDesktopHorizontalLayoutChange = useCallback(
     (layout: { [panelId: string]: number }) => {
-      if (!('jobs-panel' in layout) || !('details-panel' in layout)) {
+      if (!('details-panel' in layout) || !('steps-panel' in layout)) {
         return
       }
-      const jobs = layout['jobs-panel'] ?? 50
-      const details = layout['details-panel'] ?? 50
-      setDesktopHorizontalSizes([jobs, details])
+      const details = layout['details-panel'] ?? 30
+      const steps = layout['steps-panel'] ?? 70
+      setDesktopHorizontalSizes([details, steps])
     },
     [setDesktopHorizontalSizes],
   )
 
-  // Handle desktop vertical panel resize (top/bottom)
+  // Handle desktop vertical panel resize (jobs/bottom)
   const handleDesktopVerticalLayoutChange = useCallback(
     (layout: { [panelId: string]: number }) => {
-      if (!('top-panel' in layout) || !('bottom-panel' in layout)) {
+      if (!('jobs-panel' in layout) || !('bottom-panel' in layout)) {
         return
       }
-      const top = layout['top-panel'] ?? 50
+      const jobs = layout['jobs-panel'] ?? 50
       const bottom = layout['bottom-panel'] ?? 50
-      setDesktopVerticalSizes([top, bottom])
+      setDesktopVerticalSizes([jobs, bottom])
     },
     [setDesktopVerticalSizes],
   )
@@ -223,54 +224,65 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
       </header>
       <div className="flex-1 overflow-hidden">
         {/* Desktop Layout with Resizable Panels */}
+        {/* Layout: [Jobs Table (top)] / [Job Details | Steps (bottom)] */}
         {!isMobile && (
           <ResizablePanelGroup
             direction="vertical"
             className="h-full"
             defaultLayout={{
-              'top-panel': desktopVerticalLayout.top,
+              'jobs-panel': desktopVerticalLayout.jobs,
               'bottom-panel': desktopVerticalLayout.bottom,
             }}
             onLayoutChanged={handleDesktopVerticalLayoutChange}
           >
-            {/* Top Row: Jobs and Job Details */}
-            <ResizablePanel id="top-panel" defaultSize={selectedJobId ? desktopVerticalLayout.top : 100} minSize={20}>
-              <ResizablePanelGroup
-                direction="horizontal"
-                className="h-full"
-                defaultLayout={{
-                  'jobs-panel': desktopHorizontalLayout.jobs,
-                  'details-panel': desktopHorizontalLayout.details,
-                }}
-                onLayoutChanged={handleDesktopHorizontalLayoutChange}
-              >
-                {/* Jobs Section */}
-                <ResizablePanel id="jobs-panel" defaultSize={desktopHorizontalLayout.jobs} minSize={20}>
-                  <div className="h-full border-r">
-                    <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
-                  </div>
-                </ResizablePanel>
-
-                {/* Job Details Section */}
-                {jobDetailsVisible && (
-                  <ResizablePanel id="details-panel" defaultSize={desktopHorizontalLayout.details} minSize={20}>
-                    <JobDetails jobId={selectedJobId} onClose={() => setJobDetailsVisible(false)} />
-                  </ResizablePanel>
-                )}
-              </ResizablePanelGroup>
+            {/* Top Row: Jobs Table (full width) */}
+            <ResizablePanel id="jobs-panel" defaultSize={selectedJobId ? desktopVerticalLayout.jobs : 100} minSize={20}>
+              <div className="h-full">
+                <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
+              </div>
             </ResizablePanel>
 
-            {/* Bottom Row: Steps (full width) */}
+            {/* Bottom Row: Job Details | Steps */}
             {selectedJobId && (
               <ResizablePanel id="bottom-panel" defaultSize={desktopVerticalLayout.bottom} minSize={15}>
-                <div className="h-full flex flex-col overflow-hidden border-t">
-                  <div className="px-4 min-h-12 border-b shrink-0 flex items-center justify-between">
-                    <h2 className="font-medium">Steps</h2>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <StepList jobId={selectedJobId} selectedStepId={selectedStepId} onStepSelect={setSelectedStepId} />
-                  </div>
-                </div>
+                <ResizablePanelGroup
+                  direction="horizontal"
+                  className="h-full border-t"
+                  defaultLayout={{
+                    'details-panel': desktopHorizontalLayout.details,
+                    'steps-panel': desktopHorizontalLayout.steps,
+                  }}
+                  onLayoutChanged={handleDesktopHorizontalLayoutChange}
+                >
+                  {/* Job Details Section */}
+                  {jobDetailsVisible && (
+                    <ResizablePanel id="details-panel" defaultSize={desktopHorizontalLayout.details} minSize={15}>
+                      <div className="h-full border-r">
+                        <JobDetails jobId={selectedJobId} onClose={() => setJobDetailsVisible(false)} />
+                      </div>
+                    </ResizablePanel>
+                  )}
+
+                  {/* Steps Section */}
+                  <ResizablePanel
+                    id="steps-panel"
+                    defaultSize={jobDetailsVisible ? desktopHorizontalLayout.steps : 100}
+                    minSize={20}
+                  >
+                    <div className="h-full flex flex-col overflow-hidden">
+                      <div className="px-4 min-h-12 border-b shrink-0 flex items-center justify-between">
+                        <h2 className="font-medium">Steps</h2>
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <StepList
+                          jobId={selectedJobId}
+                          selectedStepId={selectedStepId}
+                          onStepSelect={setSelectedStepId}
+                        />
+                      </div>
+                    </div>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
               </ResizablePanel>
             )}
           </ResizablePanelGroup>

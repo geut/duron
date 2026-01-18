@@ -169,6 +169,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         status: JOB_STATUS_COMPLETED,
         output,
         finished_at: sql`now()`,
+        updated_at: sql`now()`,
       })
       .where(
         and(
@@ -195,6 +196,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         status: JOB_STATUS_FAILED,
         error,
         finished_at: sql`now()`,
+        updated_at: sql`now()`,
       })
       .where(
         and(
@@ -219,6 +221,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .set({
         status: JOB_STATUS_CANCELLED,
         finished_at: sql`now()`,
+        updated_at: sql`now()`,
       })
       .where(
         and(
@@ -462,7 +465,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           expires_at = now() + (timeout_ms || ' milliseconds')::interval,
           retries_count = 0,
           delayed_ms = NULL,
-          history_failed_attempts = '{}'::jsonb
+          history_failed_attempts = '{}'::jsonb,
+          updated_at = now()
         WHERE id IN (SELECT id FROM ancestors)
         RETURNING id
       ),
@@ -478,7 +482,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           expires_at = now() + (timeout_ms || ' milliseconds')::interval,
           retries_count = 0,
           delayed_ms = NULL,
-          history_failed_attempts = '{}'::jsonb
+          history_failed_attempts = '{}'::jsonb,
+          updated_at = now()
         WHERE id = (SELECT id FROM target_step)
         RETURNING id
       ),
@@ -492,7 +497,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           started_at = NULL,
           finished_at = NULL,
           client_id = NULL,
-          expires_at = NULL
+          expires_at = NULL,
+          updated_at = now()
         WHERE id = ${jobId}
           AND EXISTS (SELECT 1 FROM target_step)
         RETURNING id
@@ -637,7 +643,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       SET status = ${JOB_STATUS_ACTIVE},
           started_at = now(),
           expires_at = now() + (timeout_ms || ' milliseconds')::interval,
-          client_id = ${this.id}
+          client_id = ${this.id},
+          updated_at = now()
       FROM verify_concurrency vc
       WHERE j.id = vc.id
         AND vc.current_active < vc.concurrency_limit  -- Final concurrency check using job's concurrency limit
@@ -722,7 +729,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
               expires_at = NULL,
               finished_at = NULL,
               output = NULL,
-              error = NULL
+              error = NULL,
+              updated_at = now()
           WHERE EXISTS (SELECT 1 FROM locked_jobs lj WHERE lj.id = j.id)
           RETURNING id, checksum
         ),
@@ -873,6 +881,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         status: STEP_STATUS_COMPLETED,
         output,
         finished_at: sql`now()`,
+        updated_at: sql`now()`,
       })
       .from(this.tables.jobsTable)
       .where(
@@ -901,6 +910,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         status: STEP_STATUS_FAILED,
         error,
         finished_at: sql`now()`,
+        updated_at: sql`now()`,
       })
       .from(this.tables.jobsTable)
       .where(
@@ -939,6 +949,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
             'delayedMs', ${delayMs}::integer
           )
         )`,
+        updated_at: sql`now()`,
       })
       .from(jobsTable)
       .where(
@@ -965,6 +976,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .set({
         status: STEP_STATUS_CANCELLED,
         finished_at: sql`now()`,
+        updated_at: sql`now()`,
       })
       .from(this.tables.jobsTable)
       .where(

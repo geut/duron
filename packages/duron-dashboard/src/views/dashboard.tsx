@@ -247,7 +247,7 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
               <ResizablePanel id="bottom-panel" defaultSize={desktopVerticalLayout.bottom} minSize={15}>
                 <ResizablePanelGroup
                   direction="horizontal"
-                  className="h-full border-t"
+                  className="h-full border-t-2"
                   defaultLayout={{
                     'details-panel': desktopHorizontalLayout.details,
                     'steps-panel': desktopHorizontalLayout.steps,
@@ -257,7 +257,7 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
                   {/* Job Details Section */}
                   {jobDetailsVisible && (
                     <ResizablePanel id="details-panel" defaultSize={desktopHorizontalLayout.details} minSize={15}>
-                      <div className="h-full border-r">
+                      <div className="h-full border-r-2">
                         <JobDetails jobId={selectedJobId} onClose={() => setJobDetailsVisible(false)} />
                       </div>
                     </ResizablePanel>

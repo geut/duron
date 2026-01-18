@@ -87,7 +87,7 @@ export function DataTable<TData>({
         </div>
 
         {/* Fixed pagination footer */}
-        <div className="shrink-0 border-t bg-background pt-2">
+        <div className="shrink-0 border-t-0 bg-background pt-2 pb-2">
           <DataTablePagination table={table} />
           {actionBar && table.getFilteredSelectedRowModel().rows.length > 0 && actionBar}
         </div>

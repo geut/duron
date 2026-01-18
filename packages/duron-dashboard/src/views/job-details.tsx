@@ -173,105 +173,106 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
           <div className="space-y-2 text-sm">
-          <div>
-            <span className="font-medium">ID:</span> <span className="font-mono text-xs break-all">{job.id}</span>
-          </div>
-          <div>
-            <span className="font-medium">Action:</span> {job.actionName}
-          </div>
-          <div>
-            <span className="font-medium">Group Key:</span> {job.groupKey}
-          </div>
-          {job.clientId && (
             <div>
-              <span className="font-medium">Client ID:</span> <span className="font-mono text-xs">{job.clientId}</span>
+              <span className="font-medium">ID:</span> <span className="font-mono text-xs break-all">{job.id}</span>
             </div>
-          )}
-          <div>
-            <span className="font-medium">Status:</span> <BadgeStatus status={job.status} />
-          </div>
-          <div>
-            <span className="font-medium">Created:</span> {formatDate(job.createdAt)}
-          </div>
-          {job.startedAt && (
             <div>
-              <span className="font-medium">Started:</span> {formatDate(job.startedAt)}
+              <span className="font-medium">Action:</span> {job.actionName}
             </div>
-          )}
-          {job.finishedAt && (
             <div>
-              <span className="font-medium">Completed:</span> {formatDate(job.finishedAt)}
+              <span className="font-medium">Group Key:</span> {job.groupKey}
             </div>
-          )}
-          {job.startedAt && (
-            <div>
-              <span className="font-medium">Duration:</span> {jobDuration}
-            </div>
-          )}
-          {job.concurrencyLimit && (
-            <div>
-              <span className="font-medium">Concurrency Limit:</span> {job.concurrencyLimit}
-            </div>
-          )}
-          {job.timeoutMs && (
-            <div>
-              <span className="font-medium">Timeout:</span> {job.timeoutMs}ms
-            </div>
-          )}
-          {job.expiresAt && (
-            <div>
-              <span className="font-medium">Expires:</span>{' '}
-              <span
-                className={
-                  isExpiring({
-                    isStep: false,
-                    expiresAt: new Date(job.expiresAt),
-                    status: job.status,
-                    error: job.error,
-                  })
-                    ? 'text-destructive'
-                    : ''
-                }
-              >
-                {formatDate(job.expiresAt)}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Job Input/Output */}
-        <div className="space-y-4">
-          {job.input && (
-            <div>
-              <div className="font-medium mb-1">Input</div>
-              <div className="p-3 border rounded">
-                <JsonView value={job.input} />
+            {job.clientId && (
+              <div>
+                <span className="font-medium">Client ID:</span>{' '}
+                <span className="font-mono text-xs">{job.clientId}</span>
               </div>
-            </div>
-          )}
-
-          {!job.input && <div className="text-sm text-muted-foreground italic">No input available</div>}
-
-          {job.error && (
+            )}
             <div>
-              <div className="font-medium text-destructive mb-1">Error</div>
-              <div className="border rounded p-3">
-                <JsonView value={job.error} />
-              </div>
+              <span className="font-medium">Status:</span> <BadgeStatus status={job.status} />
             </div>
-          )}
-
-          {job.output && (
             <div>
-              <div className="font-medium mb-1">Output</div>
-              <div className="p-3 border rounded">
-                <JsonView value={job.output} />
-              </div>
+              <span className="font-medium">Created:</span> {formatDate(job.createdAt)}
             </div>
-          )}
+            {job.startedAt && (
+              <div>
+                <span className="font-medium">Started:</span> {formatDate(job.startedAt)}
+              </div>
+            )}
+            {job.finishedAt && (
+              <div>
+                <span className="font-medium">Completed:</span> {formatDate(job.finishedAt)}
+              </div>
+            )}
+            {job.startedAt && (
+              <div>
+                <span className="font-medium">Duration:</span> {jobDuration}
+              </div>
+            )}
+            {job.concurrencyLimit && (
+              <div>
+                <span className="font-medium">Concurrency Limit:</span> {job.concurrencyLimit}
+              </div>
+            )}
+            {job.timeoutMs && (
+              <div>
+                <span className="font-medium">Timeout:</span> {job.timeoutMs}ms
+              </div>
+            )}
+            {job.expiresAt && (
+              <div>
+                <span className="font-medium">Expires:</span>{' '}
+                <span
+                  className={
+                    isExpiring({
+                      isStep: false,
+                      expiresAt: new Date(job.expiresAt),
+                      status: job.status,
+                      error: job.error,
+                    })
+                      ? 'text-destructive'
+                      : ''
+                  }
+                >
+                  {formatDate(job.expiresAt)}
+                </span>
+              </div>
+            )}
+          </div>
 
-          {!job.output && <div className="text-sm text-muted-foreground italic">No output available</div>}
-        </div>
+          {/* Job Input/Output */}
+          <div className="space-y-4">
+            {job.input && (
+              <div>
+                <div className="font-medium mb-1">Input</div>
+                <div className="p-3 border rounded">
+                  <JsonView value={job.input} />
+                </div>
+              </div>
+            )}
+
+            {!job.input && <div className="text-sm text-muted-foreground italic">No input available</div>}
+
+            {job.error && (
+              <div>
+                <div className="font-medium text-destructive mb-1">Error</div>
+                <div className="border rounded p-3">
+                  <JsonView value={job.error} />
+                </div>
+              </div>
+            )}
+
+            {job.output && (
+              <div>
+                <div className="font-medium mb-1">Output</div>
+                <div className="p-3 border rounded">
+                  <JsonView value={job.output} />
+                </div>
+              </div>
+            )}
+
+            {!job.output && <div className="text-sm text-muted-foreground italic">No output available</div>}
+          </div>
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>

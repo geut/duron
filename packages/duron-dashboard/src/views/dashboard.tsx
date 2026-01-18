@@ -1,6 +1,6 @@
 'use client'
 
-import { LogOut, MoreVertical, Plus, Trash2, X } from 'lucide-react'
+import { LogOut, MoreVertical, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { CreateJobDialog } from '@/components/create-job-dialog'
@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { useAuth } from '@/contexts/auth-context'
 import { useIsMobile } from '@/hooks/use-is-mobile'
 import { useJobParams } from '@/hooks/use-job-params'
@@ -153,72 +154,100 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
           </DropdownMenu>
         </div>
       </header>
-      <div className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Desktop Layout: Top row (Jobs | Details), Bottom row (Steps) */}
+      <div className="flex-1 overflow-hidden">
+        {/* Desktop Layout with Resizable Panels */}
         {!isMobile && (
-          <div className="flex-1 flex flex-col h-full min-w-0">
+          <ResizablePanelGroup direction="vertical" className="h-full">
             {/* Top Row: Jobs and Job Details */}
-            <div
-              className={`flex flex-row border-b transition-all duration-200 ${selectedJobId ? 'h-1/2' : 'flex-1'} min-w-0`}
-            >
-              {/* Jobs Section */}
-              <div
-                className={`${
-                  jobDetailsVisible ? 'w-1/2' : 'w-full'
-                } border-r flex flex-col overflow-hidden transition-all duration-200 min-w-0`}
-              >
-                <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
-              </div>
+            <ResizablePanel defaultSize={selectedJobId ? 50 : 100} minSize={20}>
+              <ResizablePanelGroup direction="horizontal" className="h-full">
+                {/* Jobs Section */}
+                <ResizablePanel defaultSize={jobDetailsVisible ? 50 : 100} minSize={20}>
+                  <div className="h-full flex flex-col overflow-hidden">
+                    <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
+                  </div>
+                </ResizablePanel>
 
-              {/* Job Details Section */}
-              {jobDetailsVisible && (
-                <div className="w-1/2 flex flex-col overflow-hidden transition-all duration-200 min-w-0">
-                  <JobDetails jobId={selectedJobId} onClose={() => setJobDetailsVisible(false)} />
-                </div>
-              )}
-            </div>
+                {/* Job Details Section */}
+                {jobDetailsVisible && (
+                  <>
+                    <ResizableHandle withHandle={true} />
+                    <ResizablePanel defaultSize={50} minSize={20}>
+                      <div className="h-full flex flex-col overflow-hidden">
+                        <JobDetails jobId={selectedJobId} onClose={() => setJobDetailsVisible(false)} />
+                      </div>
+                    </ResizablePanel>
+                  </>
+                )}
+              </ResizablePanelGroup>
+            </ResizablePanel>
 
             {/* Bottom Row: Steps (full width) */}
             {selectedJobId && (
-              <div className="h-1/2 flex flex-col overflow-hidden min-w-0">
-                <div className="px-4 min-h-12 border-b shrink-0 flex items-center justify-between">
-                  <h2 className="font-medium">Steps</h2>
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <StepList jobId={selectedJobId} selectedStepId={selectedStepId} onStepSelect={setSelectedStepId} />
-                </div>
-              </div>
+              <>
+                <ResizableHandle withHandle={true} />
+                <ResizablePanel defaultSize={50} minSize={15}>
+                  <div className="h-full flex flex-col overflow-hidden">
+                    <div className="px-4 min-h-12 border-b shrink-0 flex items-center justify-between">
+                      <h2 className="font-medium">Steps</h2>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <StepList
+                        jobId={selectedJobId}
+                        selectedStepId={selectedStepId}
+                        onStepSelect={setSelectedStepId}
+                      />
+                    </div>
+                  </div>
+                </ResizablePanel>
+              </>
             )}
-          </div>
+          </ResizablePanelGroup>
         )}
 
-        {/* Mobile: Vertical Layout - Jobs, Job Details, and Steps */}
+        {/* Mobile: Vertical Resizable Layout */}
         {isMobile && (
-          <div className="flex-1 flex flex-col h-full">
+          <ResizablePanelGroup direction="vertical" className="h-full">
             {/* Jobs Section */}
-            <div className={`${selectedJobId ? 'h-1/3' : 'h-full'} border-b flex flex-col overflow-hidden`}>
-              <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
-            </div>
+            <ResizablePanel defaultSize={selectedJobId ? 33 : 100} minSize={15}>
+              <div className="h-full flex flex-col overflow-hidden border-b">
+                <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
+              </div>
+            </ResizablePanel>
 
             {/* Job Details Section */}
             {selectedJobId && (
-              <div className="h-1/3 border-b flex flex-col overflow-hidden">
-                <JobDetails jobId={selectedJobId} />
-              </div>
+              <>
+                <ResizableHandle />
+                <ResizablePanel defaultSize={33} minSize={15}>
+                  <div className="h-full flex flex-col overflow-hidden border-b">
+                    <JobDetails jobId={selectedJobId} />
+                  </div>
+                </ResizablePanel>
+              </>
             )}
 
             {/* Steps Section */}
             {selectedJobId && (
-              <div className="h-1/3 flex flex-col overflow-hidden">
-                <div className="px-4 min-h-12 border-b shrink-0 flex items-center">
-                  <h2 className="font-medium">Steps</h2>
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <StepList jobId={selectedJobId} selectedStepId={selectedStepId} onStepSelect={setSelectedStepId} />
-                </div>
-              </div>
+              <>
+                <ResizableHandle />
+                <ResizablePanel defaultSize={34} minSize={15}>
+                  <div className="h-full flex flex-col overflow-hidden">
+                    <div className="px-4 min-h-12 border-b shrink-0 flex items-center">
+                      <h2 className="font-medium">Steps</h2>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <StepList
+                        jobId={selectedJobId}
+                        selectedStepId={selectedStepId}
+                        onStepSelect={setSelectedStepId}
+                      />
+                    </div>
+                  </div>
+                </ResizablePanel>
+              </>
             )}
-          </div>
+          </ResizablePanelGroup>
         )}
       </div>
       <CreateJobDialog

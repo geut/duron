@@ -89,19 +89,6 @@ function loadConfig(): LayoutConfig {
     // Ignore parsing errors
   }
 
-  // Migrate from old step view type storage
-  try {
-    const oldStepViewType = localStorage.getItem('duron-step-view-type')
-    if (oldStepViewType === 'timeline' || oldStepViewType === 'list') {
-      return {
-        ...DEFAULT_CONFIG,
-        stepViewType: oldStepViewType,
-      }
-    }
-  } catch {
-    // Ignore errors
-  }
-
   return DEFAULT_CONFIG
 }
 
@@ -118,12 +105,8 @@ function saveConfig(config: LayoutConfig): void {
 }
 
 export function LayoutProvider({ children }: { children: ReactNode }) {
-  const [config, setConfig] = useState<LayoutConfig>(DEFAULT_CONFIG)
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    setConfig(loadConfig())
-  }, [])
+  // Load config synchronously on first render to avoid flash of default layout
+  const [config, setConfig] = useState<LayoutConfig>(() => loadConfig())
 
   const setStepViewType = useCallback((type: StepViewType) => {
     setConfig((prev) => {

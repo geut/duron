@@ -67,6 +67,9 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
   // Handle desktop horizontal panel resize (jobs/details)
   const handleDesktopHorizontalLayoutChange = useCallback(
     (layout: { [panelId: string]: number }) => {
+      if (!('jobs-panel' in layout) || !('details-panel' in layout)) {
+        return
+      }
       const jobs = layout['jobs-panel'] ?? 50
       const details = layout['details-panel'] ?? 50
       setDesktopHorizontalSizes([jobs, details])
@@ -77,6 +80,9 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
   // Handle desktop vertical panel resize (top/bottom)
   const handleDesktopVerticalLayoutChange = useCallback(
     (layout: { [panelId: string]: number }) => {
+      if (!('top-panel' in layout) || !('bottom-panel' in layout)) {
+        return
+      }
       const top = layout['top-panel'] ?? 50
       const bottom = layout['bottom-panel'] ?? 50
       setDesktopVerticalSizes([top, bottom])
@@ -87,6 +93,13 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
   // Handle mobile vertical panel resize (jobs/details/steps)
   const handleMobileVerticalLayoutChange = useCallback(
     (layout: { [panelId: string]: number }) => {
+      if (
+        !('mobile-jobs-panel' in layout) ||
+        !('mobile-details-panel' in layout) ||
+        !('mobile-steps-panel' in layout)
+      ) {
+        return
+      }
       const jobs = layout['mobile-jobs-panel'] ?? 33
       const details = layout['mobile-details-panel'] ?? 33
       const steps = layout['mobile-steps-panel'] ?? 34

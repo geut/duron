@@ -447,3 +447,5 @@ if (!apiKey) {
 4. Follow existing code patterns
 5. Use TypeScript strict mode
 6. Document public APIs with JSDoc
+
+Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.

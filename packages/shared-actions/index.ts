@@ -408,7 +408,7 @@ export const processOrder = defineAction<typeof variables>()({
         const authorization = await paymentStep('authorize-payment', async ({ step: authStep }) => {
           // Grandchild step: Fraud check (3 levels deep!)
           const fraudCheck = await authStep('fraud-check', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 150))
+            await new Promise((resolve) => setTimeout(resolve, 5000))
             const isSafe = totalAmount < 10000 // Mock: flag large orders
             addTimeline('fraud-check', isSafe ? 'success' : 'failed', `Amount: $${totalAmount.toFixed(2)}`)
             return { isSafe, riskScore: isSafe ? 0.1 : 0.9 }

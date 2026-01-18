@@ -125,14 +125,108 @@ const processOrder = defineAction()({
 The step handler receives a context object with:
 
 - **`signal`** - AbortSignal for cancellation support
+- **`stepId`** - Unique identifier for the current step
+- **`parentStepId`** - ID of the parent step (null for root steps)
+- **`step`** - Function to create nested child steps
+- **`observe`** - Observability context for metrics and tracing (see [Telemetry](/docs/telemetry))
 
 ```ts
-await ctx.step('fetchData', async ({ signal }) => {
+await ctx.step('fetchData', async ({ signal, stepId, parentStepId }) => {
+  console.log(`Executing step ${stepId}, parent: ${parentStepId}`)
+
   // Use signal for cancellation
   const response = await fetch(url, { signal })
   return response.json()
 })
 ```
+
+### Nested Steps
+
+Steps can create child steps using the `step` function available in the step handler context. This is useful for breaking down complex operations into smaller, trackable units.
+
+```ts
+const processOrder = defineAction()({
+  name: 'processOrder',
+  input: z.object({ orderId: z.string() }),
+  handler: async (ctx) => {
+    const result = await ctx.step('process', async ({ step, stepId }) => {
+      console.log('Processing step:', stepId)
+
+      // Create child steps - they inherit the parent's abort signal
+      const validation = await step('validate', async ({ parentStepId }) => {
+        // parentStepId links back to the 'process' step
+        console.log('Parent step:', parentStepId)
+        return { valid: true }
+      })
+
+      // Child steps can also be nested further
+      const payment = await step('charge', async ({ step: nestedStep }) => {
+        const auth = await nestedStep('authorize', async () => {
+          return { authCode: '123' }
+        })
+        return { charged: true, authCode: auth.authCode }
+      })
+
+      return { success: validation.valid && payment.charged }
+    })
+
+    return result
+  },
+})
+```
+
+#### Abort Signal Propagation
+
+Child steps automatically inherit the abort signal chain from their parent. When a parent step is cancelled or times out, all child steps receive the abort signal.
+
+```ts
+await ctx.step('parent', async ({ step, signal }) => {
+  // If this step times out, all children are also aborted
+  const child1 = await step('child1', async ({ signal: childSignal }) => {
+    // childSignal is linked to the parent's signal
+    return await fetch(url, { signal: childSignal })
+  })
+
+  return child1
+})
+```
+
+#### Important: Await All Child Steps
+
+All child steps **must** be awaited before the parent step returns. If a parent step completes with unawaited children, Duron will:
+
+1. Abort all pending child steps
+2. Wait for them to settle
+3. Throw an `UnhandledChildStepsError`
+
+```ts
+// ❌ Bad: Unawaited child steps
+await ctx.step('parent', async ({ step }) => {
+  step('child1', async () => { /* ... */ }) // Not awaited!
+  step('child2', async () => { /* ... */ }) // Not awaited!
+  return { done: true } // Throws UnhandledChildStepsError
+})
+
+// ✅ Good: All children awaited
+await ctx.step('parent', async ({ step }) => {
+  await step('child1', async () => { /* ... */ })
+  await step('child2', async () => { /* ... */ })
+  return { done: true }
+})
+
+// ✅ Good: Parallel execution with Promise.all
+await ctx.step('parent', async ({ step }) => {
+  const [result1, result2] = await Promise.all([
+    step('child1', async () => { /* ... */ }),
+    step('child2', async () => { /* ... */ }),
+  ])
+  return { result1, result2 }
+})
+```
+
+#### Step Hierarchy in the Dashboard
+
+Nested steps are displayed hierarchically in the Duron Dashboard. Each step shows its parent relationship, making it easy to understand the execution flow of complex workflows.
 
 ### Step Options
 
@@ -196,16 +290,21 @@ Each step has the following properties:
 
 - **`id`** - Unique identifier (UUID)
 - **`jobId`** - ID of the parent job
+- **`parentStepId`** - ID of the parent step (null for root steps)
 - **`name`** - Name of the step
 - **`status`** - Current status
-- **`input`** - Input data (serialized)
 - **`output`** - Output data (if completed)
 - **`error`** - Error information (if failed)
-- **`createdAt`** - Timestamp when step was created
+- **`timeoutMs`** - Timeout in milliseconds
+- **`expiresAt`** - Expiration timestamp
+- **`retriesLimit`** - Maximum retry attempts
+- **`retriesCount`** - Current retry count
+- **`delayedMs`** - Delay before next retry (if retrying)
+- **`historyFailedAttempts`** - Record of previous failed attempts
 - **`startedAt`** - Timestamp when step started
 - **`finishedAt`** - Timestamp when step finished
+- **`createdAt`** - Timestamp when step was created
 - **`updatedAt`** - Timestamp when step was last updated
-- **`clientId`** - ID of the Duron instance that owns the step
 
 ### Querying Steps
 

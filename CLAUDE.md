@@ -20,6 +20,7 @@ Duron is a modern, type-safe background job processing system built with TypeScr
 - **Database Adapters** - PostgreSQL (production) and PGLite (development/testing)
 - **REST API Server** - Built-in Elysia-based API with advanced filtering and pagination
 - **Dashboard UI** - Beautiful React dashboard for real-time job monitoring
+- **Telemetry & Observability** - Built-in support for metrics, tracing, and custom observability with pluggable adapters
 
 ## Runtime Environment
 
@@ -86,6 +87,10 @@ The main library providing:
 - **Adapters**:
   - `duron/adapters/postgres` - PostgreSQL adapter for production
   - `duron/adapters/pglite` - PGLite adapter for development/testing
+- **Telemetry** (`duron/telemetry`):
+  - `localTelemetryAdapter()` - Store metrics in the database
+  - `openTelemetryAdapter()` - Export to OpenTelemetry backends
+  - `noopTelemetryAdapter()` - Disable telemetry (default)
 
 **Key Dependencies:**
 - `zod` - Schema validation
@@ -94,6 +99,7 @@ The main library providing:
 - `pino` - Logging
 - `fastq` - Queue implementation
 - `jose` - JWT handling
+- `@opentelemetry/api` - OpenTelemetry integration (optional)
 
 ### `duron-dashboard` (React Dashboard)
 
@@ -272,6 +278,73 @@ const jobId = await client.runAction('send-email', {
 const job = await client.waitForJob(jobId)
 ```
 
+### Telemetry & Observability
+
+Duron provides built-in telemetry support with pluggable adapters:
+
+```typescript
+import { duron, localTelemetryAdapter } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+
+const client = duron({
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL,
+  }),
+  // Enable local telemetry - stores metrics in the database
+  telemetry: localTelemetryAdapter(),
+  actions: { sendEmail },
+})
+```
+
+**Available Telemetry Adapters:**
+
+- `localTelemetryAdapter()` - Stores metrics in the Duron database (great for development and self-hosted)
+- `openTelemetryAdapter({ serviceName, exporterUrl })` - Exports to OpenTelemetry-compatible backends (Jaeger, OTLP, etc.)
+- `noopTelemetryAdapter()` - No-op adapter, disables telemetry (default)
+
+**Recording Custom Metrics:**
+
+The `observe` context is available in action and step handlers for recording custom metrics:
+
+```typescript
+const processAI = defineAction()({
+  name: 'process-ai',
+  handler: async (ctx) => {
+    const startTime = Date.now()
+
+    // Record job-level metrics
+    ctx.observe.recordMetric('ai.request.start', 1)
+    ctx.observe.addSpanAttribute('model', 'gpt-4')
+    ctx.observe.addSpanEvent('processing.started')
+
+    const result = await ctx.step('call-api', async ({ observe }) => {
+      const response = await callAI(ctx.input)
+
+      // Record step-level metrics
+      observe.recordMetric('ai.tokens.input', response.inputTokens)
+      observe.recordMetric('ai.tokens.output', response.outputTokens)
+      observe.recordMetric('ai.latency.ms', Date.now() - startTime)
+      observe.addSpanEvent('api.call.complete', { status: 'success' })
+
+      return response
+    })
+
+    return result
+  },
+})
+```
+
+**Accessing Metrics via API:**
+
+When using `localTelemetryAdapter()`, metrics are stored in the database and accessible via the REST API:
+
+```
+GET /api/jobs/:id/metrics
+GET /api/steps/:id/metrics
+```
+
+The dashboard also shows metrics when local telemetry is enabled.
+
 ### Creating a Server with Dashboard
 
 ```typescript
@@ -385,6 +458,7 @@ Uses Bun's bundler mode with:
 | `packages/duron/src/adapters/adapter.ts` | Base adapter class |
 | `packages/duron/src/adapters/postgres/` | PostgreSQL adapter |
 | `packages/duron/src/step-manager.ts` | Step execution and nested step handling |
+| `packages/duron/src/telemetry/` | Telemetry adapters (local, opentelemetry, noop) |
 | `packages/duron-dashboard/src/DuronDashboard.tsx` | Dashboard root |
 | `packages/duron-dashboard/src/views/` | Dashboard pages |
 | `packages/examples/basic/start.ts` | Basic example |

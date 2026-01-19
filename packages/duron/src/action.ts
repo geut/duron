@@ -21,10 +21,32 @@ export interface ActionHandlerContext<TInput extends z.ZodObject, TVariables = R
    */
   observe: ObserveContext
 
+  /**
+   * Execute an inline step within the action.
+   *
+   * @param name - The name of the step (must be unique within the job)
+   * @param cb - The step handler callback
+   * @param options - Optional step configuration
+   * @returns Promise resolving to the step result
+   */
   step: <TResult>(
     name: string,
     cb: (ctx: StepHandlerContext) => Promise<TResult>,
     options?: z.input<typeof StepOptionsSchema>,
+  ) => Promise<TResult>
+
+  /**
+   * Execute a reusable step definition created with createStep().
+   *
+   * @param stepDef - The step definition to execute
+   * @param input - The input data for the step (validated against the step's input schema)
+   * @param options - Optional step configuration overrides
+   * @returns Promise resolving to the step result
+   */
+  run: <TStepInput extends z.ZodObject, TResult>(
+    stepDef: StepDefinition<TStepInput, TResult, TVariables>,
+    input: z.input<TStepInput>,
+    options?: Partial<z.input<typeof StepOptionsSchema>>,
   ) => Promise<TResult>
 }
 
@@ -69,6 +91,80 @@ export interface StepHandlerContext {
     cb: (ctx: StepHandlerContext) => Promise<TResult>,
     options?: z.input<typeof StepOptionsSchema>,
   ) => Promise<TResult>
+}
+
+/**
+ * Extended context for step definition handlers.
+ * Includes all StepHandlerContext properties plus action-level context.
+ */
+export interface StepDefinitionHandlerContext<TInput extends z.ZodObject, TVariables = Record<string, unknown>>
+  extends StepHandlerContext {
+  /**
+   * The validated input for this step.
+   */
+  input: z.infer<TInput>
+
+  /**
+   * Variables shared across the action.
+   */
+  var: TVariables
+
+  /**
+   * Logger instance for this step.
+   */
+  logger: Logger
+
+  /**
+   * The job ID this step belongs to.
+   */
+  jobId: string
+}
+
+/**
+ * A reusable step definition created with createStep().
+ * Can be executed within an action handler using ctx.run().
+ */
+export interface StepDefinition<
+  TInput extends z.ZodObject,
+  TResult,
+  TVariables = Record<string, unknown>,
+> {
+  /**
+   * The name of the step.
+   * Can be a static string or a function that generates the name from the input.
+   */
+  name: string | ((ctx: { input: z.infer<TInput> }) => string)
+
+  /**
+   * Zod schema for validating the step input.
+   */
+  input?: TInput
+
+  /**
+   * Retry configuration for this step.
+   */
+  retry?: z.input<typeof RetryOptionsSchema>
+
+  /**
+   * Timeout in milliseconds for this step.
+   */
+  expire?: number
+
+  /**
+   * Whether this step runs in parallel with siblings.
+   */
+  parallel?: boolean
+
+  /**
+   * The handler function that executes the step logic.
+   */
+  handler: (ctx: StepDefinitionHandlerContext<TInput, TVariables>) => Promise<TResult>
+
+  /**
+   * Internal marker to identify this as a step definition.
+   * @internal
+   */
+  __stepDefinition: true
 }
 
 export interface ConcurrencyHandlerContext<TInput extends z.ZodObject, TVariables = Record<string, unknown>> {
@@ -299,5 +395,52 @@ export const defineAction = <TVariables = Record<string, unknown>>() => {
     return createActionDefinitionSchema<TInput, TOutput, TVariables>().parse(def, {
       reportInput: true,
     })
+  }
+}
+
+/**
+ * Input type for createStep() - the definition object before transformation.
+ */
+export type StepDefinitionInput<
+  TInput extends z.ZodObject,
+  TResult,
+  TVariables = Record<string, unknown>,
+> = Omit<StepDefinition<TInput, TResult, TVariables>, '__stepDefinition'>
+
+/**
+ * Creates a reusable step definition that can be executed within action handlers.
+ *
+ * @template TVariables - Type of variables available to the step handler
+ * @returns A curried function that accepts the step definition and returns a StepDefinition
+ *
+ * @example
+ * ```typescript
+ * const sendEmailStep = createStep<typeof variables>()({
+ *   name: 'send-email',
+ *   input: z.object({
+ *     email: z.string().email(),
+ *     body: z.string(),
+ *   }),
+ *   retry: { limit: 3 },
+ *   expire: 60000,
+ *   handler: async (ctx) => {
+ *     // ctx.input is typed as { email: string, body: string }
+ *     // ctx.var, ctx.logger, ctx.jobId are also available
+ *     return { success: true }
+ *   },
+ * })
+ *
+ * // In an action handler:
+ * const result = await ctx.run(sendEmailStep, { email: 'test@example.com', body: 'Hello' })
+ * ```
+ */
+export const createStep = <TVariables = Record<string, unknown>>() => {
+  return <TInput extends z.ZodObject, TResult>(
+    def: StepDefinitionInput<TInput, TResult, TVariables>,
+  ): StepDefinition<TInput, TResult, TVariables> => {
+    return {
+      ...def,
+      __stepDefinition: true as const,
+    }
   }
 }

@@ -118,13 +118,50 @@ handler: async (ctx) => {
 
 ### `ctx.step`
 
-A function to create and execute steps within the action. See [Steps](/docs/jobs-and-steps#steps) for more details.
+A function to create and execute inline steps within the action. See [Steps](/docs/jobs-and-steps#steps) for more details.
 
 ```ts
 handler: async (ctx) => {
   const result = await ctx.step('fetchUser', async ({ signal }) => {
     return await fetchUser(ctx.input.userId, { signal })
   })
+}
+```
+
+### `ctx.run`
+
+A function to execute reusable step definitions created with `createStep()`. See [Reusable Step Definitions](/docs/jobs-and-steps#reusable-step-definitions) for more details.
+
+```ts
+import { createStep } from 'duron'
+
+const sendEmailStep = createStep<typeof variables>()({
+  name: 'send-email',
+  input: z.object({ to: z.string().email(), body: z.string() }),
+  handler: async (ctx) => {
+    // ctx includes input, signal, var, logger, jobId, etc.
+    return { success: true }
+  },
+})
+
+handler: async (ctx) => {
+  // Execute the reusable step
+  const result = await ctx.run(sendEmailStep, {
+    to: ctx.input.email,
+    body: 'Hello World',
+  })
+}
+```
+
+### `ctx.observe`
+
+Observability context for recording custom metrics and span data. See [Telemetry](/docs/telemetry) for more details.
+
+```ts
+handler: async (ctx) => {
+  ctx.observe.recordMetric('custom.counter', 1)
+  ctx.observe.addSpanAttribute('customKey', 'value')
+  ctx.observe.addSpanEvent('custom.event')
 }
 ```
 

@@ -5,6 +5,8 @@ import type { z } from 'zod'
 import {
   type Action,
   type ActionHandlerContext,
+  type StepDefinition,
+  type StepDefinitionHandlerContext,
   type StepHandlerContext,
   type StepOptions,
   StepOptionsSchema,
@@ -609,6 +611,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
     }
     this.#input = job.input ?? {}
     this.step = this.step.bind(this)
+    this.run = this.run.bind(this)
   }
 
   // ============================================================================
@@ -686,6 +689,64 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
       abortSignal: this.#abortSignal,
       parentStepId: null, // Root steps have no parent
       parallel: parsedOptions.parallel, // Pass parallel option
+    })
+  }
+
+  /**
+   * Execute a reusable step definition created with createStep().
+   *
+   * @param stepDef - The step definition to execute
+   * @param input - The input data for the step (validated against the step's input schema)
+   * @param options - Optional step configuration overrides
+   * @returns Promise resolving to the step result
+   */
+  async run<TStepInput extends z.ZodObject, TResult>(
+    stepDef: StepDefinition<TStepInput, TResult, TVariables>,
+    input: z.input<TStepInput>,
+    options: Partial<z.input<typeof StepOptionsSchema>> = {},
+  ): Promise<TResult> {
+    // Validate input against the step's schema if provided
+    // After parsing, validatedInput is z.output<TStepInput> (same as z.infer<TStepInput>)
+    const validatedInput: z.infer<TStepInput> = stepDef.input
+      ? stepDef.input.parse(input, {
+          error: () => 'Error parsing step input',
+          reportInput: true,
+        })
+      : (input as z.infer<TStepInput>)
+
+    // Resolve step name (static or dynamic)
+    const stepName = typeof stepDef.name === 'function' ? stepDef.name({ input: validatedInput }) : stepDef.name
+
+    // Merge options: action defaults -> step definition -> call-time overrides
+    const mergedOptions: z.input<typeof StepOptionsSchema> = {
+      ...this.#action.steps,
+      ...(stepDef.retry !== undefined && { retry: stepDef.retry }),
+      ...(stepDef.expire !== undefined && { expire: stepDef.expire }),
+      ...(stepDef.parallel !== undefined && { parallel: stepDef.parallel }),
+      ...options,
+    }
+
+    const parsedOptions = StepOptionsSchema.parse(mergedOptions)
+
+    // Create a wrapper callback that provides the extended context
+    const wrappedCb = async (baseCtx: StepHandlerContext): Promise<TResult> => {
+      const extendedCtx: StepDefinitionHandlerContext<TStepInput, TVariables> = {
+        ...baseCtx,
+        input: validatedInput,
+        var: this.#variables,
+        logger: this.#logger,
+        jobId: this.#jobId,
+      }
+      return stepDef.handler(extendedCtx)
+    }
+
+    return this.#stepManager.push({
+      name: stepName,
+      cb: wrappedCb,
+      options: parsedOptions,
+      abortSignal: this.#abortSignal,
+      parentStepId: null, // Root steps have no parent
+      parallel: parsedOptions.parallel,
     })
   }
 }

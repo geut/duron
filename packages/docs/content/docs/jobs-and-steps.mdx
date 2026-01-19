@@ -228,6 +228,138 @@ await ctx.step('parent', async ({ step }) => {
 
 Nested steps are displayed hierarchically in the Duron Dashboard. Each step shows its parent relationship, making it easy to understand the execution flow of complex workflows.
 
+## Reusable Step Definitions
+
+For steps that are used across multiple actions or need to be called multiple times with different inputs, you can create **reusable step definitions** using `createStep()`.
+
+### Creating a Reusable Step
+
+Use `createStep()` to define a step with its own input schema, options, and handler:
+
+```ts
+import { createStep } from 'duron'
+import { z } from 'zod'
+
+const sendEmailStep = createStep<typeof variables>()({
+  name: 'send-email',
+  input: z.object({
+    to: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  retry: { limit: 3 },
+  expire: 60000,
+  handler: async (ctx) => {
+    // ctx includes all step context plus action-level properties
+    const result = await ctx.var.emailService.send({
+      to: ctx.input.to,
+      subject: ctx.input.subject,
+      body: ctx.input.body,
+    })
+    return { success: true, messageId: result.id }
+  },
+})
+```
+
+### Step Definition Context
+
+The handler receives an extended context that includes:
+
+- **`input`** - The validated input data based on the step's input schema
+- **`signal`** - AbortSignal for cancellation support
+- **`stepId`** - Unique identifier for the current step
+- **`parentStepId`** - ID of the parent step (null for root steps)
+- **`step`** - Function to create nested child steps
+- **`observe`** - Observability context for metrics and tracing
+- **`var`** - Variables from the action context
+- **`logger`** - Pino logger instance
+- **`jobId`** - The job ID this step belongs to
+
+### Executing Step Definitions
+
+Use `ctx.run()` to execute a step definition within an action handler:
+
+```ts
+const processOrder = defineAction<typeof variables>()({
+  name: 'processOrder',
+  handler: async (ctx) => {
+    // Execute the reusable step
+    const emailResult = await ctx.run(sendEmailStep, {
+      to: ctx.input.email,
+      subject: 'Order Confirmation',
+      body: `Your order ${ctx.input.orderId} has been placed.`,
+    })
+
+    return { success: emailResult.success }
+  },
+})
+```
+
+### Overriding Step Options
+
+You can override step options at call time:
+
+```ts
+// Override expire and retry at call time
+const result = await ctx.run(
+  sendEmailStep,
+  { to: 'user@example.com', subject: 'Hello', body: 'World' },
+  { expire: 30000, retry: { limit: 5 } }
+)
+```
+
+### Dynamic Step Names
+
+Use a function for the `name` property to generate unique step names based on input. This is essential when calling the same step definition multiple times within a single job:
+
+```ts
+const sendEmailStep = createStep<typeof variables>()({
+  // Dynamic name based on input
+  name: (ctx) => `send-email-${ctx.input.to}`,
+  input: z.object({
+    to: z.string().email(),
+    body: z.string(),
+  }),
+  handler: async (ctx) => {
+    // ...
+  },
+})
+
+// Now you can call it multiple times with different inputs
+const processOrder = defineAction<typeof variables>()({
+  name: 'processOrder',
+  handler: async (ctx) => {
+    // Each call creates a uniquely named step
+    await ctx.run(sendEmailStep, { to: 'customer@example.com', body: 'Confirmation' })
+    await ctx.run(sendEmailStep, { to: 'admin@example.com', body: 'Notification' })
+    return { success: true }
+  },
+})
+```
+
+### Nested Steps in Step Definitions
+
+Step definitions can create nested child steps using `ctx.step()`:
+
+```ts
+const processPaymentStep = createStep<typeof variables>()({
+  name: 'process-payment',
+  input: z.object({ amount: z.number(), currency: z.string() }),
+  handler: async (ctx) => {
+    // Create nested child steps
+    const auth = await ctx.step('authorize', async () => {
+      return await ctx.var.paymentGateway.authorize(ctx.input.amount)
+    })
+
+    const capture = await ctx.step('capture', async () => {
+      return await ctx.var.paymentGateway.capture(auth.transactionId)
+    })
+
+    return { success: true, transactionId: capture.id }
+  },
+})
+```
+
 ### Step Options
 
 You can configure steps with options:

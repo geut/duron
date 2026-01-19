@@ -2,7 +2,7 @@ import type { Logger } from 'pino'
 
 import type { Action } from './action.js'
 import type { Adapter } from './adapters/adapter.js'
-import { ActionCancelError, ActionTimeoutError, isCancelError, StepTimeoutError, serializeError } from './errors.js'
+import { ActionCancelError, ActionTimeoutError, isCancelError, isTimeoutError, serializeError } from './errors.js'
 import { StepManager } from './step-manager.js'
 import type { Span, TelemetryAdapter } from './telemetry/adapter.js'
 import waitForAbort from './utils/wait-for-abort.js'
@@ -164,6 +164,15 @@ export class ActionJob<TAction extends Action<any, any, any>> {
 
       return result
     } catch (error) {
+      // Abort all running steps when an error occurs
+      // This ensures cascading failure and stops any steps still running
+      if (!this.#abortController.signal.aborted) {
+        this.#abortController.abort(error)
+      }
+
+      // Wait for step manager to drain (all steps to settle)
+      await this.#stepManager.drain()
+
       if (
         isCancelError(error) ||
         (error instanceof Error && error.name === 'AbortError' && isCancelError(error.cause))
@@ -179,11 +188,9 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       }
 
       const message =
-        error instanceof ActionTimeoutError
+        isTimeoutError(error)
           ? '[ActionJob] Job timed out'
-          : error instanceof StepTimeoutError
-            ? '[ActionJob] Step timed out'
-            : '[ActionJob] Job failed'
+          : '[ActionJob] Job failed'
 
       this.#logger.error({ jobId: this.#job.id, actionName: this.#action.name }, message)
       await this.#database.failJob({ jobId: this.#job.id, error: serializeError(error) })

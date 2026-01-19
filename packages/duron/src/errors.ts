@@ -1,8 +1,31 @@
+// Error codes for type checking without instanceof
+export const ERROR_CODES = {
+  DURON_ERROR: 'DURON_ERROR',
+  STEP_ALREADY_EXECUTED: 'STEP_ALREADY_EXECUTED',
+  NON_RETRIABLE: 'NON_RETRIABLE',
+  ACTION_TIMEOUT: 'ACTION_TIMEOUT',
+  STEP_TIMEOUT: 'STEP_TIMEOUT',
+  ACTION_CANCEL: 'ACTION_CANCEL',
+  UNHANDLED_CHILD_STEPS: 'UNHANDLED_CHILD_STEPS',
+} as const
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
+
 /**
  * Base class for all built-in errors in Duron.
  * All errors include a cause property that can be serialized.
  */
 export abstract class DuronError extends Error {
+  /**
+   * Error code for type checking without instanceof.
+   */
+  public readonly code: ErrorCode = ERROR_CODES.DURON_ERROR
+
+  /**
+   * Whether this error should prevent retries.
+   */
+  public readonly nonRetriable: boolean = false
+
   /**
    * The underlying cause of the error, if any.
    *
@@ -36,6 +59,9 @@ export abstract class DuronError extends Error {
  * Error thrown when attempting to execute a step that has already been executed.
  */
 export class StepAlreadyExecutedError extends DuronError {
+  public override readonly code = ERROR_CODES.STEP_ALREADY_EXECUTED
+  public override readonly nonRetriable = true
+
   /**
    * Create a new StepAlreadyExecutedError.
    *
@@ -55,13 +81,17 @@ export class StepAlreadyExecutedError extends DuronError {
  * without retrying, even if retry options are configured.
  */
 export class NonRetriableError extends DuronError {
-  // Constructor inherited from DuronError
+  public override readonly code: ErrorCode = ERROR_CODES.NON_RETRIABLE
+  public override readonly nonRetriable = true
 }
 
 /**
  * Error thrown when an action exceeds its timeout.
  */
 export class ActionTimeoutError extends DuronError {
+  public override readonly code = ERROR_CODES.ACTION_TIMEOUT
+  public override readonly nonRetriable = true
+
   /**
    * Create a new ActionTimeoutError.
    *
@@ -84,6 +114,9 @@ export class ActionTimeoutError extends DuronError {
  * Error thrown when a step exceeds its timeout.
  */
 export class StepTimeoutError extends DuronError {
+  public override readonly code = ERROR_CODES.STEP_TIMEOUT
+  public override readonly nonRetriable = false
+
   /**
    * Create a new StepTimeoutError.
    *
@@ -108,6 +141,9 @@ export class StepTimeoutError extends DuronError {
  * Error thrown when an action is cancelled.
  */
 export class ActionCancelError extends DuronError {
+  public override readonly code = ERROR_CODES.ACTION_CANCEL
+  public override readonly nonRetriable = true
+
   /**
    * Create a new ActionCancelError.
    *
@@ -133,6 +169,8 @@ export class ActionCancelError extends DuronError {
  * but not properly awaited. All child steps must be awaited before the parent returns.
  */
 export class UnhandledChildStepsError extends NonRetriableError {
+  public override readonly code = ERROR_CODES.UNHANDLED_CHILD_STEPS
+
   /**
    * The name of the parent step that completed with unhandled children.
    */
@@ -162,45 +200,44 @@ export class UnhandledChildStepsError extends NonRetriableError {
  * Checks if an error is a DuronError instance.
  */
 export function isDuronError(error: unknown): error is DuronError {
-  return error instanceof DuronError
+  const code = (error as any)?.code
+  return code !== undefined && Object.values(ERROR_CODES).includes(code)
 }
 
 /**
  * Checks if an error is a NonRetriableError instance.
  */
 export function isNonRetriableError(error: unknown): error is NonRetriableError {
-  return (
-    error instanceof NonRetriableError ||
-    error instanceof ActionCancelError ||
-    error instanceof ActionTimeoutError ||
-    error instanceof UnhandledChildStepsError
-  )
+  return (error as any)?.nonRetriable === true
 }
 
 /**
  * Checks if an error is an UnhandledChildStepsError instance.
  */
 export function isUnhandledChildStepsError(error: unknown): error is UnhandledChildStepsError {
-  return error instanceof UnhandledChildStepsError
+  return (error as any)?.code === ERROR_CODES.UNHANDLED_CHILD_STEPS
 }
 
 /**
  * Checks if an error is a timeout error (ActionTimeoutError or StepTimeoutError).
  */
 export function isTimeoutError(error: unknown): error is ActionTimeoutError | StepTimeoutError {
-  return error instanceof ActionTimeoutError || error instanceof StepTimeoutError
+  const code = (error as any)?.code
+  return code === ERROR_CODES.ACTION_TIMEOUT || code === ERROR_CODES.STEP_TIMEOUT
 }
 
 /**
  * Checks if an error is a cancel error (ActionCancelError or StepCancelError).
  */
 export function isCancelError(error: unknown): error is ActionCancelError {
-  return error instanceof ActionCancelError
+  return (error as any)?.code === ERROR_CODES.ACTION_CANCEL
 }
 
 export type SerializableError = {
   name: string
   message: string
+  code?: ErrorCode
+  nonRetriable?: boolean
   cause?: unknown
   stack?: string
 }
@@ -209,25 +246,27 @@ export type SerializableError = {
  * Serializes an error for storage in the database.
  * Handles DuronError instances specially to preserve their type information.
  */
-export function serializeError(error: unknown): {
-  name: string
-  message: string
-  cause?: unknown
-  stack?: string
-} {
-  if (error instanceof StepTimeoutError || error instanceof ActionTimeoutError) {
+export function serializeError(error: unknown): SerializableError {
+  const code = (error as any)?.code
+  const nonRetriable = (error as any)?.nonRetriable
+
+  if (isTimeoutError(error)) {
     return {
       name: error.name,
       message: error.message,
+      code,
+      nonRetriable,
       cause: error.cause,
       stack: undefined,
     }
   }
 
-  if (error instanceof DuronError) {
+  if (isDuronError(error)) {
     return {
       name: error.name,
       message: error.message,
+      code,
+      nonRetriable,
       cause: error.cause,
       stack: error.stack,
     }

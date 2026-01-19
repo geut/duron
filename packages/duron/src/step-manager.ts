@@ -17,6 +17,7 @@ import {
   ActionCancelError,
   isCancelError,
   isNonRetriableError,
+  isTimeoutError,
   NonRetriableError,
   StepAlreadyExecutedError,
   StepTimeoutError,
@@ -493,6 +494,7 @@ export class StepManager {
             .catch(() => {
               trackedChild.settled = true
               // Swallow the error here - it will be re-thrown to the caller via the returned promise
+              // Note: sibling steps will be aborted when the error propagates to the action level
             })
 
           return childPromise
@@ -607,6 +609,15 @@ export class StepManager {
           if (!delayed) {
             throw new Error(`Failed to delay step "${name}" for job "${this.#jobId}" action "${this.#actionName}"`)
           }
+        } else {
+          if (isTimeoutError(error)) {
+            ;(error as any).nonRetriable = true
+            throw error
+          }
+          throw new NonRetriableError(
+            `Failed to execute step="${name}", jobId="${this.#jobId}", action="${this.#actionName}", parentStepId="${parentStepId}"`,
+            { cause: error },
+          )
         }
       },
     }).catch(async (error) => {
@@ -758,6 +769,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
       ...this.#action.steps,
       ...options,
     })
+
     return this.#stepManager.push({
       name,
       cb,

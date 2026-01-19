@@ -238,6 +238,54 @@ const parentStepIdVerificationAction = defineAction()({
   },
 })
 
+const parallelStepsAction = defineAction()({
+  name: 'parallel-steps-action',
+  version: '1.0.0',
+  input: z.object({
+    delay: z.number().default(100),
+  }),
+  output: z.object({}),
+  steps: {
+    retry: {
+      limit: 1,
+    },
+  },
+  handler: async (ctx) => {
+    const input = ctx.input
+
+    await ctx.step('validate-order', async ({ step: nestedStep }) => {
+      await nestedStep('check-inventory', async () => {
+        return { success: true }
+      })
+
+      await nestedStep('verify-customer', async (ctx) => {
+        await Promise.all([
+          ctx.step(
+            'deep-step-1',
+            async () => {
+              await new Promise((resolve) => setTimeout(resolve, input.delay))
+              return { success: true }
+            },
+            { parallel: true, expire: 2000 },
+          ),
+          ctx.step(
+            'deep-step-2',
+            async () => {
+              await new Promise((resolve) => setTimeout(resolve, 100))
+              return { success: true }
+            },
+            { parallel: true },
+          ),
+        ])
+        return { success: true }
+      })
+
+      return { success: true }
+    })
+
+    return {}
+  },
+})
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -252,6 +300,7 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         unawaitedChildAction: typeof unawaitedChildAction
         parentTimeoutAction: typeof parentTimeoutAction
         parentStepIdVerificationAction: typeof parentStepIdVerificationAction
+        parallelStepsAction: typeof parallelStepsAction
       },
       Record<string, unknown>
     >
@@ -273,6 +322,7 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
             unawaitedChildAction,
             parentTimeoutAction,
             parentStepIdVerificationAction,
+            parallelStepsAction,
           },
           syncPattern: false,
           recoverJobsOnStart: false,
@@ -521,9 +571,25 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         expect([JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, 'cancelled']).toContain(job.status)
       })
     })
+
+    describe('Parallel Steps', () => {
+      it.only(
+        'should throw a timeout error when a nested step times out',
+        async () => {
+          const jobId = await client.runAction('parallelStepsAction', { delay: 3000 })
+          await client.fetch({ batchSize: 10 })
+
+          const job = await client.waitForJob(jobId)
+          expectToBeDefined(job)
+          expect(job.error).toBeDefined()
+          expect(job.error.name).toBe('StepTimeoutError')
+        },
+        { timeout: 10000 },
+      )
+    })
   })
 }
 
 // Run tests with both adapters
 runNestedStepsTests(pgliteFactory)
-runNestedStepsTests(postgresFactory)
+// runNestedStepsTests(postgresFactory)

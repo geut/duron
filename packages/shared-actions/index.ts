@@ -339,6 +339,13 @@ export const processOrder = defineAction<typeof variables>()({
       }),
     ),
   }),
+  steps: {
+    concurrency: 10,
+    // expire: 5_000,
+    retry: {
+      limit: 1,
+    },
+  },
   handler: async (ctx) => {
     const { orderId, customerId, items, paymentMethod, shippingAddress } = ctx.input
     const timeline: Array<{ step: string; status: 'success' | 'failed'; timestamp: string; details?: string }> = []
@@ -352,41 +359,53 @@ export const processOrder = defineAction<typeof variables>()({
     // =========================================================================
     // Step 1: Validate Order (with nested child steps)
     // =========================================================================
-    const validation = await ctx.step(
-      'validate-order',
-      async ({ step: nestedStep }) => {
-        // Child step: Check inventory for all items
-        const inventoryCheck = await nestedStep('check-inventory', async () => {
-          // Simulate inventory check
-          await new Promise((resolve) => setTimeout(resolve, 100))
-          const allInStock = items.every((item) => item.quantity <= 10) // Mock: max 10 per item
-          addTimeline('check-inventory', allInStock ? 'success' : 'failed', `Checked ${items.length} items`)
-          return { allInStock, checkedItems: items.length }
-        })
+    const validation = await ctx.step('validate-order', async ({ step: nestedStep }) => {
+      // Child step: Check inventory for all items
+      const inventoryCheck = await nestedStep('check-inventory', async () => {
+        const allInStock = items.every((item) => item.quantity <= 10) // Mock: max 10 per item
+        addTimeline('check-inventory', allInStock ? 'success' : 'failed', `Checked ${items.length} items`)
+        return { allInStock, checkedItems: items.length }
+      })
 
-        // Child step: Verify customer
-        const customerVerification = await nestedStep('verify-customer', async () => {
-          // Simulate customer verification
-          await new Promise((resolve) => setTimeout(resolve, 80))
-          const isValid = customerId.length > 0
-          addTimeline('verify-customer', isValid ? 'success' : 'failed', `Customer: ${customerId}`)
-          return { isValid, customerId }
-        })
+      // Child step: Verify customer
+      const customerVerification = await nestedStep('verify-customer', async (ctx) => {
+        await Promise.all([
+          ctx.step(
+            'more deeph',
+            async () => {
+              await new Promise((resolve) => setTimeout(resolve, 10_000))
+              return { success: true }
+            },
+            { parallel: true },
+          ),
+          ctx.step(
+            'more deeph 2',
+            async () => {
+              await new Promise((resolve) => setTimeout(resolve, 4_000))
+              return { success: true }
+            },
+            { parallel: true },
+          ),
+        ])
+        // Simulate customer verification
+        await new Promise((resolve) => setTimeout(resolve, 80))
+        const isValid = customerId.length > 0
+        addTimeline('verify-customer', isValid ? 'success' : 'failed', `Customer: ${customerId}`)
+        return { isValid, customerId }
+      })
 
-        addTimeline(
-          'validate-order',
-          inventoryCheck.allInStock && customerVerification.isValid ? 'success' : 'failed',
-          `Inventory: ${inventoryCheck.allInStock}, Customer: ${customerVerification.isValid}`,
-        )
+      addTimeline(
+        'validate-order',
+        inventoryCheck.allInStock && customerVerification.isValid ? 'success' : 'failed',
+        `Inventory: ${inventoryCheck.allInStock}, Customer: ${customerVerification.isValid}`,
+      )
 
-        return {
-          isValid: inventoryCheck.allInStock && customerVerification.isValid,
-          inventoryCheck,
-          customerVerification,
-        }
-      },
-      { expire: 30_000 },
-    )
+      return {
+        isValid: inventoryCheck.allInStock && customerVerification.isValid,
+        inventoryCheck,
+        customerVerification,
+      }
+    })
 
     if (!validation.isValid) {
       return {
@@ -461,59 +480,51 @@ export const processOrder = defineAction<typeof variables>()({
     // =========================================================================
     // Step 3: Fulfill Order (with nested steps)
     // =========================================================================
-    const fulfillment = await ctx.step(
-      'fulfill-order',
-      async ({ step: fulfillStep }) => {
-        // Child step: Reserve inventory
-        const reservation = await fulfillStep('reserve-inventory', async () => {
-          await new Promise((resolve) => setTimeout(resolve, 90))
-          const reservationId = `RES-${Date.now()}`
-          addTimeline('reserve-inventory', 'success', `Reserved ${items.length} items`)
-          return { reserved: true, reservationId }
-        })
+    const fulfillment = await ctx.step('fulfill-order', async ({ step: fulfillStep }) => {
+      // Child step: Reserve inventory
+      const reservation = await fulfillStep('reserve-inventory', async () => {
+        await new Promise((resolve) => setTimeout(resolve, 90))
+        const reservationId = `RES-${Date.now()}`
+        addTimeline('reserve-inventory', 'success', `Reserved ${items.length} items`)
+        return { reserved: true, reservationId }
+      })
 
-        // Child step: Create shipment
-        const shipment = await fulfillStep('create-shipment', async () => {
-          await new Promise((resolve) => setTimeout(resolve, 110))
-          const shipmentId = `SHIP-${Date.now()}`
-          addTimeline('create-shipment', 'success', `Shipment to ${shippingAddress.city}, ${shippingAddress.country}`)
-          return { shipmentId, carrier: 'FastShip', estimatedDays: 3 }
-        })
+      // Child step: Create shipment
+      const shipment = await fulfillStep('create-shipment', async () => {
+        await new Promise((resolve) => setTimeout(resolve, 110))
+        const shipmentId = `SHIP-${Date.now()}`
+        addTimeline('create-shipment', 'success', `Shipment to ${shippingAddress.city}, ${shippingAddress.country}`)
+        return { shipmentId, carrier: 'FastShip', estimatedDays: 3 }
+      })
 
-        addTimeline('fulfill-order', 'success', `Shipment: ${shipment.shipmentId}`)
-        return { reservation, shipment }
-      },
-      { expire: 30_000 },
-    )
+      addTimeline('fulfill-order', 'success', `Shipment: ${shipment.shipmentId}`)
+      return { reservation, shipment }
+    })
 
     // =========================================================================
     // Step 4: Send Notifications (with concurrent nested steps)
     // =========================================================================
-    await ctx.step(
-      'send-notifications',
-      async ({ step: notifyStep }) => {
-        // Run notification child steps concurrently
-        const [emailResult, smsResult] = await Promise.all([
-          // Child step: Send email confirmation
-          notifyStep('email-confirmation', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 70))
-            addTimeline('email-confirmation', 'success', `Sent to customer ${customerId}`)
-            return { sent: true, type: 'email' }
-          }),
+    await ctx.step('send-notifications', async ({ step: notifyStep }) => {
+      // Run notification child steps concurrently
+      const [emailResult, smsResult] = await Promise.all([
+        // Child step: Send email confirmation
+        notifyStep('email-confirmation', async () => {
+          await new Promise((resolve) => setTimeout(resolve, 70))
+          addTimeline('email-confirmation', 'success', `Sent to customer ${customerId}`)
+          return { sent: true, type: 'email' }
+        }),
 
-          // Child step: Send SMS notification
-          notifyStep('sms-notification', async () => {
-            await new Promise((resolve) => setTimeout(resolve, 50))
-            addTimeline('sms-notification', 'success', 'Order confirmation SMS sent')
-            return { sent: true, type: 'sms' }
-          }),
-        ])
+        // Child step: Send SMS notification
+        notifyStep('sms-notification', async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50))
+          addTimeline('sms-notification', 'success', 'Order confirmation SMS sent')
+          return { sent: true, type: 'sms' }
+        }),
+      ])
 
-        addTimeline('send-notifications', 'success', `Email: ${emailResult.sent}, SMS: ${smsResult.sent}`)
-        return { email: emailResult, sms: smsResult }
-      },
-      { expire: 15_000 },
-    )
+      addTimeline('send-notifications', 'success', `Email: ${emailResult.sent}, SMS: ${smsResult.sent}`)
+      return { email: emailResult, sms: smsResult }
+    })
 
     const { analytics, loyalty, partnerSync } = await ctx.step('post-order-processing', async (ctx) => {
       // =========================================================================
@@ -543,7 +554,7 @@ export const processOrder = defineAction<typeof variables>()({
             addTimeline('analytics-tracking', 'success', 'Analytics updated')
             return { purchase, recommendations }
           },
-          { expire: 10_000, parallel: true },
+          { parallel: true },
         ),
 
         // Parent step 2: Loyalty Program Update (with nested steps)
@@ -569,7 +580,7 @@ export const processOrder = defineAction<typeof variables>()({
             addTimeline('loyalty-update', 'success', `${points.earnedPoints} points, tier: ${tier.tier}`)
             return { points, tier }
           },
-          { expire: 10_000, parallel: true },
+          { parallel: true },
         ),
 
         // Parent step 3: Partner Sync (with nested steps)
@@ -593,7 +604,7 @@ export const processOrder = defineAction<typeof variables>()({
             addTimeline('partner-sync', 'success', 'All partners synced')
             return { supplier, warehouse }
           },
-          { expire: 10_000, parallel: true },
+          { parallel: true },
         ),
       ])
 

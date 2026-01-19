@@ -1,6 +1,7 @@
 'use client'
 
-import { ChevronRight, Clock, GitBranch, History, List, Search } from 'lucide-react'
+import clsx from 'clsx'
+import { Clock, GitBranch, History, List, Search } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useDebounceValue } from 'usehooks-ts'
 
@@ -15,6 +16,16 @@ import { useStepsPolling } from '@/hooks/use-steps-polling'
 import { type GetJobStepsResponse, useJob, useJobSteps, useTimeTravelJob } from '@/lib/api'
 import { calculateDurationSeconds, formatDurationSeconds } from '@/lib/duration'
 import { BadgeStatus } from '../components/badge-status'
+
+// Colors for nesting level indicators (cycles after 6 levels)
+const NESTING_COLORS = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500', 'bg-cyan-500']
+
+/**
+ * Get the color class for a given nesting depth
+ */
+function getNestingColor(depth: number): string {
+  return NESTING_COLORS[(depth - 1) % NESTING_COLORS.length] ?? NESTING_COLORS[0]!
+}
 
 // Step type from the API response (without output field)
 type JobStepWithoutOutput = GetJobStepsResponse['steps'][number] & { parentStepId?: string | null; parallel?: boolean }
@@ -188,70 +199,81 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                 >
                   {orderedSteps.map(({ step, depth }, index) => {
                     const stepNumber = index + 1
-                    const isNested = depth > 0
                     const isParallel = (step as any).parallel === true
-                    // Calculate left padding based on depth (16px per level)
-                    const paddingLeft = depth * 16
                     const duration = calculateDurationSeconds(step.startedAt, step.finishedAt)
+
+                    // Calculate left margin based on depth (16px per level)
+                    const marginLeft = depth * 16
 
                     return (
                       <AccordionItem
                         key={step.id}
                         value={step.id}
-                        className="border-b"
-                        style={{ marginLeft: paddingLeft }}
+                        className={clsx(depth === 0 && 'border-b')}
+                        style={{ marginLeft }}
                       >
-                        <AccordionTrigger className="hover:no-underline w-full">
-                          <div className="flex items-center justify-between w-full pr-4 min-w-0 overflow-hidden">
-                            <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
-                              {isNested && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0 -ml-1" />}
-                              {isParallel && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild={true}>
-                                    <GitBranch className="h-3 w-3 text-blue-500 shrink-0" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Parallel step (independent from siblings)</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                              <span className="text-sm font-mono text-muted-foreground shrink-0">#{stepNumber}</span>
-                              <span className="font-medium truncate w-0 grow">{step.name}</span>
+                        <div className="flex">
+                          {/* Nesting level indicator - colored line for current depth */}
+                          {depth > 0 && (
+                            <div className="relative w-1 shrink-0" aria-hidden="true">
+                              <div className={clsx('w-1 h-full opacity-60', getNestingColor(depth))} />
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-xs font-mono text-muted-foreground">
-                                {formatDurationSeconds(duration)}
-                              </span>
-                              {canTimeTravel && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild={true}>
-                                    <span
-                                      role="button"
-                                      tabIndex={0}
-                                      className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                                      onClick={(e) => handleTimeTravel(step.id, e)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter' || e.key === ' ') {
-                                          handleTimeTravel(step.id, e as unknown as React.MouseEvent)
-                                        }
-                                      }}
-                                      aria-disabled={timeTravelMutation.isPending}
-                                    >
-                                      <History className="h-3 w-3" />
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Time travel: restart from this step</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                              <BadgeStatus status={step.status} justIcon={true} />
-                            </div>
+                          )}
+                          <div className={clsx('flex-1 min-w-0', depth > 0 && 'ml-2')}>
+                            <AccordionTrigger className="hover:no-underline w-full">
+                              <div className="flex items-center justify-between w-full pr-4 min-w-0 overflow-hidden">
+                                <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                                  {isParallel && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild={true}>
+                                        <GitBranch className="h-3 w-3 text-blue-500 shrink-0" />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Parallel step (independent from siblings)</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                  <span className="text-sm font-mono text-muted-foreground shrink-0">
+                                    #{stepNumber}
+                                  </span>
+                                  <span className="font-medium truncate w-0 grow">{step.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="text-xs font-mono text-muted-foreground">
+                                    {formatDurationSeconds(duration)}
+                                  </span>
+                                  {canTimeTravel && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild={true}>
+                                        <span
+                                          role="button"
+                                          tabIndex={0}
+                                          className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                                          onClick={(e) => handleTimeTravel(step.id, e)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                              handleTimeTravel(step.id, e as unknown as React.MouseEvent)
+                                            }
+                                          }}
+                                          aria-disabled={timeTravelMutation.isPending}
+                                        >
+                                          <History className="h-3 w-3" />
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Time travel: restart from this step</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                  <BadgeStatus status={step.status} justIcon={true} />
+                                </div>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <StepDetailsContent stepId={step.id} jobId={jobId} />
+                            </AccordionContent>
                           </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <StepDetailsContent stepId={step.id} jobId={jobId} />
-                        </AccordionContent>
+                        </div>
                       </AccordionItem>
                     )
                   })}

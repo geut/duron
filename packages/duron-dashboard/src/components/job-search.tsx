@@ -3,9 +3,9 @@
 import { Search, X } from 'lucide-react'
 import { parseAsString, useQueryState } from 'nuqs'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDebounceValue } from 'usehooks-ts'
 
 import { Input } from '@/components/ui/input'
-import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { cn } from '@/lib/utils'
 
 interface JobSearchProps {
@@ -15,26 +15,22 @@ interface JobSearchProps {
 export function JobSearch({ className }: JobSearchProps) {
   const [search, setSearch] = useQueryState('search', parseAsString.withDefault(''))
   const [inputValue, setInputValue] = useState(search)
+  const [debouncedInputValue] = useDebounceValue(inputValue, 300)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Debounce the search query update with 1000ms delay
-  const debouncedSetSearch = useDebouncedCallback((value: string | null) => {
-    setSearch(value)
-  }, 1000)
+  // Sync debounced input value to query state
+  useEffect(() => {
+    setSearch(debouncedInputValue || null)
+  }, [debouncedInputValue, setSearch])
 
-  // Sync input value with query state when it changes externally (e.g., clear button)
+  // Sync input value with query state when it changes externally (e.g., browser back/forward)
   useEffect(() => {
     setInputValue(search)
   }, [search])
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value || null
-      setInputValue(value || '')
-      debouncedSetSearch(value)
-    },
-    [debouncedSetSearch],
-  )
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value)
+  }, [])
 
   const handleClear = useCallback(() => {
     setInputValue('')

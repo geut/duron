@@ -2,6 +2,7 @@
 
 import { ChevronRight, Clock, GitBranch, History, List, Search } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
+import { useDebounceValue } from 'usehooks-ts'
 
 import { Timeline } from '@/components/timeline'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
@@ -10,7 +11,6 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useStepView } from '@/contexts/layout-context'
-import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { useStepsPolling } from '@/hooks/use-steps-polling'
 import { type GetJobStepsResponse, useJob, useJobSteps, useTimeTravelJob } from '@/lib/api'
 import { calculateDurationSeconds, formatDurationSeconds } from '@/lib/duration'
@@ -84,26 +84,13 @@ function flattenStepTree(nodes: StepNode[]): Array<{ step: JobStepWithoutOutput;
 }
 
 export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps) {
-  const [inputValue, setInputValue] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm] = useDebounceValue(searchTerm, 300)
   const { viewType, setViewType } = useStepView()
-
-  // Debounce the search term update with 1000ms delay
-  const debouncedSetSearchTerm = useDebouncedCallback((value: string) => {
-    setSearchTerm(value)
-  }, 1000)
-
-  const handleSearchChange = useCallback(
-    (value: string) => {
-      setInputValue(value)
-      debouncedSetSearchTerm(value)
-    },
-    [debouncedSetSearchTerm],
-  )
 
   // Fetch all steps (no pagination)
   const { data: stepsData, isLoading: stepsLoading } = useJobSteps(jobId, {
-    search: searchTerm || undefined,
+    search: debouncedSearchTerm || undefined,
   })
 
   const { data: job } = useJob(jobId)
@@ -152,8 +139,8 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
             <Input
               type="text"
               placeholder="Search steps..."
-              value={inputValue}
-              onChange={(e) => handleSearchChange(e.target.value)}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-8"
             />
           </div>
@@ -190,7 +177,7 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                 <div className="p-4 text-center text-muted-foreground">Loading steps...</div>
               ) : orderedSteps.length === 0 ? (
                 <div className="p-4 text-center text-muted-foreground">
-                  {inputValue ? 'No steps found matching your search' : 'No steps found'}
+                  {searchTerm ? 'No steps found matching your search' : 'No steps found'}
                 </div>
               ) : (
                 <Accordion

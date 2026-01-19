@@ -15,14 +15,20 @@ import {
 // Types
 // ============================================================================
 
-// Note: This interface is intentionally empty as the database is obtained from the Duron client
-export type LocalTelemetryAdapterOptions = Record<string, never>
+export interface LocalTelemetryAdapterOptions {
+  /**
+   * Delay in milliseconds before flushing queued metrics to the database.
+   * Metrics are batched and inserted after this delay of inactivity.
+   * @default 1000
+   */
+  flushDelayMs?: number
+}
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const METRICS_FLUSH_DELAY_MS = 1000
+const DEFAULT_FLUSH_DELAY_MS = 1000
 
 // ============================================================================
 // Local Telemetry Adapter
@@ -33,15 +39,13 @@ const METRICS_FLUSH_DELAY_MS = 1000
  * Perfect for development and self-hosted deployments.
  *
  * This adapter automatically uses the database adapter configured in the Duron client.
- * No additional configuration is required.
- *
- * Metrics are batched and inserted after 1 second of inactivity to reduce database load.
+ * Metrics are batched and inserted after a configurable delay of inactivity to reduce database load.
  *
  * @example
  * ```typescript
  * const client = duron({
  *   database: postgresAdapter({ connection: 'postgres://...' }),
- *   telemetry: localTelemetryAdapter(),
+ *   telemetry: localTelemetryAdapter({ flushDelayMs: 500 }), // Custom 500ms delay
  *   actions: { ... }
  * })
  * ```
@@ -51,6 +55,12 @@ export class LocalTelemetryAdapter extends TelemetryAdapter {
   #metricsQueue: InsertMetricOptions[] = []
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #flushPromise: Promise<void> | null = null
+  #flushDelayMs: number
+
+  constructor(options?: LocalTelemetryAdapterOptions) {
+    super()
+    this.#flushDelayMs = options?.flushDelayMs ?? DEFAULT_FLUSH_DELAY_MS
+  }
 
   /**
    * Get the database adapter from the Duron client.
@@ -93,7 +103,7 @@ export class LocalTelemetryAdapter extends TelemetryAdapter {
       this.#flushPromise = this.#flushQueue().finally(() => {
         this.#flushPromise = null
       })
-    }, METRICS_FLUSH_DELAY_MS)
+    }, this.#flushDelayMs)
   }
 
   /**
@@ -301,17 +311,26 @@ export class LocalTelemetryAdapter extends TelemetryAdapter {
  * Perfect for development and self-hosted deployments.
  *
  * The database adapter is automatically obtained from the Duron client.
- * Metrics are batched and inserted after 1 second of inactivity to reduce database load.
+ * Metrics are batched and inserted after a configurable delay of inactivity to reduce database load.
  *
+ * @param options - Configuration options
+ * @param options.flushDelayMs - Delay in milliseconds before flushing queued metrics (default: 1000)
  * @returns LocalTelemetryAdapter instance
  *
  * @example
  * ```typescript
  * const client = duron({
  *   database: postgresAdapter({ connection: 'postgres://...' }),
- *   telemetry: localTelemetryAdapter(),
+ *   telemetry: localTelemetryAdapter(), // Uses default 1 second delay
+ *   actions: { ... }
+ * })
+ *
+ * // Or with custom flush delay
+ * const client = duron({
+ *   database: postgresAdapter({ connection: 'postgres://...' }),
+ *   telemetry: localTelemetryAdapter({ flushDelayMs: 500 }), // 500ms delay
  *   actions: { ... }
  * })
  * ```
  */
-export const localTelemetryAdapter = () => new LocalTelemetryAdapter()
+export const localTelemetryAdapter = (options?: LocalTelemetryAdapterOptions) => new LocalTelemetryAdapter(options)

@@ -3,6 +3,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Activity, Clock, Hash, Search, Tag, X } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
+import { useDebounceValue } from 'usehooks-ts'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -139,14 +140,15 @@ interface MetricsModalProps {
 
 function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }: MetricsModalProps) {
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm] = useDebounceValue(searchTerm, 300)
 
-  // Filter metrics based on search term
+  // Filter metrics based on debounced search term
   const filteredMetrics = useMemo(() => {
-    if (!searchTerm.trim()) {
+    if (!debouncedSearchTerm.trim()) {
       return metrics
     }
 
-    const lowerSearch = searchTerm.toLowerCase()
+    const lowerSearch = debouncedSearchTerm.toLowerCase()
     return metrics.filter((metric) => {
       // Search in name
       if (metric.name.toLowerCase().includes(lowerSearch)) {
@@ -167,7 +169,7 @@ function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }
       }
       return false
     })
-  }, [metrics, searchTerm])
+  }, [metrics, debouncedSearchTerm])
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>

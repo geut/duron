@@ -334,196 +334,192 @@ function runRecoverTests(adapterFactory: AdapterFactory) {
       })
     })
 
-    describe(
-      'Multi-Process Recovery',
-      () => {
-        it(
-          'should recover jobs from a crashed worker process',
-          async () => {
-            const workerId = `worker-${Date.now()}`
+    describe('Multi-Process Recovery', () => {
+      it(
+        'should recover jobs from a crashed worker process',
+        async () => {
+          const workerId = `worker-${Date.now()}`
 
-            // 1. Create host client to create jobs
-            const hostClient = new Client({
-              id: 'host-client',
-              database: createAdapter(connectionUrl),
-              actions: { slowAction, quickAction },
-              syncPattern: false,
-              recoverJobsOnStart: false,
-              logger: 'error',
-            })
-            clientsToStop.push(hostClient)
-            await hostClient.start()
+          // 1. Create host client to create jobs
+          const hostClient = new Client({
+            id: 'host-client',
+            database: createAdapter(connectionUrl),
+            actions: { slowAction, quickAction },
+            syncPattern: false,
+            recoverJobsOnStart: false,
+            logger: 'error',
+          })
+          clientsToStop.push(hostClient)
+          await hostClient.start()
 
-            // 2. Spawn a worker that will process jobs
-            workerProcess = await spawnWorker(workerId)
+          // 2. Spawn a worker that will process jobs
+          workerProcess = await spawnWorker(workerId)
 
-            // 3. Create a slow job from the host
-            const jobId = await hostClient.runAction('slowAction', { delay: 60_000 })
+          // 3. Create a slow job from the host
+          const jobId = await hostClient.runAction('slowAction', { delay: 60_000 })
 
-            // 4. Wait for the worker to pick up the job
-            await new Promise((resolve) => setTimeout(resolve, 500))
+          // 4. Wait for the worker to pick up the job
+          await new Promise((resolve) => setTimeout(resolve, 500))
 
-            // Verify job is being processed
-            let job = await hostClient.getJobById(jobId)
-            expectToBeDefined(job)
-            expect(job.status).toBe(JOB_STATUS_ACTIVE)
+          // Verify job is being processed
+          let job = await hostClient.getJobById(jobId)
+          expectToBeDefined(job)
+          expect(job.status).toBe(JOB_STATUS_ACTIVE)
 
-            // 5. Kill the worker process abruptly (simulating a crash)
-            workerProcess.kill(9) // SIGKILL - immediate termination
+          // 5. Kill the worker process abruptly (simulating a crash)
+          workerProcess.kill(9) // SIGKILL - immediate termination
+          workerProcess = null
+
+          // 6. Wait a moment for the worker to die
+          await new Promise((resolve) => setTimeout(resolve, 100))
+
+          // 7. Create a recovery client that will recover jobs from dead processes
+          const recoveryClient = new Client({
+            id: 'recovery-client',
+            database: createAdapter(connectionUrl),
+            actions: { slowAction, quickAction },
+            syncPattern: false,
+            recoverJobsOnStart: true,
+            multiProcessMode: true,
+            processTimeout: 2_000, // Short timeout for testing
+            logger: 'error',
+          })
+          clientsToStop.push(recoveryClient)
+          await recoveryClient.start()
+
+          // 8. Verify job was recovered (status should be 'created' again)
+          job = await recoveryClient.getJobById(jobId)
+          expectToBeDefined(job)
+          expect(job.status).toBe(JOB_STATUS_CREATED)
+        },
+        { timeout: 30_000 },
+      )
+
+      it(
+        'should not recover jobs from a live worker process',
+        async () => {
+          const workerId = `worker-${Date.now()}`
+
+          // 1. Create host client
+          const hostClient = new Client({
+            id: 'host-client',
+            database: createAdapter(connectionUrl),
+            actions: { slowAction, quickAction },
+            syncPattern: false,
+            recoverJobsOnStart: false,
+            logger: 'error',
+          })
+          clientsToStop.push(hostClient)
+          await hostClient.start()
+
+          // 2. Spawn a worker that will process jobs
+          workerProcess = await spawnWorker(workerId)
+
+          // 3. Create a slow job from the host
+          const jobId = await hostClient.runAction('slowAction', { delay: 60_000 })
+
+          // 4. Wait for the worker to pick up the job
+          await new Promise((resolve) => setTimeout(resolve, 500))
+
+          // Verify job is being processed
+          let job = await hostClient.getJobById(jobId)
+          expectToBeDefined(job)
+          expect(job.status).toBe(JOB_STATUS_ACTIVE)
+
+          // 5. Create a recovery client - worker is still alive
+          const recoveryClient = new Client({
+            id: 'recovery-client',
+            database: createAdapter(connectionUrl),
+            actions: { slowAction, quickAction },
+            syncPattern: false,
+            recoverJobsOnStart: true,
+            multiProcessMode: true,
+            processTimeout: 2_000,
+            logger: 'error',
+          })
+          clientsToStop.push(recoveryClient)
+          await recoveryClient.start()
+
+          // 6. Verify job was NOT recovered (worker is still alive and responding to pings)
+          job = await recoveryClient.getJobById(jobId)
+          expectToBeDefined(job)
+          expect(job.status).toBe(JOB_STATUS_ACTIVE) // Still active, not recovered
+
+          // Cleanup: kill the worker
+          if (workerProcess) {
+            workerProcess.kill()
             workerProcess = null
+          }
+        },
+        { timeout: 30_000 },
+      )
 
-            // 6. Wait a moment for the worker to die
-            await new Promise((resolve) => setTimeout(resolve, 100))
+      it(
+        'should recover and complete a job after worker crash',
+        async () => {
+          const workerId = `worker-${Date.now()}`
 
-            // 7. Create a recovery client that will recover jobs from dead processes
-            const recoveryClient = new Client({
-              id: 'recovery-client',
-              database: createAdapter(connectionUrl),
-              actions: { slowAction, quickAction },
-              syncPattern: false,
-              recoverJobsOnStart: true,
-              multiProcessMode: true,
-              processTimeout: 2_000, // Short timeout for testing
-              logger: 'error',
-            })
-            clientsToStop.push(recoveryClient)
-            await recoveryClient.start()
+          // 1. Create host client
+          const hostClient = new Client({
+            id: 'host-client',
+            database: createAdapter(connectionUrl),
+            actions: { slowAction, quickAction },
+            syncPattern: false,
+            recoverJobsOnStart: false,
+            logger: 'error',
+          })
+          clientsToStop.push(hostClient)
+          await hostClient.start()
 
-            // 8. Verify job was recovered (status should be 'created' again)
-            job = await recoveryClient.getJobById(jobId)
-            expectToBeDefined(job)
-            expect(job.status).toBe(JOB_STATUS_CREATED)
-          },
-          { timeout: 30_000 },
-        )
+          // 2. Spawn a worker that will process jobs
+          workerProcess = await spawnWorker(workerId)
 
-        it(
-          'should not recover jobs from a live worker process',
-          async () => {
-            const workerId = `worker-${Date.now()}`
+          // 3. Create a quick job from the host
+          const jobId = await hostClient.runAction('quickAction', { message: 'recover-me' })
 
-            // 1. Create host client
-            const hostClient = new Client({
-              id: 'host-client',
-              database: createAdapter(connectionUrl),
-              actions: { slowAction, quickAction },
-              syncPattern: false,
-              recoverJobsOnStart: false,
-              logger: 'error',
-            })
-            clientsToStop.push(hostClient)
-            await hostClient.start()
+          // 4. Create a slow job and wait for it to start
+          const slowJobId = await hostClient.runAction('slowAction', { delay: 30_000 })
 
-            // 2. Spawn a worker that will process jobs
-            workerProcess = await spawnWorker(workerId)
+          await new Promise((resolve) => setTimeout(resolve, 300))
 
-            // 3. Create a slow job from the host
-            const jobId = await hostClient.runAction('slowAction', { delay: 60_000 })
+          // Verify slow job is being processed
+          const activeJob = await hostClient.getJobById(slowJobId)
+          expectToBeDefined(activeJob)
+          expect(activeJob.status).toBe(JOB_STATUS_ACTIVE)
 
-            // 4. Wait for the worker to pick up the job
-            await new Promise((resolve) => setTimeout(resolve, 500))
+          // 5. Kill the worker
+          workerProcess.kill(9)
+          workerProcess = null
 
-            // Verify job is being processed
-            let job = await hostClient.getJobById(jobId)
-            expectToBeDefined(job)
-            expect(job.status).toBe(JOB_STATUS_ACTIVE)
+          await new Promise((resolve) => setTimeout(resolve, 100))
 
-            // 5. Create a recovery client - worker is still alive
-            const recoveryClient = new Client({
-              id: 'recovery-client',
-              database: createAdapter(connectionUrl),
-              actions: { slowAction, quickAction },
-              syncPattern: false,
-              recoverJobsOnStart: true,
-              multiProcessMode: true,
-              processTimeout: 2_000,
-              logger: 'error',
-            })
-            clientsToStop.push(recoveryClient)
-            await recoveryClient.start()
+          // 6. Create a recovery client that will also process jobs
+          const recoveryClient = new Client({
+            id: 'recovery-client',
+            database: createAdapter(connectionUrl),
+            actions: { slowAction, quickAction },
+            syncPattern: 'pull',
+            pullInterval: 100,
+            recoverJobsOnStart: true,
+            multiProcessMode: true,
+            processTimeout: 2_000,
+            logger: 'error',
+          })
+          clientsToStop.push(recoveryClient)
+          await recoveryClient.start()
 
-            // 6. Verify job was NOT recovered (worker is still alive and responding to pings)
-            job = await recoveryClient.getJobById(jobId)
-            expectToBeDefined(job)
-            expect(job.status).toBe(JOB_STATUS_ACTIVE) // Still active, not recovered
+          // 7. Wait for jobs to be recovered and processed
+          await new Promise((resolve) => setTimeout(resolve, 2500))
 
-            // Cleanup: kill the worker
-            if (workerProcess) {
-              workerProcess.kill()
-              workerProcess = null
-            }
-          },
-          { timeout: 30_000 },
-        )
-
-        it(
-          'should recover and complete a job after worker crash',
-          async () => {
-            const workerId = `worker-${Date.now()}`
-
-            // 1. Create host client
-            const hostClient = new Client({
-              id: 'host-client',
-              database: createAdapter(connectionUrl),
-              actions: { slowAction, quickAction },
-              syncPattern: false,
-              recoverJobsOnStart: false,
-              logger: 'error',
-            })
-            clientsToStop.push(hostClient)
-            await hostClient.start()
-
-            // 2. Spawn a worker that will process jobs
-            workerProcess = await spawnWorker(workerId)
-
-            // 3. Create a quick job from the host
-            const jobId = await hostClient.runAction('quickAction', { message: 'recover-me' })
-
-            // 4. Create a slow job and wait for it to start
-            const slowJobId = await hostClient.runAction('slowAction', { delay: 30_000 })
-
-            await new Promise((resolve) => setTimeout(resolve, 300))
-
-            // Verify slow job is being processed
-            const activeJob = await hostClient.getJobById(slowJobId)
-            expectToBeDefined(activeJob)
-            expect(activeJob.status).toBe(JOB_STATUS_ACTIVE)
-
-            // 5. Kill the worker
-            workerProcess.kill(9)
-            workerProcess = null
-
-            await new Promise((resolve) => setTimeout(resolve, 100))
-
-            // 6. Create a recovery client that will also process jobs
-            const recoveryClient = new Client({
-              id: 'recovery-client',
-              database: createAdapter(connectionUrl),
-              actions: { slowAction, quickAction },
-              syncPattern: 'pull',
-              pullInterval: 100,
-              recoverJobsOnStart: true,
-              multiProcessMode: true,
-              processTimeout: 2_000,
-              logger: 'error',
-            })
-            clientsToStop.push(recoveryClient)
-            await recoveryClient.start()
-
-            // 7. Wait for jobs to be recovered and processed
-            await new Promise((resolve) => setTimeout(resolve, 2500))
-
-            // 8. Verify quick job was completed
-            const quickJob = await recoveryClient.getJobById(jobId)
-            expectToBeDefined(quickJob)
-            expect(quickJob.status).toBe(JOB_STATUS_COMPLETED)
-            expect(quickJob.output).toEqual({ result: 'Processed: recover-me' })
-          },
-          { timeout: 30_000 },
-        )
-      },
-      { timeout: 60_000 },
-    )
+          // 8. Verify quick job was completed
+          const quickJob = await recoveryClient.getJobById(jobId)
+          expectToBeDefined(quickJob)
+          expect(quickJob.status).toBe(JOB_STATUS_COMPLETED)
+          expect(quickJob.output).toEqual({ result: 'Processed: recover-me' })
+        },
+        { timeout: 30_000 },
+      )
+    })
   })
 }
 

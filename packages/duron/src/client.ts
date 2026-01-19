@@ -20,6 +20,38 @@ import type { JobStatusResult, JobStepStatusResult } from './adapters/schemas.js
 import { JOB_STATUS_CANCELLED, JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, type JobStatus } from './constants.js'
 import { LocalTelemetryAdapter, noopTelemetryAdapter, type TelemetryAdapter } from './telemetry/index.js'
 
+/**
+ * Extracts the inferred type from an action's input/output schema.
+ * Handles the case where the schema might be undefined.
+ */
+type InferActionSchema<T> = T extends z.ZodTypeAny ? z.infer<T> : Record<string, unknown>
+
+/**
+ * Result returned from waitForJob with untyped input and output.
+ */
+export interface JobResult {
+  jobId: string
+  actionName: string
+  status: JobStatus
+  groupKey: string
+  input: unknown
+  output: unknown
+  error: Job['error']
+}
+
+/**
+ * Result returned from runActionAndWait with typed input and output based on the action's Zod schemas.
+ */
+export interface TypedJobResult<TAction extends Action<any, any, any>> {
+  jobId: string
+  actionName: string
+  status: JobStatus
+  groupKey: string
+  input: InferActionSchema<NonNullable<TAction['input']>>
+  output: InferActionSchema<NonNullable<TAction['output']>>
+  error: Job['error']
+}
+
 const BaseOptionsSchema = z.object({
   /**
    * Unique identifier for this Duron instance.
@@ -184,7 +216,7 @@ export class Client<
   #pendingJobWaits = new Map<
     string,
     Set<{
-      resolve: (job: Job | null) => void
+      resolve: (result: JobResult | null) => void
       timeoutId?: NodeJS.Timeout
       signal?: AbortSignal
       abortHandler?: () => void
@@ -333,6 +365,132 @@ export class Client<
     this.#logger.debug({ jobId, actionName: String(actionName), groupKey }, '[Duron] Action sent/created')
 
     return jobId
+  }
+
+  /**
+   * Run an action and wait for its completion.
+   * This is a convenience method that combines `runAction` and `waitForJob`.
+   *
+   * @param actionName - Name of the action to run
+   * @param input - Input data for the action (validated against action's input schema if provided)
+   * @param options - Options including abort signal and timeout
+   * @returns Promise resolving to the job result with typed input and output
+   * @throws Error if action is not found, job creation fails, job is cancelled, or operation is aborted
+   */
+  async runActionAndWait<TActionName extends keyof TActions>(
+    actionName: TActionName,
+    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodObject
+      ? z.input<NonNullable<TActions[TActionName]['input']>>
+      : never,
+    options?: {
+      /**
+       * AbortSignal to cancel the operation. If aborted, the job will be cancelled and the promise will reject.
+       */
+      signal?: AbortSignal
+      /**
+       * Timeout in milliseconds. If the job doesn't complete within this time, the job will be cancelled and the promise will reject.
+       */
+      timeout?: number
+    },
+  ): Promise<TypedJobResult<TActions[TActionName]>> {
+    // Check if already aborted before starting
+    if (options?.signal?.aborted) {
+      throw new Error('Operation was aborted')
+    }
+
+    // Create the job
+    const jobId = await this.runAction(actionName, input)
+
+    // Set up abort handler to cancel the job if signal is aborted
+    let abortHandler: (() => void) | undefined
+    if (options?.signal) {
+      abortHandler = () => {
+        this.cancelJob(jobId).catch((err) => {
+          this.#logger.error({ err, jobId }, '[Duron] Error cancelling job on abort')
+        })
+      }
+      options.signal.addEventListener('abort', abortHandler, { once: true })
+    }
+
+    // Set up timeout handler to cancel the job if timeout is reached
+    let timeoutId: NodeJS.Timeout | undefined
+    let timeoutAbortController: AbortController | undefined
+    if (options?.timeout) {
+      timeoutAbortController = new AbortController()
+      timeoutId = setTimeout(() => {
+        timeoutAbortController!.abort()
+        this.cancelJob(jobId).catch((err) => {
+          this.#logger.error({ err, jobId }, '[Duron] Error cancelling job on timeout')
+        })
+      }, options.timeout)
+    }
+
+    try {
+      // Combine signals if both are provided
+      let waitSignal: AbortSignal | undefined
+      if (options?.signal && timeoutAbortController) {
+        waitSignal = AbortSignal.any([options.signal, timeoutAbortController.signal])
+      } else if (options?.signal) {
+        waitSignal = options.signal
+      } else if (timeoutAbortController) {
+        waitSignal = timeoutAbortController.signal
+      }
+
+      // Wait for the job to complete
+      const job = await this.waitForJob(jobId, { signal: waitSignal })
+
+      // Clean up
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      if (options?.signal && abortHandler) {
+        options.signal.removeEventListener('abort', abortHandler)
+      }
+
+      // Handle null result (aborted or timed out)
+      if (!job) {
+        if (options?.signal?.aborted) {
+          throw new Error('Operation was aborted')
+        }
+        if (timeoutAbortController?.signal.aborted) {
+          throw new Error('Operation timed out')
+        }
+        throw new Error('Job not found')
+      }
+
+      // Handle cancelled job
+      if (job.status === JOB_STATUS_CANCELLED) {
+        if (options?.signal?.aborted) {
+          throw new Error('Operation was aborted')
+        }
+        if (timeoutAbortController?.signal.aborted) {
+          throw new Error('Operation timed out')
+        }
+        throw new Error('Job was cancelled')
+      }
+
+      // Handle failed job
+      if (job.status === JOB_STATUS_FAILED) {
+        const errorMessage = job.error?.message ?? 'Job failed'
+        const error = new Error(errorMessage)
+        if (job.error?.stack) {
+          error.stack = job.error.stack
+        }
+        throw error
+      }
+
+      // Return the job result with typed input/output
+      return job as TypedJobResult<TActions[TActionName]>
+    } catch (err) {
+      // Clean up on error
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      if (options?.signal && abortHandler) {
+        options.signal.removeEventListener('abort', abortHandler)
+      }
+      throw err
+    }
   }
 
   /**
@@ -515,11 +673,11 @@ export class Client<
 
   /**
    * Wait for a job to change status by subscribing to job-status-changed events.
-   * When the job status changes, the job is fetched and returned.
+   * When the job status changes, the job result is returned.
    *
    * @param jobId - The ID of the job to wait for
    * @param options - Optional configuration including timeout
-   * @returns Promise resolving to the job when its status changes, or `null` if timeout
+   * @returns Promise resolving to the job result when its status changes, or `null` if timeout
    */
   async waitForJob(
     jobId: string,
@@ -534,7 +692,7 @@ export class Client<
        */
       signal?: AbortSignal
     },
-  ): Promise<Job | null> {
+  ): Promise<JobResult | null> {
     await this.start()
 
     // First, check if the job already exists and is in a terminal state
@@ -546,14 +704,22 @@ export class Client<
         if (!job) {
           return null
         }
-        return job
+        return {
+          jobId: job.id,
+          actionName: job.actionName,
+          status: job.status,
+          groupKey: job.groupKey,
+          input: job.input,
+          output: job.output,
+          error: job.error,
+        }
       }
     }
 
     // Set up the shared event listener if not already set up
     this.#setupJobStatusListener()
 
-    return new Promise<Job | null>((resolve) => {
+    return new Promise<JobResult | null>((resolve) => {
       // Check if already aborted before setting up wait
       if (options?.signal?.aborted) {
         resolve(null)
@@ -796,6 +962,19 @@ export class Client<
         // Fetch the job once for all pending waits
         const job = await this.getJobById(event.jobId)
 
+        // Transform to JobResult
+        const result: JobResult | null = job
+          ? {
+              jobId: job.id,
+              actionName: job.actionName,
+              status: job.status,
+              groupKey: job.groupKey,
+              input: job.input,
+              output: job.output,
+              error: job.error,
+            }
+          : null
+
         // Resolve all pending waits for this job
         const waitsToResolve = Array.from(pendingWaits)
         this.#pendingJobWaits.delete(event.jobId)
@@ -808,7 +987,7 @@ export class Client<
           if (wait.signal && wait.abortHandler) {
             wait.signal.removeEventListener('abort', wait.abortHandler)
           }
-          wait.resolve(job)
+          wait.resolve(result)
         }
       },
     )
@@ -820,7 +999,7 @@ export class Client<
    * @param jobId - The job ID
    * @param resolve - The resolve function to remove
    */
-  #removeJobWait(jobId: string, resolve: (job: Job | null) => void) {
+  #removeJobWait(jobId: string, resolve: (result: JobResult | null) => void) {
     const pendingWaits = this.#pendingJobWaits.get(jobId)
     if (!pendingWaits) {
       return

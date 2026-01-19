@@ -269,7 +269,8 @@ The handler receives an extended context that includes:
 - **`signal`** - AbortSignal for cancellation support
 - **`stepId`** - Unique identifier for the current step
 - **`parentStepId`** - ID of the parent step (null for root steps)
-- **`step`** - Function to create nested child steps
+- **`step`** - Function to create nested inline child steps
+- **`run`** - Function to execute other reusable step definitions
 - **`observe`** - Observability context for metrics and tracing
 - **`var`** - Variables from the action context
 - **`logger`** - Pino logger instance
@@ -359,6 +360,50 @@ const processPaymentStep = createStep<typeof variables>()({
   },
 })
 ```
+
+### Composing Step Definitions
+
+Step definitions can call other step definitions using `ctx.run()`. This enables powerful composition patterns where you can build complex workflows from reusable building blocks:
+
+```ts
+// Inner step definition
+const validateOrderStep = createStep<typeof variables>()({
+  name: (ctx) => `validate-order-${ctx.input.orderId}`,
+  input: z.object({ orderId: z.string() }),
+  handler: async (ctx) => {
+    const order = await ctx.var.db.getOrder(ctx.input.orderId)
+    return { valid: order.items.length > 0, total: order.total }
+  },
+})
+
+// Outer step that calls inner step via ctx.run()
+const processOrderStep = createStep<typeof variables>()({
+  name: (ctx) => `process-order-${ctx.input.orderId}`,
+  input: z.object({ orderId: z.string() }),
+  handler: async (ctx) => {
+    // Call another step definition from within this step definition
+    const validation = await ctx.run(validateOrderStep, {
+      orderId: ctx.input.orderId,
+    })
+
+    if (!validation.valid) {
+      throw new Error('Invalid order')
+    }
+
+    return { processed: true, total: validation.total }
+  },
+})
+
+// Use in an action
+const orderAction = defineAction<typeof variables>()({
+  name: 'orderAction',
+  handler: async (ctx) => {
+    return ctx.run(processOrderStep, { orderId: ctx.input.orderId })
+  },
+})
+```
+
+This pattern supports arbitrary nesting depths. Each step definition call creates its own step in the database for tracking and observability.
 
 ### Step Options
 

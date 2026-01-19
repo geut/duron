@@ -736,6 +736,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
         var: this.#variables,
         logger: this.#logger,
         jobId: this.#jobId,
+        run: this.run.bind(this), // Allow nested step definitions to call ctx.run()
       }
       return stepDef.handler(extendedCtx)
     }

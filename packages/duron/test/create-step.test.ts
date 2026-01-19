@@ -151,6 +151,75 @@ const failingStep = createStep<typeof variables>()({
   },
 })
 
+/**
+ * Inner step that can be called from another step definition
+ */
+const innerStep = createStep<typeof variables>()({
+  name: (ctx) => `inner-step-${ctx.input.id}`,
+  input: z.object({
+    id: z.string(),
+    value: z.number(),
+  }),
+  handler: async (ctx) => {
+    return {
+      innerId: ctx.input.id,
+      doubledValue: ctx.input.value * 2,
+    }
+  },
+})
+
+/**
+ * Outer step that calls inner step via ctx.run()
+ */
+const outerStep = createStep<typeof variables>()({
+  name: 'outer-step',
+  input: z.object({
+    id: z.string(),
+    value: z.number(),
+  }),
+  handler: async (ctx) => {
+    // Call another step definition from within a step definition
+    const innerResult = await ctx.run(innerStep, {
+      id: ctx.input.id,
+      value: ctx.input.value,
+    })
+
+    return {
+      outerId: ctx.input.id,
+      innerResult,
+    }
+  },
+})
+
+/**
+ * Deeply nested step definitions (3 levels)
+ */
+const level3Step = createStep<typeof variables>()({
+  name: (ctx) => `level3-${ctx.input.level}`,
+  input: z.object({ level: z.number() }),
+  handler: async (ctx) => {
+    return { level: ctx.input.level, message: 'deepest' }
+  },
+})
+
+const level2Step = createStep<typeof variables>()({
+  name: (ctx) => `level2-${ctx.input.level}`,
+  input: z.object({ level: z.number() }),
+  handler: async (ctx) => {
+    const level3Result = await ctx.run(level3Step, { level: ctx.input.level + 1 })
+    return { level: ctx.input.level, nested: level3Result }
+  },
+})
+
+const level1Step = createStep<typeof variables>()({
+  name: (ctx) => `level1-${ctx.input.level}`,
+  input: z.object({ level: z.number() }),
+  handler: async (ctx) => {
+    const level2Result = await ctx.run(level2Step, { level: ctx.input.level + 1 })
+    return { level: ctx.input.level, nested: level2Result }
+  },
+})
+
 // =============================================================================
 // Test Actions
 // =============================================================================
@@ -315,6 +384,49 @@ const mixedStepsAction = defineAction<typeof variables>()({
   },
 })
 
+const nestedStepDefCallAction = defineAction<typeof variables>()({
+  name: 'nested-step-def-call-action',
+  version: '1.0.0',
+  input: z.object({
+    id: z.string(),
+    value: z.number(),
+  }),
+  output: z.object({
+    outerId: z.string(),
+    innerResult: z.object({
+      innerId: z.string(),
+      doubledValue: z.number(),
+    }),
+  }),
+  handler: async (ctx) => {
+    // Call a step definition that calls another step definition
+    return ctx.run(outerStep, {
+      id: ctx.input.id,
+      value: ctx.input.value,
+    })
+  },
+})
+
+const deeplyNestedStepDefAction = defineAction<typeof variables>()({
+  name: 'deeply-nested-step-def-action',
+  version: '1.0.0',
+  input: z.object({}),
+  output: z.object({
+    level: z.number(),
+    nested: z.object({
+      level: z.number(),
+      nested: z.object({
+        level: z.number(),
+        message: z.string(),
+      }),
+    }),
+  }),
+  handler: async (ctx) => {
+    // Call a step definition that calls another, which calls another (3 levels deep)
+    return ctx.run(level1Step, { level: 1 })
+  },
+})
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -331,6 +443,8 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         contextVerificationAction: typeof contextVerificationAction
         failingStepAction: typeof failingStepAction
         mixedStepsAction: typeof mixedStepsAction
+        nestedStepDefCallAction: typeof nestedStepDefCallAction
+        deeplyNestedStepDefAction: typeof deeplyNestedStepDefAction
       },
       typeof variables
     >
@@ -354,6 +468,8 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
             contextVerificationAction,
             failingStepAction,
             mixedStepsAction,
+            nestedStepDefCallAction,
+            deeplyNestedStepDefAction,
           },
           variables,
           syncPattern: false,
@@ -562,6 +678,67 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         const stepNames = stepsResult.steps.map((s) => s.name)
         expect(stepNames).toContain('inline-step')
         expect(stepNames).toContain('send-email')
+      })
+    })
+
+    describe('Nested Step Definitions with ctx.run()', () => {
+      it('should allow a step definition to call another step definition via ctx.run()', async () => {
+        const jobId = await client.runAction('nestedStepDefCallAction', {
+          id: 'test-123',
+          value: 5,
+        })
+        await client.fetch({ batchSize: 10 })
+
+        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        expectToBeDefined(job)
+        expect(job.status).toBe(JOB_STATUS_COMPLETED)
+
+        const output = job.output as {
+          outerId: string
+          innerResult: { innerId: string; doubledValue: number }
+        }
+        expect(output.outerId).toBe('test-123')
+        expect(output.innerResult.innerId).toBe('test-123')
+        expect(output.innerResult.doubledValue).toBe(10)
+
+        // Verify both step definitions created steps
+        const stepsResult = await client.getJobSteps({ jobId })
+        expect(stepsResult.steps.length).toBe(2)
+        const stepNames = stepsResult.steps.map((s) => s.name)
+        expect(stepNames).toContain('outer-step')
+        expect(stepNames).toContain('inner-step-test-123')
+      })
+
+      it('should support deeply nested step definitions (3 levels)', async () => {
+        const jobId = await client.runAction('deeplyNestedStepDefAction', {})
+        await client.fetch({ batchSize: 10 })
+
+        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        expectToBeDefined(job)
+        expect(job.status).toBe(JOB_STATUS_COMPLETED)
+
+        const output = job.output as {
+          level: number
+          nested: {
+            level: number
+            nested: {
+              level: number
+              message: string
+            }
+          }
+        }
+        expect(output.level).toBe(1)
+        expect(output.nested.level).toBe(2)
+        expect(output.nested.nested.level).toBe(3)
+        expect(output.nested.nested.message).toBe('deepest')
+
+        // Verify all 3 step definitions created steps
+        const stepsResult = await client.getJobSteps({ jobId })
+        expect(stepsResult.steps.length).toBe(3)
+        const stepNames = stepsResult.steps.map((s) => s.name)
+        expect(stepNames).toContain('level1-1')
+        expect(stepNames).toContain('level2-2')
+        expect(stepNames).toContain('level3-3')
       })
     })
   })

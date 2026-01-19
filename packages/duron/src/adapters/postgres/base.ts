@@ -1382,8 +1382,6 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _getMetrics(options: GetMetricsOptions): Promise<GetMetricsResult> {
     const metricsTable = this.tables.metricsTable
-    const page = options.page ?? 1
-    const pageSize = options.pageSize ?? 100
     const filters = options.filters ?? {}
 
     // Build WHERE clause
@@ -1404,8 +1402,6 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       return {
         metrics: [],
         total: 0,
-        page,
-        pageSize,
       }
     }
 
@@ -1427,14 +1423,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .from(metricsTable)
       .where(where)
       .orderBy(orderByClause)
-      .limit(pageSize)
-      .offset((page - 1) * pageSize)
 
     return {
       metrics,
       total,
-      page,
-      pageSize,
     }
   }
 

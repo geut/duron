@@ -12,7 +12,7 @@ import { useCancelJob, useDeleteJob, useJob, useRetryJob } from '@/lib/api'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { JsonView } from '../components/json-view'
-import { JobMetricsPanel } from '../components/metrics-panel'
+import { JobMetricsModal } from '../components/metrics-panel'
 import { isExpiring } from '../lib/is-expiring'
 
 interface JobDetailsProps {
@@ -282,17 +282,13 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
             )}
 
             {!job.output && <div className="text-sm text-muted-foreground italic">No output available</div>}
-
-            {/* Metrics Panel */}
-            {metricsEnabled && showMetrics && (
-              <div className="border-t pt-4">
-                <JobMetricsPanel jobId={job.id} />
-              </div>
-            )}
           </div>
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
+
+      {/* Metrics Modal */}
+      {metricsEnabled && <JobMetricsModal jobId={job.id} open={showMetrics} onClose={() => setShowMetrics(false)} />}
     </div>
   )
 }

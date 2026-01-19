@@ -16,31 +16,23 @@ interface Metric {
 interface MetricsResult {
   metrics: Metric[]
   total: number
-  page?: number
-  pageSize?: number
 }
 
 interface UseJobMetricsOptions {
   jobId: string | null
   enabled?: boolean
-  page?: number
-  pageSize?: number
 }
 
-export function useJobMetrics({ jobId, enabled = true, page = 1, pageSize = 50 }: UseJobMetricsOptions) {
+export function useJobMetrics({ jobId, enabled = true }: UseJobMetricsOptions) {
   const apiRequest = useApiRequest()
 
   return useQuery({
-    queryKey: ['job-metrics', jobId, page, pageSize],
+    queryKey: ['job-metrics', jobId],
     queryFn: async () => {
       if (!jobId) {
         return { metrics: [], total: 0 }
       }
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-      })
-      return apiRequest<MetricsResult>(`/jobs/${jobId}/metrics?${params}`)
+      return apiRequest<MetricsResult>(`/jobs/${jobId}/metrics`)
     },
     enabled: enabled && !!jobId,
   })
@@ -49,24 +41,18 @@ export function useJobMetrics({ jobId, enabled = true, page = 1, pageSize = 50 }
 interface UseStepMetricsOptions {
   stepId: string | null
   enabled?: boolean
-  page?: number
-  pageSize?: number
 }
 
-export function useStepMetrics({ stepId, enabled = true, page = 1, pageSize = 50 }: UseStepMetricsOptions) {
+export function useStepMetrics({ stepId, enabled = true }: UseStepMetricsOptions) {
   const apiRequest = useApiRequest()
 
   return useQuery({
-    queryKey: ['step-metrics', stepId, page, pageSize],
+    queryKey: ['step-metrics', stepId],
     queryFn: async () => {
       if (!stepId) {
         return { metrics: [], total: 0 }
       }
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-      })
-      return apiRequest<MetricsResult>(`/steps/${stepId}/metrics?${params}`)
+      return apiRequest<MetricsResult>(`/steps/${stepId}/metrics`)
     },
     enabled: enabled && !!stepId,
   })

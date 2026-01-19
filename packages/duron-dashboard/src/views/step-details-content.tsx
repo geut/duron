@@ -4,7 +4,7 @@ import { Activity } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { JsonView } from '@/components/json-view'
-import { StepMetricsPanel } from '@/components/metrics-panel'
+import { StepMetricsModal } from '@/components/metrics-panel'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useMetrics } from '@/contexts/metrics-context'
@@ -202,22 +202,18 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
         </div>
       )}
 
-      {/* Metrics Toggle Button */}
+      {/* Metrics Button */}
       {metricsEnabled && (
         <div>
-          <Button variant="outline" size="sm" onClick={() => setShowMetrics(!showMetrics)} className="w-full">
+          <Button variant="outline" size="sm" onClick={() => setShowMetrics(true)} className="w-full">
             <Activity className="h-4 w-4 mr-2" />
-            {showMetrics ? 'Hide Metrics' : 'Show Metrics'}
+            View Metrics
           </Button>
         </div>
       )}
 
-      {/* Metrics Panel */}
-      {metricsEnabled && showMetrics && (
-        <div className="border-t pt-4">
-          <StepMetricsPanel stepId={step.id} />
-        </div>
-      )}
+      {/* Metrics Modal */}
+      {metricsEnabled && <StepMetricsModal stepId={step.id} open={showMetrics} onClose={() => setShowMetrics(false)} />}
     </div>
   )
 }

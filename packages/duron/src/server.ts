@@ -179,10 +179,6 @@ export type GetJobStepsQueryInput = z.input<typeof GetJobStepsQuerySchema>
 // Metrics query schema
 export const GetMetricsQuerySchema = z
   .object({
-    // Pagination
-    page: z.coerce.number().int().min(1).optional(),
-    pageSize: z.coerce.number().int().min(1).max(1000).optional(),
-
     // Filters
     fName: z.union([z.string(), z.array(z.string())]).optional(),
     fType: z.union([MetricTypeSchema, z.array(MetricTypeSchema)]).optional(),
@@ -217,8 +213,6 @@ export const GetMetricsQuerySchema = z
     }
 
     return {
-      page: data.page,
-      pageSize: data.pageSize,
       filters: Object.keys(filters).length > 0 ? filters : undefined,
       sort,
     }
@@ -698,8 +692,6 @@ export function createServer<P extends string>({ client, prefix, login, metricsE
         }
         const options: GetMetricsOptions = {
           jobId: params.id,
-          page: query.page,
-          pageSize: query.pageSize,
           filters: query.filters,
           sort: query.sort,
         }
@@ -725,8 +717,6 @@ export function createServer<P extends string>({ client, prefix, login, metricsE
         }
         const options: GetMetricsOptions = {
           stepId: params.id,
-          page: query.page,
-          pageSize: query.pageSize,
           filters: query.filters,
           sort: query.sort,
         }

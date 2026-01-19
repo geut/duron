@@ -340,15 +340,11 @@ export const GetMetricsOptionsSchema = z.object({
   stepId: z.string().optional(),
   filters: MetricFiltersSchema.optional(),
   sort: MetricSortSchema.optional(),
-  page: z.number().int().positive().optional(),
-  pageSize: z.number().int().positive().optional(),
 })
 
 export const GetMetricsResultSchema = z.object({
   metrics: z.array(MetricSchema),
   total: z.number().int().nonnegative(),
-  page: z.number().int().positive().optional(),
-  pageSize: z.number().int().positive().optional(),
 })
 
 export const DeleteMetricsOptionsSchema = z.object({

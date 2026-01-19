@@ -573,7 +573,7 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
     })
 
     describe('Parallel Steps', () => {
-      it.only(
+      it(
         'should throw a timeout error when a nested step times out',
         async () => {
           const jobId = await client.runAction('parallelStepsAction', { delay: 3000 })
@@ -592,4 +592,4 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
 
 // Run tests with both adapters
 runNestedStepsTests(pgliteFactory)
-// runNestedStepsTests(postgresFactory)
+runNestedStepsTests(postgresFactory)

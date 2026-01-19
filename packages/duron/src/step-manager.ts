@@ -614,8 +614,9 @@ export class StepManager {
             ;(error as any).nonRetriable = true
             throw error
           }
+          const errorMessage = error instanceof Error ? error.message : String(error)
           throw new NonRetriableError(
-            `Failed to execute step="${name}", jobId="${this.#jobId}", action="${this.#actionName}", parentStepId="${parentStepId}"`,
+            `Failed to execute step="${name}", jobId="${this.#jobId}", action="${this.#actionName}", parentStepId="${parentStepId}": ${errorMessage}`,
             { cause: error },
           )
         }

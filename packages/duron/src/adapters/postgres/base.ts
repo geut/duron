@@ -1359,22 +1359,28 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   // ============================================================================
 
   /**
-   * Internal method to insert a metric record.
+   * Internal method to insert multiple metric records in a single batch.
    */
-  protected async _insertMetric(options: InsertMetricOptions): Promise<string> {
-    const [result] = await this.db
+  protected async _insertMetrics(metrics: InsertMetricOptions[]): Promise<number> {
+    if (metrics.length === 0) {
+      return 0
+    }
+
+    const values = metrics.map((m) => ({
+      job_id: m.jobId,
+      step_id: m.stepId ?? null,
+      name: m.name,
+      value: m.value,
+      attributes: m.attributes ?? {},
+      type: m.type,
+    }))
+
+    const result = await this.db
       .insert(this.tables.metricsTable)
-      .values({
-        job_id: options.jobId,
-        step_id: options.stepId ?? null,
-        name: options.name,
-        value: options.value,
-        attributes: options.attributes ?? {},
-        type: options.type,
-      })
+      .values(values)
       .returning({ id: this.tables.metricsTable.id })
 
-    return result!.id
+    return result.length
   }
 
   /**

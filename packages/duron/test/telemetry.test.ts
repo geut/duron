@@ -141,6 +141,9 @@ function runTelemetryTests(adapterFactory: AdapterFactory) {
         const job = await client.getJobById(jobId)
         expect(job?.status).toBe(JOB_STATUS_COMPLETED)
 
+        // Wait for metrics debounce flush (1 second debounce + buffer)
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+
         // Retrieve metrics
         const result = await client.getMetrics({ jobId })
         expect(result.metrics.length).toBeGreaterThan(0)
@@ -226,6 +229,9 @@ function runTelemetryTests(adapterFactory: AdapterFactory) {
         // Verify step ID was captured
         expect(capturedStepId).toBeTruthy()
 
+        // Wait for metrics debounce flush (1 second debounce + buffer)
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+
         // Get metrics for the specific step
         const stepMetrics = await client.getMetrics({ stepId: capturedStepId! })
         expect(stepMetrics.metrics.length).toBeGreaterThan(0)
@@ -301,6 +307,9 @@ function runTelemetryTests(adapterFactory: AdapterFactory) {
         const jobId = await client.runAction('action', {})
         await client.fetch({ batchSize: 10 })
         await new Promise((resolve) => setTimeout(resolve, 1000))
+
+        // Wait for metrics debounce flush (1 second debounce + buffer)
+        await new Promise((resolve) => setTimeout(resolve, 1500))
 
         // Get metrics via API
         const response = await server.handle(new Request(`http://localhost/api/jobs/${jobId}/metrics`))
@@ -425,6 +434,9 @@ function runTelemetryTests(adapterFactory: AdapterFactory) {
         const jobId = await client.runAction('action', {})
         await client.fetch({ batchSize: 10 })
         await new Promise((resolve) => setTimeout(resolve, 1000))
+
+        // Wait for metrics debounce flush (1 second debounce + buffer)
+        await new Promise((resolve) => setTimeout(resolve, 1500))
 
         const result = await client.getMetrics({ jobId })
 

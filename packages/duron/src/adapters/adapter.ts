@@ -997,20 +997,23 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
   // ============================================================================
 
   /**
-   * Insert a metric record.
+   * Insert multiple metric records in a single batch operation.
    * Note: This method bypasses telemetry tracing to prevent infinite loops.
    *
-   * @param options - The metric data to insert
-   * @returns Promise resolving to the metric ID
+   * @param metrics - Array of metric data to insert
+   * @returns Promise resolving to the number of metrics inserted
    */
-  async insertMetric(options: InsertMetricOptions): Promise<string> {
+  async insertMetrics(metrics: InsertMetricOptions[]): Promise<number> {
     try {
+      if (metrics.length === 0) {
+        return 0
+      }
       await this.start()
-      const parsedOptions = InsertMetricOptionsSchema.parse(options)
-      const result = await this._insertMetric(parsedOptions)
-      return z.string().parse(result)
+      const parsedMetrics = metrics.map((m) => InsertMetricOptionsSchema.parse(m))
+      const result = await this._insertMetrics(parsedMetrics)
+      return NumberResultSchema.parse(result)
     } catch (error) {
-      this.#logger?.error(error, 'Error in Adapter.insertMetric()')
+      this.#logger?.error(error, 'Error in Adapter.insertMetrics()')
       throw error
     }
   }
@@ -1062,12 +1065,12 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
   // ============================================================================
 
   /**
-   * Internal method to insert a metric record.
+   * Internal method to insert multiple metric records in a single batch.
    *
-   * @param options - Validated metric data
-   * @returns Promise resolving to the metric ID
+   * @param metrics - Array of validated metric data
+   * @returns Promise resolving to the number of metrics inserted
    */
-  protected abstract _insertMetric(options: InsertMetricOptions): Promise<string>
+  protected abstract _insertMetrics(metrics: InsertMetricOptions[]): Promise<number>
 
   /**
    * Internal method to get metrics for a job or step.

@@ -303,6 +303,21 @@ export class StepManager {
    * @returns Promise resolving to the step result
    */
   async push(task: TaskStep): Promise<any> {
+    // Warn about potential starvation when child steps are queued and all slots are occupied
+    if (task.parentStepId !== null && this.#queue.running() >= this.#queue.concurrency) {
+      this.#logger.warn(
+        {
+          jobId: this.#jobId,
+          actionName: this.#actionName,
+          stepName: task.name,
+          parentStepId: task.parentStepId,
+          running: this.#queue.running(),
+          waiting: this.#queue.length(),
+          concurrency: this.#queue.concurrency,
+        },
+        '[StepManager] Potential starvation: child step queued while all concurrency slots are occupied by parent steps. Consider increasing steps.concurrency.',
+      )
+    }
     return this.#queue.push(task)
   }
 

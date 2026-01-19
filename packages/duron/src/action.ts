@@ -353,9 +353,9 @@ export function createActionDefinitionSchema<
            * Function to determine the concurrency limit for a step.
            * The concurrency limit is stored with each step and used during fetch operations.
            * When fetching steps, the latest step's concurrency limit is used for each stepKey.
-           * If not provided, defaults to 10.
+           * If not provided, defaults to 100.
            */
-          concurrency: z.number().default(10).describe('How many steps can run concurrently for this action'),
+          concurrency: z.number().default(100).describe('How many steps can run concurrently for this action'),
           retry: RetryOptionsSchema.describe('How to retry on failure for the steps of this action'),
           expire: z
             .number()
@@ -363,7 +363,7 @@ export function createActionDefinitionSchema<
             .describe('How long a step can run for (milliseconds)'),
         })
         .default({
-          concurrency: 10,
+          concurrency: 100,
           retry: { limit: 4, factor: 2, minTimeout: 1000, maxTimeout: 30000 },
           expire: 5 * 60 * 1000,
         }),

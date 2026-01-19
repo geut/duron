@@ -61,7 +61,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       adapter: options.database,
       telemetry: options.telemetry,
       logger: options.logger,
-      concurrencyLimit: options.action.concurrency,
+      concurrencyLimit: options.action.steps.concurrency,
     })
 
     this.#done = new Promise((resolve) => {

@@ -23,7 +23,46 @@ import {
   serializeError,
   UnhandledChildStepsError,
 } from './errors.js'
-import type { ObserveContext, Span, TelemetryAdapter } from './telemetry/adapter.js'
+import type { ObserveContext, Span, TelemetryAdapter, Tracer, TracerSpan } from './telemetry/adapter.js'
+
+// ============================================================================
+// Noop Tracer (for fallback observe context)
+// ============================================================================
+
+const noopTracerSpan: TracerSpan = {
+  setAttribute() {
+    // No-op
+  },
+  setAttributes() {
+    // No-op
+  },
+  addEvent() {
+    // No-op
+  },
+  recordException() {
+    // No-op
+  },
+  setStatusOk() {
+    // No-op
+  },
+  setStatusError() {
+    // No-op
+  },
+  end() {
+    // No-op
+  },
+  isRecording() {
+    return false
+  },
+}
+
+const createNoopTracer = (name: string): Tracer => ({
+  name,
+  startSpan(): TracerSpan {
+    return noopTracerSpan
+  },
+})
+
 import pRetry from './utils/p-retry.js'
 import waitForAbort from './utils/wait-for-abort.js'
 
@@ -250,6 +289,9 @@ export class StepManager {
       },
       addSpanEvent: () => {
         // No-op
+      },
+      getTracer: (name: string) => {
+        return createNoopTracer(name)
       },
     }
   }

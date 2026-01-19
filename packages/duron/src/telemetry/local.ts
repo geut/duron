@@ -7,8 +7,11 @@ import {
   type Span,
   type StartDatabaseSpanOptions,
   type StartJobSpanOptions,
+  type StartSpanOptions,
   type StartStepSpanOptions,
   TelemetryAdapter,
+  type Tracer,
+  type TracerSpan,
 } from './adapter.js'
 
 // ============================================================================
@@ -303,6 +306,96 @@ export class LocalTelemetryAdapter extends TelemetryAdapter {
         value: String(options.value),
       },
     })
+  }
+
+  // ============================================================================
+  // Tracer Methods
+  // ============================================================================
+
+  protected _getTracer(name: string): Tracer {
+    const adapter = this
+
+    return {
+      name,
+
+      startSpan(spanName: string, options?: StartSpanOptions): TracerSpan {
+        const spanId = `tracer:${name}:${globalThis.crypto.randomUUID()}`
+        const startTime = Date.now()
+        let ended = false
+        const attributes: Record<string, string | number | boolean> = {
+          ...options?.attributes,
+        }
+
+        // Note: Local adapter tracer spans don't have a jobId context,
+        // so they can't be stored in the database. They're essentially no-ops
+        // but provide a consistent API for code that needs a tracer.
+        // For actual metrics storage, use ctx.observe within action/step handlers.
+
+        const tracerSpan: TracerSpan = {
+          setAttribute(key: string, value: string | number | boolean): void {
+            if (!ended) {
+              attributes[key] = value
+            }
+          },
+
+          setAttributes(attrs: Record<string, string | number | boolean>): void {
+            if (!ended) {
+              Object.assign(attributes, attrs)
+            }
+          },
+
+          addEvent(eventName: string, eventAttrs?: Record<string, string | number | boolean>): void {
+            if (!ended) {
+              adapter.logger?.debug({ spanId, event: eventName, attributes: eventAttrs }, 'Tracer span event')
+            }
+          },
+
+          recordException(error: Error): void {
+            if (!ended) {
+              attributes['error.message'] = error.message
+              attributes['error.name'] = error.name
+              adapter.logger?.debug({ spanId, error: error.message }, 'Tracer span exception')
+            }
+          },
+
+          setStatusOk(): void {
+            if (!ended) {
+              // biome-ignore lint/complexity/useLiteralKeys: Index signature requires bracket notation
+              attributes['status'] = 'ok'
+            }
+          },
+
+          setStatusError(message?: string): void {
+            if (!ended) {
+              // biome-ignore lint/complexity/useLiteralKeys: Index signature requires bracket notation
+              attributes['status'] = 'error'
+              if (message) {
+                attributes['status.message'] = message
+              }
+            }
+          },
+
+          end(): void {
+            if (!ended) {
+              ended = true
+              const duration = Date.now() - startTime
+              adapter.logger?.debug(
+                { spanId, spanName, tracerName: name, durationMs: duration, attributes },
+                'Tracer span ended',
+              )
+            }
+          },
+
+          isRecording(): boolean {
+            return !ended
+          },
+        }
+
+        adapter.logger?.debug({ spanId, spanName, tracerName: name }, 'Tracer span started')
+
+        return tracerSpan
+      },
+    }
   }
 }
 

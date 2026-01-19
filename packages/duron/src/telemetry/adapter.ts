@@ -109,6 +109,106 @@ export interface AddSpanAttributeOptions {
 }
 
 /**
+ * Options for starting a custom span with the tracer.
+ */
+export interface StartSpanOptions {
+  /**
+   * Span kind (internal, client, server, producer, consumer).
+   * @default 'internal'
+   */
+  kind?: 'internal' | 'client' | 'server' | 'producer' | 'consumer'
+
+  /**
+   * Initial attributes for the span.
+   */
+  attributes?: Record<string, string | number | boolean>
+
+  /**
+   * Parent span to use for context propagation.
+   * If not provided, uses the current active context.
+   */
+  parentSpan?: TracerSpan
+}
+
+/**
+ * A span created by the Tracer for manual instrumentation.
+ */
+export interface TracerSpan {
+  /**
+   * Set an attribute on the span.
+   *
+   * @param key - The attribute key
+   * @param value - The attribute value
+   */
+  setAttribute(key: string, value: string | number | boolean): void
+
+  /**
+   * Set multiple attributes on the span.
+   *
+   * @param attributes - The attributes to set
+   */
+  setAttributes(attributes: Record<string, string | number | boolean>): void
+
+  /**
+   * Add an event to the span.
+   *
+   * @param name - The event name
+   * @param attributes - Optional event attributes
+   */
+  addEvent(name: string, attributes?: Record<string, string | number | boolean>): void
+
+  /**
+   * Record an exception on the span.
+   *
+   * @param error - The error to record
+   */
+  recordException(error: Error): void
+
+  /**
+   * Set the span status to OK.
+   */
+  setStatusOk(): void
+
+  /**
+   * Set the span status to error.
+   *
+   * @param message - Optional error message
+   */
+  setStatusError(message?: string): void
+
+  /**
+   * End the span.
+   * After calling this, no more operations can be performed on the span.
+   */
+  end(): void
+
+  /**
+   * Check if this span is recording.
+   */
+  isRecording(): boolean
+}
+
+/**
+ * A Tracer provides methods for creating spans.
+ * Similar to OpenTelemetry's Tracer interface.
+ */
+export interface Tracer {
+  /**
+   * The name of this tracer.
+   */
+  readonly name: string
+
+  /**
+   * Start a new span.
+   *
+   * @param name - The name of the span
+   * @param options - Optional span configuration
+   * @returns A TracerSpan for manual instrumentation
+   */
+  startSpan(name: string, options?: StartSpanOptions): TracerSpan
+}
+
+/**
  * Observe context provided to action and step handlers.
  */
 export interface ObserveContext {
@@ -136,6 +236,37 @@ export interface ObserveContext {
    * @param attributes - Optional event attributes
    */
   addSpanEvent(name: string, attributes?: Record<string, any>): void
+
+  /**
+   * Get a tracer for manual instrumentation.
+   * Similar to OpenTelemetry's `trace.getTracer()` method.
+   *
+   * @param name - The name of the tracer (typically your service or library name)
+   * @returns A Tracer for creating custom spans
+   *
+   * @example
+   * ```typescript
+   * const tracer = ctx.observe.getTracer('my-service')
+   *
+   * const span = tracer.startSpan('external-api-call', {
+   *   kind: 'client',
+   *   attributes: { 'api.endpoint': '/users' }
+   * })
+   *
+   * try {
+   *   const result = await fetch('https://api.example.com/users')
+   *   span.setStatusOk()
+   *   return result
+   * } catch (error) {
+   *   span.recordException(error)
+   *   span.setStatusError(error.message)
+   *   throw error
+   * } finally {
+   *   span.end()
+   * }
+   * ```
+   */
+  getTracer(name: string): Tracer
 }
 
 // ============================================================================
@@ -370,6 +501,41 @@ export abstract class TelemetryAdapter {
   }
 
   // ============================================================================
+  // Tracer Methods
+  // ============================================================================
+
+  /**
+   * Get a tracer for manual instrumentation.
+   * Similar to OpenTelemetry's `trace.getTracer()` method.
+   *
+   * @param name - The name of the tracer (typically your service or library name)
+   * @returns A Tracer for creating custom spans
+   *
+   * @example
+   * ```typescript
+   * const tracer = telemetry.getTracer('my-service')
+   *
+   * const span = tracer.startSpan('process-order', {
+   *   attributes: { 'order.id': orderId }
+   * })
+   *
+   * try {
+   *   // Do some work
+   *   span.addEvent('order.validated')
+   *   span.setStatusOk()
+   * } catch (error) {
+   *   span.recordException(error)
+   *   span.setStatusError(error.message)
+   * } finally {
+   *   span.end()
+   * }
+   * ```
+   */
+  getTracer(name: string): Tracer {
+    return this._getTracer(name)
+  }
+
+  // ============================================================================
   // Context Methods
   // ============================================================================
 
@@ -403,6 +569,9 @@ export abstract class TelemetryAdapter {
         this.addSpanEvent({ span, name, attributes }).catch((err) => {
           this.#logger?.error(err, 'Error adding span event')
         })
+      },
+      getTracer: (name: string) => {
+        return this.getTracer(name)
       },
     }
   }
@@ -465,4 +634,9 @@ export abstract class TelemetryAdapter {
    * Internal method to add a span attribute.
    */
   protected abstract _addSpanAttribute(options: AddSpanAttributeOptions): Promise<void>
+
+  /**
+   * Internal method to get a tracer for manual instrumentation.
+   */
+  protected abstract _getTracer(name: string): Tracer
 }

@@ -8,7 +8,40 @@ import {
   type StartJobSpanOptions,
   type StartStepSpanOptions,
   TelemetryAdapter,
+  type Tracer,
+  type TracerSpan,
 } from './adapter.js'
+
+// ============================================================================
+// Noop Tracer Span
+// ============================================================================
+
+const noopTracerSpan: TracerSpan = {
+  setAttribute() {
+    // No-op
+  },
+  setAttributes() {
+    // No-op
+  },
+  addEvent() {
+    // No-op
+  },
+  recordException() {
+    // No-op
+  },
+  setStatusOk() {
+    // No-op
+  },
+  setStatusError() {
+    // No-op
+  },
+  end() {
+    // No-op
+  },
+  isRecording() {
+    return false
+  },
+}
 
 // ============================================================================
 // Noop Telemetry Adapter
@@ -83,6 +116,19 @@ export class NoopTelemetryAdapter extends TelemetryAdapter {
 
   protected async _addSpanAttribute(_options: AddSpanAttributeOptions): Promise<void> {
     // No-op
+  }
+
+  // ============================================================================
+  // Tracer Methods
+  // ============================================================================
+
+  protected _getTracer(name: string): Tracer {
+    return {
+      name,
+      startSpan(): TracerSpan {
+        return noopTracerSpan
+      },
+    }
   }
 }
 

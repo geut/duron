@@ -1,4 +1,4 @@
-import type { Span as OTelSpan, Tracer, TracerProvider } from '@opentelemetry/api'
+import type { Span as OTelSpan, Tracer as OTelTracer, TracerProvider } from '@opentelemetry/api'
 
 import {
   type AddSpanAttributeOptions,
@@ -8,8 +8,11 @@ import {
   type Span,
   type StartDatabaseSpanOptions,
   type StartJobSpanOptions,
+  type StartSpanOptions,
   type StartStepSpanOptions,
   TelemetryAdapter,
+  type Tracer,
+  type TracerSpan,
 } from './adapter.js'
 
 // ============================================================================
@@ -52,8 +55,9 @@ export class OpenTelemetryAdapter extends TelemetryAdapter {
   #serviceName: string
   #tracerProvider: TracerProvider | null
   #traceDatabaseQueries: boolean
-  #tracer: Tracer | null = null
+  #tracer: OTelTracer | null = null
   #spanMap = new Map<string, OTelSpan>()
+  #tracerCache = new Map<string, Tracer>()
 
   constructor(options: OpenTelemetryAdapterOptions = {}) {
     super()
@@ -297,6 +301,145 @@ export class OpenTelemetryAdapter extends TelemetryAdapter {
     if (extSpan.otelSpan) {
       extSpan.otelSpan.setAttribute(options.key, options.value)
     }
+  }
+
+  // ============================================================================
+  // Tracer Methods
+  // ============================================================================
+
+  protected _getTracer(name: string): Tracer {
+    // Return cached tracer if available
+    const cached = this.#tracerCache.get(name)
+    if (cached) {
+      return cached
+    }
+
+    const adapter = this
+
+    const tracer: Tracer = {
+      name,
+
+      startSpan(spanName: string, options?: StartSpanOptions): TracerSpan {
+        // We need to dynamically get the OpenTelemetry API
+        // Since _getTracer is synchronous, we need to handle this carefully
+        let otelSpan: OTelSpan | null = null
+        let api: typeof import('@opentelemetry/api') | null = null
+        let ended = false
+
+        // Initialize the span asynchronously but return synchronously
+        const initPromise = (async () => {
+          api = await import('@opentelemetry/api')
+
+          // Get the tracer
+          let otelTracer: OTelTracer
+          if (adapter.#tracerProvider) {
+            otelTracer = adapter.#tracerProvider.getTracer(name)
+          } else {
+            otelTracer = api.trace.getTracer(name)
+          }
+
+          // Map kind
+          let spanKind = api.SpanKind.INTERNAL
+          if (options?.kind === 'client') spanKind = api.SpanKind.CLIENT
+          else if (options?.kind === 'server') spanKind = api.SpanKind.SERVER
+          else if (options?.kind === 'producer') spanKind = api.SpanKind.PRODUCER
+          else if (options?.kind === 'consumer') spanKind = api.SpanKind.CONSUMER
+
+          // Get parent context
+          let parentContext = api.context.active()
+          if (options?.parentSpan) {
+            const parentOtelSpan = (options.parentSpan as any)._otelSpan as OTelSpan | undefined
+            if (parentOtelSpan) {
+              parentContext = api.trace.setSpan(api.context.active(), parentOtelSpan)
+            }
+          }
+
+          otelSpan = otelTracer.startSpan(
+            spanName,
+            {
+              kind: spanKind,
+              attributes: options?.attributes,
+            },
+            parentContext,
+          )
+        })()
+
+        const tracerSpan: TracerSpan & { _otelSpan?: OTelSpan } = {
+          setAttribute(key: string, value: string | number | boolean): void {
+            initPromise.then(() => {
+              if (otelSpan && !ended) {
+                otelSpan.setAttribute(key, value)
+              }
+            })
+          },
+
+          setAttributes(attributes: Record<string, string | number | boolean>): void {
+            initPromise.then(() => {
+              if (otelSpan && !ended) {
+                otelSpan.setAttributes(attributes)
+              }
+            })
+          },
+
+          addEvent(eventName: string, attributes?: Record<string, string | number | boolean>): void {
+            initPromise.then(() => {
+              if (otelSpan && !ended) {
+                otelSpan.addEvent(eventName, attributes)
+              }
+            })
+          },
+
+          recordException(error: Error): void {
+            initPromise.then(() => {
+              if (otelSpan && !ended) {
+                otelSpan.recordException(error)
+              }
+            })
+          },
+
+          setStatusOk(): void {
+            initPromise.then(() => {
+              if (otelSpan && api && !ended) {
+                otelSpan.setStatus({ code: api.SpanStatusCode.OK })
+              }
+            })
+          },
+
+          setStatusError(message?: string): void {
+            initPromise.then(() => {
+              if (otelSpan && api && !ended) {
+                otelSpan.setStatus({ code: api.SpanStatusCode.ERROR, message })
+              }
+            })
+          },
+
+          end(): void {
+            initPromise.then(() => {
+              if (otelSpan && !ended) {
+                ended = true
+                otelSpan.end()
+              }
+            })
+          },
+
+          isRecording(): boolean {
+            return otelSpan?.isRecording() ?? false
+          },
+        }
+
+        // Store reference for parent context propagation
+        initPromise.then(() => {
+          if (otelSpan) {
+            ;(tracerSpan as any)._otelSpan = otelSpan
+          }
+        })
+
+        return tracerSpan
+      },
+    }
+
+    this.#tracerCache.set(name, tracer)
+    return tracer
   }
 }
 

@@ -190,7 +190,11 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
             {Object.entries(step.historyFailedAttempts).map(([key, attempt]) => (
               <div key={key} className="p-2 bg-muted border rounded text-xs">
                 <div className="font-medium mb-1">Attempt at {formatDate(attempt.failedAt)}</div>
-                <JsonView value={attempt.error} title={`Attempt Error (${formatDate(attempt.failedAt)})`} height="100px" />
+                <JsonView
+                  value={attempt.error}
+                  title={`Attempt Error (${formatDate(attempt.failedAt)})`}
+                  height="100px"
+                />
                 {attempt.delayedMs && <div className="mt-1 text-muted-foreground">Delayed: {attempt.delayedMs}ms</div>}
               </div>
             ))}

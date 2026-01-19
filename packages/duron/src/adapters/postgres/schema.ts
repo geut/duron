@@ -119,7 +119,9 @@ export default function createSchema(schemaName: string) {
       index('idx_job_steps_output_fts').using('gin', sql`to_tsvector('english', ${table.output}::text)`),
       // Unique constraint - step name is unique within a parent (name + parentStepId)
       // nullsNotDistinct ensures NULL parent_step_id values are treated as equal for uniqueness
-      unique('unique_job_step_name_parent').on(table.job_id, table.name, table.parent_step_id).nullsNotDistinct(),
+      unique('unique_job_step_name_parent')
+        .on(table.job_id, table.name, table.parent_step_id)
+        .nullsNotDistinct(),
       check(
         'job_steps_status_check',
         sql`${table.status} IN ${sql.raw(`(${STEP_STATUSES.map((s) => `'${s}'`).join(',')})`)}`,

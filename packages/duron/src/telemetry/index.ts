@@ -9,8 +9,11 @@ export {
   type Span,
   type StartDatabaseSpanOptions,
   type StartJobSpanOptions,
+  type StartSpanOptions,
   type StartStepSpanOptions,
   TelemetryAdapter,
+  type Tracer,
+  type TracerSpan,
 } from './adapter.js'
 export { LocalTelemetryAdapter, type LocalTelemetryAdapterOptions, localTelemetryAdapter } from './local.js'
 export { NoopTelemetryAdapter, noopTelemetryAdapter } from './noop.js'

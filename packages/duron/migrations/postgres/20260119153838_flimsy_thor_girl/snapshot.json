@@ -2,9 +2,7 @@
   "version": "8",
   "dialect": "postgres",
   "id": "4e93c0bf-b135-40b4-b130-0cf0968bffe3",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "duron",
@@ -1268,14 +1266,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "job_id"
-      ],
+      "columns": ["job_id"],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "job_steps_job_id_jobs_id_fkey",
@@ -1285,14 +1279,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "job_id"
-      ],
+      "columns": ["job_id"],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "metrics_job_id_jobs_id_fkey",
@@ -1302,14 +1292,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "step_id"
-      ],
+      "columns": ["step_id"],
       "schemaTo": "duron",
       "tableTo": "job_steps",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "metrics_step_id_job_steps_id_fkey",
@@ -1318,9 +1304,7 @@
       "table": "metrics"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "job_steps_pkey",
       "schema": "duron",
@@ -1328,9 +1312,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "jobs_pkey",
       "schema": "duron",
@@ -1338,9 +1320,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "metrics_pkey",
       "schema": "duron",
@@ -1349,11 +1329,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "job_id",
-        "name",
-        "parent_step_id"
-      ],
+      "columns": ["job_id", "name", "parent_step_id"],
       "nullsNotDistinct": true,
       "name": "unique_job_step_name_parent",
       "entityType": "uniques",

@@ -1,8 +1,10 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "4dab3234-6e6b-4a65-a5c5-c898bf2f3911",
-  "prevIds": ["e32fddc5-6d55-4c79-87b4-13d3a01b7d09"],
+  "id": "4e93c0bf-b135-40b4-b130-0cf0968bffe3",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
   "ddl": [
     {
       "name": "duron",
@@ -17,6 +19,12 @@
     {
       "isRlsEnabled": false,
       "name": "jobs",
+      "entityType": "tables",
+      "schema": "duron"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "metrics",
       "entityType": "tables",
       "schema": "duron"
     },
@@ -461,6 +469,123 @@
       "entityType": "columns",
       "schema": "duron",
       "table": "jobs"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "step_id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "value",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "attributes",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "type",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "timestamp",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "metrics"
     },
     {
       "nameExplicit": true,
@@ -932,11 +1057,225 @@
       "table": "jobs"
     },
     {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_metrics_job_id",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "step_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_metrics_step_id",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_metrics_name",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "type",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_metrics_type",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "timestamp",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_metrics_timestamp",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "step_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_metrics_job_step",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_metrics_job_name",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "type",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_metrics_job_type",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "attributes",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "gin",
+      "concurrently": false,
+      "name": "idx_metrics_attributes",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
       "nameExplicit": false,
-      "columns": ["job_id"],
+      "columns": [
+        "job_id"
+      ],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": ["id"],
+      "columnsTo": [
+        "id"
+      ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "job_steps_job_id_jobs_id_fkey",
@@ -945,7 +1284,43 @@
       "table": "job_steps"
     },
     {
-      "columns": ["id"],
+      "nameExplicit": false,
+      "columns": [
+        "job_id"
+      ],
+      "schemaTo": "duron",
+      "tableTo": "jobs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "metrics_job_id_jobs_id_fkey",
+      "entityType": "fks",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "step_id"
+      ],
+      "schemaTo": "duron",
+      "tableTo": "job_steps",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "metrics_step_id_job_steps_id_fkey",
+      "entityType": "fks",
+      "schema": "duron",
+      "table": "metrics"
+    },
+    {
+      "columns": [
+        "id"
+      ],
       "nameExplicit": false,
       "name": "job_steps_pkey",
       "schema": "duron",
@@ -953,7 +1328,9 @@
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
+      "columns": [
+        "id"
+      ],
       "nameExplicit": false,
       "name": "jobs_pkey",
       "schema": "duron",
@@ -961,10 +1338,24 @@
       "entityType": "pks"
     },
     {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "metrics_pkey",
+      "schema": "duron",
+      "table": "metrics",
+      "entityType": "pks"
+    },
+    {
       "nameExplicit": true,
-      "columns": ["job_id", "name"],
-      "nullsNotDistinct": false,
-      "name": "unique_job_step_name",
+      "columns": [
+        "job_id",
+        "name",
+        "parent_step_id"
+      ],
+      "nullsNotDistinct": true,
+      "name": "unique_job_step_name_parent",
       "entityType": "uniques",
       "schema": "duron",
       "table": "job_steps"
@@ -982,6 +1373,13 @@
       "entityType": "checks",
       "schema": "duron",
       "table": "jobs"
+    },
+    {
+      "value": "\"type\" IN ('metric', 'span_event', 'span_attribute')",
+      "name": "metrics_type_check",
+      "entityType": "checks",
+      "schema": "duron",
+      "table": "metrics"
     }
   ],
   "renames": []

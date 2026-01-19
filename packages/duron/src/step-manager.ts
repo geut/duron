@@ -148,7 +148,7 @@ export class StepManager {
   #telemetry: TelemetryAdapter
   #queue: fastq.queueAsPromised<TaskStep, any>
   #logger: Logger
-  // each step name should be executed only once per action job
+  // each step name should be executed only once per parent (name + parentStepId)
   #historySteps = new Set<string>()
   // Store step spans for nested step tracking
   #stepSpans = new Map<string, Span>()
@@ -173,10 +173,12 @@ export class StepManager {
     this.#telemetry = options.telemetry
     this.#stepStore = new StepStore(options.adapter)
     this.#queue = fastq.promise(async (task: TaskStep) => {
-      if (this.#historySteps.has(task.name)) {
+      // Create composite key: name + parentStepId (allows same name under different parents)
+      const stepKey = `${task.parentStepId ?? 'root'}:${task.name}`
+      if (this.#historySteps.has(stepKey)) {
         throw new StepAlreadyExecutedError(task.name, this.#jobId, this.#actionName)
       }
-      this.#historySteps.add(task.name)
+      this.#historySteps.add(stepKey)
       return this.#executeStep(task.name, task.cb, task.options, task.abortSignal, task.parentStepId, task.parallel)
     }, options.concurrencyLimit)
   }

@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { createStep, defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
-import { JOB_STATUS_COMPLETED, JOB_STATUS_FAILED } from '../src/constants.js'
+import { JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, STEP_STATUS_FAILED } from '../src/constants.js'
 import { type Adapter, type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.js'
 import { expectToBeDefined } from './asserts.js'
 
@@ -148,6 +148,22 @@ const failingStep = createStep<typeof variables>()({
       throw new Error('Step failed intentionally')
     }
     return { success: true }
+  },
+})
+
+/**
+ * Step that always fails but retries before giving up
+ */
+const failingWithRetryStep = createStep<typeof variables>()({
+  name: 'failing-with-retry-step',
+  input: z.object({
+    message: z.string(),
+  }),
+  retry: { limit: 3, minTimeout: 10, maxTimeout: 50, factor: 1 }, // 3 retries with minimal delays
+  handler: async (ctx) => {
+    // Increment counter to track how many times handler was called
+    ctx.var.counter++
+    throw new Error(`Step failed: ${ctx.input.message}`)
   },
 })
 
@@ -356,6 +372,22 @@ const failingStepAction = defineAction<typeof variables>()({
   },
 })
 
+const failingWithRetryAction = defineAction<typeof variables>()({
+  name: 'failing-with-retry-action',
+  version: '1.0.0',
+  input: z.object({
+    message: z.string(),
+  }),
+  output: z.object({
+    success: z.boolean(),
+  }),
+  handler: async (ctx) => {
+    // Reset counter before test
+    ctx.var.counter = 0
+    return ctx.run(failingWithRetryStep, { message: ctx.input.message })
+  },
+})
+
 const mixedStepsAction = defineAction<typeof variables>()({
   name: 'mixed-steps-action',
   version: '1.0.0',
@@ -456,6 +488,41 @@ const inlineStepCallsRunAction = defineAction<typeof variables>()({
   },
 })
 
+/**
+ * Step that has a generic name - used to test that same name works under different parents
+ */
+const commonNameStep = createStep<typeof variables>()({
+  name: 'process', // Common name that could be used under different parents
+  input: z.object({ value: z.string() }),
+  handler: async (ctx) => {
+    return { processed: ctx.input.value }
+  },
+})
+
+const sameNameDifferentParentsAction = defineAction<typeof variables>()({
+  name: 'same-name-different-parents-action',
+  version: '1.0.0',
+  input: z.object({}),
+  output: z.object({
+    parent1Result: z.object({ processed: z.string() }),
+    parent2Result: z.object({ processed: z.string() }),
+  }),
+  handler: async (ctx) => {
+    // Two different parent inline steps, each calling a step with the same name
+    const parent1Result = await ctx.step('parent-1', async (stepCtx) => {
+      // This 'process' step has parent 'parent-1'
+      return stepCtx.run(commonNameStep, { value: 'from-parent-1' })
+    })
+
+    const parent2Result = await ctx.step('parent-2', async (stepCtx) => {
+      // This 'process' step has parent 'parent-2' - should work despite same name
+      return stepCtx.run(commonNameStep, { value: 'from-parent-2' })
+    })
+
+    return { parent1Result, parent2Result }
+  },
+})
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -471,10 +538,12 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         nestedStepDefAction: typeof nestedStepDefAction
         contextVerificationAction: typeof contextVerificationAction
         failingStepAction: typeof failingStepAction
+        failingWithRetryAction: typeof failingWithRetryAction
         mixedStepsAction: typeof mixedStepsAction
         nestedStepDefCallAction: typeof nestedStepDefCallAction
         deeplyNestedStepDefAction: typeof deeplyNestedStepDefAction
         inlineStepCallsRunAction: typeof inlineStepCallsRunAction
+        sameNameDifferentParentsAction: typeof sameNameDifferentParentsAction
       },
       typeof variables
     >
@@ -497,10 +566,12 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
             nestedStepDefAction,
             contextVerificationAction,
             failingStepAction,
+            failingWithRetryAction,
             mixedStepsAction,
             nestedStepDefCallAction,
             deeplyNestedStepDefAction,
             inlineStepCallsRunAction,
+            sameNameDifferentParentsAction,
           },
           variables,
           syncPattern: false,
@@ -682,6 +753,42 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         expectToBeDefined(job)
         expect(job.status).toBe(JOB_STATUS_COMPLETED)
       })
+
+      it('should retry step definition before failing action', async () => {
+        // Reset the counter
+        variables.counter = 0
+
+        const jobId = await client.runAction('failingWithRetryAction', {
+          message: 'retry test',
+        })
+
+        // Process the job (may need multiple fetches for retries)
+        for (let i = 0; i < 10; i++) {
+          await client.fetch({ batchSize: 10 })
+          await new Promise((resolve) => setTimeout(resolve, 100))
+        }
+
+        const job = await client.waitForJob(jobId, { timeout: 10000 })
+        expectToBeDefined(job)
+
+        // The action should have failed
+        expect(job.status).toBe(JOB_STATUS_FAILED)
+        expect(job.error).toBeDefined()
+        expect(job.error.message).toContain('Step failed: retry test')
+
+        // The step should have been called 4 times (1 initial + 3 retries)
+        // Note: counter is reset in the action handler before calling run
+        // But the step handler increments it each time
+        expect(variables.counter).toBe(4)
+
+        // Verify the step also failed
+        const stepsResult = await client.getJobSteps({ jobId })
+        expect(stepsResult.steps.length).toBe(1)
+        const step = stepsResult.steps[0]!
+        expect(step.name).toBe('failing-with-retry-step')
+        expect(step.status).toBe(STEP_STATUS_FAILED)
+        expect(step.retriesCount).toBe(3) // 3 retries after initial attempt
+      })
     })
 
     describe('Mixed Steps', () => {
@@ -824,6 +931,43 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
 
         // The step definition step should have the inline step as its parent
         expect(innerStep.parentStepId).toBe(outerStep.id)
+      })
+    })
+
+    describe('Step Name Uniqueness with Parent Scope', () => {
+      it('should allow same step name under different parent steps', async () => {
+        const jobId = await client.runAction('sameNameDifferentParentsAction', {})
+        await client.fetch({ batchSize: 10 })
+
+        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        expectToBeDefined(job)
+        expect(job.status).toBe(JOB_STATUS_COMPLETED)
+
+        const output = job.output as {
+          parent1Result: { processed: string }
+          parent2Result: { processed: string }
+        }
+        expect(output.parent1Result.processed).toBe('from-parent-1')
+        expect(output.parent2Result.processed).toBe('from-parent-2')
+
+        // Verify all 4 steps exist (2 parents + 2 'process' steps)
+        const stepsResult = await client.getJobSteps({ jobId })
+        expect(stepsResult.steps.length).toBe(4)
+
+        // Both 'process' steps should exist with different parents
+        const processSteps = stepsResult.steps.filter((s) => s.name === 'process')
+        expect(processSteps.length).toBe(2)
+
+        // Verify they have different parents
+        const parent1 = stepsResult.steps.find((s) => s.name === 'parent-1')
+        const parent2 = stepsResult.steps.find((s) => s.name === 'parent-2')
+        expectToBeDefined(parent1)
+        expectToBeDefined(parent2)
+
+        const process1 = processSteps.find((s) => s.parentStepId === parent1.id)
+        const process2 = processSteps.find((s) => s.parentStepId === parent2.id)
+        expectToBeDefined(process1)
+        expectToBeDefined(process2)
       })
     })
   })

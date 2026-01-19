@@ -788,7 +788,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       step_existed AS (
         SELECT EXISTS(
           SELECT 1 FROM ${this.tables.jobStepsTable} s
-          WHERE s.job_id = ${jobId} AND s.name = ${name}
+          WHERE s.job_id = ${jobId} 
+            AND s.name = ${name}
+            AND s.parent_step_id IS NOT DISTINCT FROM ${parentStepId}
         ) AS existed
       ),
       upserted_step AS (
@@ -818,7 +820,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           0,
           NULL
         WHERE EXISTS (SELECT 1 FROM job_check)
-        ON CONFLICT (job_id, name) DO UPDATE
+        ON CONFLICT (job_id, name, parent_step_id) DO UPDATE
         SET
           timeout_ms = ${timeoutMs},
           expires_at = now() + interval '${sql.raw(timeoutMs.toString())} milliseconds',
@@ -858,6 +860,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         INNER JOIN job_check jc ON s.job_id = jc.id
         WHERE s.job_id = ${jobId}
           AND s.name = ${name}
+          AND s.parent_step_id IS NOT DISTINCT FROM ${parentStepId}
           AND NOT EXISTS (SELECT 1 FROM final_upserted)
       )
       SELECT * FROM final_upserted

@@ -255,9 +255,7 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
             {job.input && (
               <div>
                 <div className="font-medium mb-1">Input</div>
-                <div className="p-3 border rounded">
-                  <JsonView value={job.input} />
-                </div>
+                <JsonView value={job.input} title="Job Input" />
               </div>
             )}
 
@@ -266,18 +264,14 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
             {job.error && (
               <div>
                 <div className="font-medium text-destructive mb-1">Error</div>
-                <div className="border rounded p-3">
-                  <JsonView value={job.error} />
-                </div>
+                <JsonView value={job.error} title="Job Error" />
               </div>
             )}
 
             {job.output && (
               <div>
                 <div className="font-medium mb-1">Output</div>
-                <div className="p-3 border rounded">
-                  <JsonView value={job.output} />
-                </div>
+                <JsonView value={job.output} title="Job Output" />
               </div>
             )}
 

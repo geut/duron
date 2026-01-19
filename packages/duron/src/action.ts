@@ -133,18 +133,13 @@ export interface StepDefinitionHandlerContext<TInput extends z.ZodObject, TVaria
    * The job ID this step belongs to.
    */
   jobId: string
-
 }
 
 /**
  * A reusable step definition created with createStep().
  * Can be executed within an action handler using ctx.run().
  */
-export interface StepDefinition<
-  TInput extends z.ZodObject,
-  TResult,
-  TVariables = Record<string, unknown>,
-> {
+export interface StepDefinition<TInput extends z.ZodObject, TResult, TVariables = Record<string, unknown>> {
   /**
    * The name of the step.
    * Can be a static string or a function that generates the name from the input.
@@ -417,11 +412,10 @@ export const defineAction = <TVariables = Record<string, unknown>>() => {
 /**
  * Input type for createStep() - the definition object before transformation.
  */
-export type StepDefinitionInput<
-  TInput extends z.ZodObject,
-  TResult,
-  TVariables = Record<string, unknown>,
-> = Omit<StepDefinition<TInput, TResult, TVariables>, '__stepDefinition'>
+export type StepDefinitionInput<TInput extends z.ZodObject, TResult, TVariables = Record<string, unknown>> = Omit<
+  StepDefinition<TInput, TResult, TVariables>,
+  '__stepDefinition'
+>
 
 /**
  * Creates a reusable step definition that can be executed within action handlers.

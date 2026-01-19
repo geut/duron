@@ -49,7 +49,7 @@ function MetricItem({ metric }: MetricItemProps) {
             <span>Attributes</span>
           </div>
           <div className="text-xs">
-            <JsonView value={metric.attributes} />
+            <JsonView value={metric.attributes} title="Metric Attributes" height="100px" />
           </div>
         </div>
       )}
@@ -250,7 +250,7 @@ function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }
               <div className="text-xs text-primary font-medium mb-1">Query Result</div>
               <div className="text-sm font-mono">
                 {typeof jsonataResult.primitiveValue === 'object' ? (
-                  <JsonView value={jsonataResult.primitiveValue} />
+                  <JsonView value={jsonataResult.primitiveValue} title="Query Result" height="150px" />
                 ) : (
                   String(jsonataResult.primitiveValue)
                 )}

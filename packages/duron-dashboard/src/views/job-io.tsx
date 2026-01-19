@@ -33,9 +33,7 @@ export function JobIO({ jobId }: JobIOProps) {
         {job.input && (
           <div>
             <div className="font-medium mb-1">Input</div>
-            <div className="p-3 border rounded">
-              <JsonView value={job.input} />
-            </div>
+            <JsonView value={job.input} title="Job Input" />
           </div>
         )}
 
@@ -44,9 +42,7 @@ export function JobIO({ jobId }: JobIOProps) {
         {job.output && (
           <div>
             <div className="font-medium mb-1">Output</div>
-            <div className="p-3 border rounded">
-              <JsonView value={job.output} />
-            </div>
+            <JsonView value={job.output} title="Job Output" />
           </div>
         )}
 

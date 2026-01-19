@@ -154,6 +154,8 @@ export class StepManager {
   #stepSpans = new Map<string, Span>()
   // Store the job span for creating step spans
   #jobSpan: Span | null = null
+  // Factory function to create run functions with the correct parent step ID and abort signal
+  #runFnFactory: ((parentStepId: string | null, abortSignal: AbortSignal) => StepHandlerContext['run']) | null = null
 
   // ============================================================================
   // Constructor
@@ -185,6 +187,16 @@ export class StepManager {
    */
   setJobSpan(span: Span): void {
     this.#jobSpan = span
+  }
+
+  /**
+   * Set the run function factory for executing step definitions from inline steps.
+   * Called from ActionContext after it's initialized.
+   *
+   * @param factory - A function that creates run functions with the correct parent step ID and abort signal
+   */
+  setRunFnFactory(factory: (parentStepId: string | null, abortSignal: AbortSignal) => StepHandlerContext['run']): void {
+    this.#runFnFactory = factory
   }
 
   // ============================================================================
@@ -426,6 +438,7 @@ export class StepManager {
 
           return childPromise
         },
+        run: this.#runFnFactory!(step.id, childSignal),
       }
 
       try {
@@ -612,6 +625,10 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
     this.#input = job.input ?? {}
     this.step = this.step.bind(this)
     this.run = this.run.bind(this)
+    // Set the run function factory so inline steps can call step definitions with correct parent
+    this.#stepManager.setRunFnFactory((parentStepId, abortSignal) => {
+      return (stepDef, input, options) => this.#runInternal(stepDef, input, options, parentStepId, abortSignal)
+    })
   }
 
   // ============================================================================
@@ -694,6 +711,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
 
   /**
    * Execute a reusable step definition created with createStep().
+   * This is the public method called from action handlers.
    *
    * @param stepDef - The step definition to execute
    * @param input - The input data for the step (validated against the step's input schema)
@@ -704,6 +722,20 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
     stepDef: StepDefinition<TStepInput, TResult, TVariables>,
     input: z.input<TStepInput>,
     options: Partial<z.input<typeof StepOptionsSchema>> = {},
+  ): Promise<TResult> {
+    return this.#runInternal(stepDef, input, options, null, this.#abortSignal)
+  }
+
+  /**
+   * Internal method to execute a step definition with explicit parent step ID and abort signal.
+   * Used by both the public run method and the run functions passed to step contexts.
+   */
+  async #runInternal<TStepInput extends z.ZodObject, TResult>(
+    stepDef: StepDefinition<TStepInput, TResult, TVariables>,
+    input: z.input<TStepInput>,
+    options: Partial<z.input<typeof StepOptionsSchema>> = {},
+    parentStepId: string | null,
+    abortSignal: AbortSignal,
   ): Promise<TResult> {
     // Validate input against the step's schema if provided
     // After parsing, validatedInput is z.output<TStepInput> (same as z.infer<TStepInput>)
@@ -736,7 +768,6 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
         var: this.#variables,
         logger: this.#logger,
         jobId: this.#jobId,
-        run: this.run.bind(this), // Allow nested step definitions to call ctx.run()
       }
       return stepDef.handler(extendedCtx)
     }
@@ -745,8 +776,8 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
       name: stepName,
       cb: wrappedCb,
       options: parsedOptions,
-      abortSignal: this.#abortSignal,
-      parentStepId: null, // Root steps have no parent
+      abortSignal,
+      parentStepId,
       parallel: parsedOptions.parallel,
     })
   }

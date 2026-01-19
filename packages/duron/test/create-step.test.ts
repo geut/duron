@@ -427,6 +427,35 @@ const deeplyNestedStepDefAction = defineAction<typeof variables>()({
   },
 })
 
+const inlineStepCallsRunAction = defineAction<typeof variables>()({
+  name: 'inline-step-calls-run-action',
+  version: '1.0.0',
+  input: z.object({
+    email: z.string().email(),
+  }),
+  output: z.object({
+    inlineStepResult: z.object({
+      stepDefResult: z.object({
+        success: z.boolean(),
+        recipient: z.string(),
+      }),
+    }),
+  }),
+  handler: async (ctx) => {
+    // Use inline step that calls ctx.run() inside
+    const inlineStepResult = await ctx.step('outer-inline-step', async (stepCtx) => {
+      // Call a step definition from within an inline step
+      const stepDefResult = await stepCtx.run(sendEmailStep, {
+        email: ctx.input.email,
+        body: 'Called from inline step',
+      })
+      return { stepDefResult }
+    })
+
+    return { inlineStepResult }
+  },
+})
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -445,6 +474,7 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         mixedStepsAction: typeof mixedStepsAction
         nestedStepDefCallAction: typeof nestedStepDefCallAction
         deeplyNestedStepDefAction: typeof deeplyNestedStepDefAction
+        inlineStepCallsRunAction: typeof inlineStepCallsRunAction
       },
       typeof variables
     >
@@ -470,6 +500,7 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
             mixedStepsAction,
             nestedStepDefCallAction,
             deeplyNestedStepDefAction,
+            inlineStepCallsRunAction,
           },
           variables,
           syncPattern: false,
@@ -739,6 +770,60 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         expect(stepNames).toContain('level1-1')
         expect(stepNames).toContain('level2-2')
         expect(stepNames).toContain('level3-3')
+      })
+    })
+
+    describe('Inline Steps calling ctx.run()', () => {
+      it('should allow inline steps to call step definitions via ctx.run()', async () => {
+        const jobId = await client.runAction('inlineStepCallsRunAction', {
+          email: 'inline-test@example.com',
+        })
+        await client.fetch({ batchSize: 10 })
+
+        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        expectToBeDefined(job)
+        expect(job.status).toBe(JOB_STATUS_COMPLETED)
+
+        const output = job.output as {
+          inlineStepResult: {
+            stepDefResult: { success: boolean; recipient: string }
+          }
+        }
+        expect(output.inlineStepResult.stepDefResult.success).toBe(true)
+        expect(output.inlineStepResult.stepDefResult.recipient).toBe('inline-test@example.com')
+
+        // Verify both the inline step and the step definition created steps
+        const stepsResult = await client.getJobSteps({ jobId })
+        expect(stepsResult.steps.length).toBe(2)
+        const stepNames = stepsResult.steps.map((s) => s.name)
+        expect(stepNames).toContain('outer-inline-step')
+        expect(stepNames).toContain('send-email')
+      })
+
+      it('should set correct parent step ID when calling ctx.run() from inline step', async () => {
+        const jobId = await client.runAction('inlineStepCallsRunAction', {
+          email: 'parent-test@example.com',
+        })
+        await client.fetch({ batchSize: 10 })
+
+        await client.waitForJob(jobId, { timeout: 5000 })
+
+        // Get all steps and verify parent relationship
+        const stepsResult = await client.getJobSteps({ jobId })
+        expect(stepsResult.steps.length).toBe(2)
+
+        // Find the outer inline step and the nested step definition step
+        const outerStep = stepsResult.steps.find((s) => s.name === 'outer-inline-step')
+        const innerStep = stepsResult.steps.find((s) => s.name === 'send-email')
+
+        expectToBeDefined(outerStep)
+        expectToBeDefined(innerStep)
+
+        // The outer inline step should have no parent (root step)
+        expect(outerStep.parentStepId).toBeNull()
+
+        // The step definition step should have the inline step as its parent
+        expect(innerStep.parentStepId).toBe(outerStep.id)
       })
     })
   })

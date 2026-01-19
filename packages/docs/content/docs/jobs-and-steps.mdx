@@ -127,15 +127,20 @@ The step handler receives a context object with:
 - **`signal`** - AbortSignal for cancellation support
 - **`stepId`** - Unique identifier for the current step
 - **`parentStepId`** - ID of the parent step (null for root steps)
-- **`step`** - Function to create nested child steps
+- **`step`** - Function to create nested inline child steps
+- **`run`** - Function to execute reusable step definitions
 - **`observe`** - Observability context for metrics and tracing (see [Telemetry](/docs/telemetry))
 
 ```ts
-await ctx.step('fetchData', async ({ signal, stepId, parentStepId }) => {
+await ctx.step('fetchData', async ({ signal, stepId, parentStepId, run }) => {
   console.log(`Executing step ${stepId}, parent: ${parentStepId}`)
 
   // Use signal for cancellation
   const response = await fetch(url, { signal })
+
+  // Call a step definition from within an inline step
+  await run(sendEmailStep, { to: 'user@example.com', body: 'Done!' })
+
   return response.json()
 })
 ```

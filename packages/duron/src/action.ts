@@ -91,6 +91,21 @@ export interface StepHandlerContext {
     cb: (ctx: StepHandlerContext) => Promise<TResult>,
     options?: z.input<typeof StepOptionsSchema>,
   ) => Promise<TResult>
+
+  /**
+   * Execute a reusable step definition created with createStep().
+   * Allows inline steps to call step definitions.
+   *
+   * @param stepDef - The step definition to execute
+   * @param input - The input data for the step (validated against the step's input schema)
+   * @param options - Optional step configuration overrides
+   * @returns Promise resolving to the step result
+   */
+  run: <TStepInput extends z.ZodObject, TResult>(
+    stepDef: StepDefinition<TStepInput, TResult, any>,
+    input: z.input<TStepInput>,
+    options?: Partial<z.input<typeof StepOptionsSchema>>,
+  ) => Promise<TResult>
 }
 
 /**
@@ -119,20 +134,6 @@ export interface StepDefinitionHandlerContext<TInput extends z.ZodObject, TVaria
    */
   jobId: string
 
-  /**
-   * Execute a reusable step definition created with createStep().
-   * Allows nested step definitions to call other step definitions.
-   *
-   * @param stepDef - The step definition to execute
-   * @param input - The input data for the step (validated against the step's input schema)
-   * @param options - Optional step configuration overrides
-   * @returns Promise resolving to the step result
-   */
-  run: <TStepInput extends z.ZodObject, TResult>(
-    stepDef: StepDefinition<TStepInput, TResult, TVariables>,
-    input: z.input<TStepInput>,
-    options?: Partial<z.input<typeof StepOptionsSchema>>,
-  ) => Promise<TResult>
 }
 
 /**

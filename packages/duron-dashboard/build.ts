@@ -46,6 +46,10 @@ const [indexResult, initResult] = await Promise.all([
     format: 'esm',
     target: 'browser',
     sourcemap: 'linked',
+    minify: true,
+    define: {
+      'process.env.NODE_ENV': '"production"',
+    },
     external: [...Object.keys(pkg.dependencies), ...Object.keys(pkg.devDependencies)],
   }),
   Bun.build({
@@ -55,6 +59,9 @@ const [indexResult, initResult] = await Promise.all([
     format: 'esm',
     minify: true,
     target: 'browser',
+    define: {
+      'process.env.NODE_ENV': '"production"',
+    },
     sourcemap: 'linked',
   }),
 ])

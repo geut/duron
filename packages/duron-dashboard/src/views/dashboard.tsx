@@ -21,6 +21,7 @@ import { useLayout } from '@/contexts/layout-context'
 import { useIsMobile } from '@/hooks/use-is-mobile'
 import { useJobParams } from '@/hooks/use-job-params'
 import { useDeleteJobs } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { JobDetails } from './job-details'
 import { JobsTable } from './jobs-table'
 import { StepList } from './step-list'
@@ -28,9 +29,11 @@ import { StepList } from './step-list'
 interface DashboardProps {
   showLogo?: boolean
   enableLogin?: boolean
+  showThemeToggle?: boolean
+  className?: string
 }
 
-export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProps) {
+export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle = true, className }: DashboardProps) {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   const [createJobDialogOpen, setCreateJobDialogOpen] = useState(false)
@@ -145,12 +148,12 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
   }, [params, deleteJobsMutation])
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className={cn('h-screen flex flex-col', className)}>
       <header className="border-b p-2 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4">
         <div className="flex items-center justify-between w-full sm:w-auto">
           {showLogo && <Logo className="h-8 sm:h-10" />}
           <div className="flex items-center gap-2 sm:hidden">
-            <ThemeToggle />
+            {showThemeToggle && <ThemeToggle />}
             <DropdownMenu>
               <DropdownMenuTrigger asChild={true}>
                 <Button variant="outline" size="sm" className="h-8 w-8 p-0">
@@ -188,7 +191,7 @@ export function Dashboard({ showLogo = true, enableLogin = true }: DashboardProp
           <JobSearch className="w-full sm:w-full sm:max-w-2xl" />
         </div>
         <div className="hidden sm:flex items-center gap-2 order-2 sm:order-3">
-          <ThemeToggle />
+          {showThemeToggle && <ThemeToggle />}
           <DropdownMenu>
             <DropdownMenuTrigger asChild={true}>
               <Button variant="outline" size="sm">

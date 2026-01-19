@@ -11,7 +11,7 @@ import type { JobStatus, StepStatus } from 'duron/constants'
 import type { GetJobStepsQueryInput, GetJobsQueryInput } from 'duron/server'
 import { useCallback } from 'react'
 
-import { useApi } from '@/contexts/api-context'
+import { type CustomFetch, useApi, useFetch } from '@/contexts/api-context'
 
 // Re-export types from duron package
 export type { ActionStats, GetActionsResult, Job, JobStep, JobStatus, StepStatus }
@@ -23,14 +23,14 @@ export type GetJobStepsParams = GetJobStepsQueryInput
 export type GetJobStepsResponse = GetJobStepsResult
 
 // Token refresh function
-async function refreshAccessToken(baseUrl: string): Promise<string> {
+async function refreshAccessToken(baseUrl: string, fetchFn: CustomFetch): Promise<string> {
   const refreshToken = localStorage.getItem('refresh_token')
   if (!refreshToken) {
     throw new Error('No refresh token available')
   }
 
   const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-  const response = await fetch(`${normalizedBaseUrl}/refresh`, {
+  const response = await fetchFn(`${normalizedBaseUrl}/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken }),
@@ -51,6 +51,7 @@ async function refreshAccessToken(baseUrl: string): Promise<string> {
 // API client functions
 export function useApiRequest() {
   const { baseUrl } = useApi()
+  const fetchFn = useFetch()
 
   return useCallback(
     async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -69,7 +70,7 @@ export function useApiRequest() {
       // Ensure baseUrl doesn't end with /
       const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
 
-      let response = await fetch(`${normalizedBaseUrl}${normalizedEndpoint}`, {
+      let response = await fetchFn(`${normalizedBaseUrl}${normalizedEndpoint}`, {
         ...options,
         headers,
       })
@@ -77,10 +78,10 @@ export function useApiRequest() {
       // If we get a 401, try to refresh the token and retry once
       if (response.status === 401 && token && endpoint !== '/refresh' && endpoint !== '/login') {
         try {
-          const newToken = await refreshAccessToken(baseUrl)
+          const newToken = await refreshAccessToken(baseUrl, fetchFn)
           // Retry the request with the new token
           headers.Authorization = `Bearer ${newToken}`
-          response = await fetch(`${normalizedBaseUrl}${normalizedEndpoint}`, {
+          response = await fetchFn(`${normalizedBaseUrl}${normalizedEndpoint}`, {
             ...options,
             headers,
           })
@@ -98,17 +99,18 @@ export function useApiRequest() {
 
       return response.json()
     },
-    [baseUrl],
+    [baseUrl, fetchFn],
   )
 }
 
 // Auth API
 export function useLogin() {
   const { baseUrl } = useApi()
+  const fetchFn = useFetch()
   return useMutation({
     mutationFn: async (credentials: { email: string; password: string }) => {
       const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-      const response = await fetch(`${normalizedBaseUrl}/login`, {
+      const response = await fetchFn(`${normalizedBaseUrl}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),

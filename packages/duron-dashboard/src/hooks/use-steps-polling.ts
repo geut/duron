@@ -1,10 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 
+import { usePollingInterval } from '@/contexts/polling-context'
 import type { GetJobStepsResponse } from '@/lib/api'
 import { useApiRequest } from '@/lib/api'
-
-const POLL_INTERVAL = 2000 // 2 seconds
 
 /**
  * Hook to poll for step updates for a specific job and trigger refetch when updates are detected.
@@ -13,6 +12,7 @@ const POLL_INTERVAL = 2000 // 2 seconds
 export function useStepsPolling(jobId: string | null, enabled: boolean = true) {
   const queryClient = useQueryClient()
   const apiRequest = useApiRequest()
+  const pollingInterval = usePollingInterval()
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -75,7 +75,7 @@ export function useStepsPolling(jobId: string | null, enabled: boolean = true) {
     }
 
     // Set up polling interval
-    intervalRef.current = setInterval(pollForUpdates, POLL_INTERVAL)
+    intervalRef.current = setInterval(pollForUpdates, pollingInterval)
 
     return () => {
       if (intervalRef.current) {
@@ -83,7 +83,7 @@ export function useStepsPolling(jobId: string | null, enabled: boolean = true) {
         intervalRef.current = null
       }
     }
-  }, [enabled, jobId, lastUpdatedAt, queryClient, apiRequest])
+  }, [enabled, jobId, lastUpdatedAt, queryClient, apiRequest, pollingInterval])
 
   // Update lastUpdatedAt when steps data changes
   useEffect(() => {

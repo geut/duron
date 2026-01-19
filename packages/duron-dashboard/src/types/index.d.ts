@@ -19,6 +19,17 @@ export interface DuronDashboardProps {
    * Defaults to true.
    */
   showLogo?: boolean
+  /**
+   * Custom fetch function to use for API requests.
+   * This allows you to intercept, modify, or wrap fetch calls.
+   * Defaults to the native fetch.
+   */
+  customFetch?: CustomFetch
+  /**
+   * Controls whether the theme toggle button is shown in the navbar.
+   * Defaults to true.
+   */
+  showThemeToggle?: boolean
 }
 
 /**

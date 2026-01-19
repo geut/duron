@@ -1,13 +1,33 @@
-import { createContext, type ReactNode, useContext } from 'react'
+import { createContext, type ReactNode, useContext, useMemo } from 'react'
+
+export type CustomFetch = typeof fetch
 
 interface ApiContextType {
   baseUrl: string
+  customFetch: CustomFetch
 }
 
 const ApiContext = createContext<ApiContextType | undefined>(undefined)
 
-export function ApiProvider({ children, baseUrl }: { children: ReactNode; baseUrl: string }) {
-  return <ApiContext.Provider value={{ baseUrl }}>{children}</ApiContext.Provider>
+export interface ApiProviderProps {
+  children: ReactNode
+  baseUrl: string
+  /**
+   * Custom fetch function to use for API requests.
+   * Defaults to the native fetch.
+   */
+  customFetch?: CustomFetch
+}
+
+export function ApiProvider({ children, baseUrl, customFetch }: ApiProviderProps) {
+  const value = useMemo(
+    () => ({
+      baseUrl,
+      customFetch: customFetch ?? fetch,
+    }),
+    [baseUrl, customFetch],
+  )
+  return <ApiContext.Provider value={value}>{children}</ApiContext.Provider>
 }
 
 export function useApi() {
@@ -16,4 +36,9 @@ export function useApi() {
     throw new Error('useApi must be used within an ApiProvider')
   }
   return context
+}
+
+export function useFetch() {
+  const { customFetch } = useApi()
+  return customFetch
 }

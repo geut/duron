@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { createContext, type ReactNode, useContext } from 'react'
 
-import { useApi } from './api-context'
+import { useApi, useFetch } from './api-context'
 import { useAuth } from './auth-context'
 
 interface MetricsContextType {
@@ -14,6 +14,7 @@ const MetricsContext = createContext<MetricsContextType | undefined>(undefined)
 export function MetricsProvider({ children }: { children: ReactNode }) {
   const { baseUrl } = useApi()
   const { token } = useAuth()
+  const fetchFn = useFetch()
 
   const { data, isLoading } = useQuery({
     queryKey: ['config'],
@@ -22,7 +23,7 @@ export function MetricsProvider({ children }: { children: ReactNode }) {
       if (token) {
         headers.Authorization = `Bearer ${token}`
       }
-      const response = await fetch(`${baseUrl}/config`, { headers })
+      const response = await fetchFn(`${baseUrl}/config`, { headers })
       if (!response.ok) {
         throw new Error('Failed to fetch config')
       }

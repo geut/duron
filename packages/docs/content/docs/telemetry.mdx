@@ -1,245 +1,244 @@
 ---
 title: Telemetry
-description: Add observability to your job queue with telemetry adapters
+description: Add observability to your job queue with OpenTelemetry tracing
 icon: Activity
 ---
 
-Duron provides a pluggable telemetry system that gives you visibility into job and step execution. You can integrate with OpenTelemetry for external tracing systems or use the built-in local telemetry for database-backed metrics.
-
-## Telemetry Adapters
-
-Duron supports three telemetry adapters:
-
-| Adapter | Use Case |
-|---------|----------|
-| `localTelemetryAdapter()` | Store metrics in the Duron database. Perfect for development and self-hosted deployments. |
-| `openTelemetryAdapter()` | Export traces to OpenTelemetry backends (Jaeger, Zipkin, OTLP collectors). |
-| `noopTelemetryAdapter()` | Disable telemetry (default behavior). |
-
-## Installation
-
-For OpenTelemetry support, install the optional peer dependencies:
-
-```bash
-# Using npm
-npm install @opentelemetry/api @opentelemetry/sdk-trace-node @opentelemetry/exporter-trace-otlp-http
-
-# Using bun
-bun add @opentelemetry/api @opentelemetry/sdk-trace-node @opentelemetry/exporter-trace-otlp-http
-```
-
-For local telemetry, no additional dependencies are needed.
+Duron provides built-in OpenTelemetry support for tracing job and step execution. You can store spans locally in the database, export to external systems, or both.
 
 ## Configuration
 
-Configure the `telemetry` option when creating a Duron client:
-
-### Local Telemetry
-
-Store metrics directly in the Duron database. This is the simplest option and works great for development and self-hosted deployments.
+Configure telemetry when creating a Duron client:
 
 ```ts
 import { duron } from 'duron'
 import { postgresAdapter } from 'duron/adapters/postgres'
-import { localTelemetryAdapter } from 'duron/telemetry'
 
 const client = duron({
   database: postgresAdapter({
     connection: process.env.DATABASE_URL,
   }),
   actions: { /* your actions */ },
-  telemetry: localTelemetryAdapter(),
+  telemetry: {
+    local: true, // Store spans in the database
+  },
 })
 ```
 
-The local telemetry adapter automatically uses the same database as your Duron client.
+### Configuration Options
 
-### OpenTelemetry
+| Option | Type | Description |
+|--------|------|-------------|
+| `local` | `boolean \| LocalTelemetryOptions` | Enable local span storage in the database |
+| `traceExporter` | `SpanExporter` | Export spans to external systems (OTLP, Jaeger, etc.) |
+| `spanProcessors` | `SpanProcessor[]` | Add custom span processors |
+| `serviceName` | `string` | Service name for OpenTelemetry resource (default: `'duron'`) |
 
-Export traces to external systems like Jaeger, Zipkin, or any OTLP-compatible collector:
+### Local Storage
+
+Store spans in the Duron database for querying via the API or dashboard:
 
 ```ts
-import { duron } from 'duron'
-import { postgresAdapter } from 'duron/adapters/postgres'
-import { openTelemetryAdapter } from 'duron/telemetry'
+// Simple: enable with defaults
+telemetry: { local: true }
 
-const client = duron({
-  database: postgresAdapter({
-    connection: process.env.DATABASE_URL,
-  }),
-  actions: { /* your actions */ },
-  telemetry: openTelemetryAdapter({
-    serviceName: 'my-job-queue',
-    exporterUrl: 'http://localhost:4318/v1/traces', // OTLP HTTP endpoint
-  }),
-})
+// Custom flush delay (default: 5000ms)
+telemetry: { local: { flushDelayMs: 10000 } }
 ```
 
-### Disable Telemetry
+### External Export
 
-To explicitly disable telemetry (this is the default behavior):
+Export spans to OpenTelemetry-compatible backends:
 
 ```ts
-import { noopTelemetryAdapter } from 'duron/telemetry'
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 
-const client = duron({
-  // ...
-  telemetry: noopTelemetryAdapter(),
-})
+telemetry: {
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces',
+  }),
+}
 ```
 
-## Recording Custom Metrics
+### Combined
 
-The `ctx.observe` object is available in both action and step handlers. Use it to record custom metrics, add span attributes, and add span events.
+Use both local storage and external export:
 
-### In Action Handlers
+```ts
+telemetry: {
+  local: true,
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces',
+  }),
+}
+```
+
+## Telemetry Context
+
+Both action and step handlers have access to `ctx.telemetry` which provides OpenTelemetry APIs:
+
+```ts
+interface TelemetryContext {
+  // Get the active span for the current job/step
+  getActiveSpan(): Span | undefined
+
+  // Get a tracer for creating custom spans
+  getTracer(name: string): Tracer
+
+  // Convenience method to create a child span
+  startSpan(name: string, options?: { attributes?: Record<string, any> }): Span
+
+  // Record a metric as a span event
+  recordMetric(name: string, value: number, attributes?: Record<string, any>): void
+}
+```
+
+### Recording Metrics
+
+Use `recordMetric()` to record numeric metrics as span events:
 
 ```ts
 const processOrder = defineAction()({
-  name: 'processOrder',
+  name: 'process-order',
   input: z.object({ orderId: z.string() }),
   handler: async (ctx) => {
     const startTime = Date.now()
 
-    // Add attributes to the job span
-    ctx.observe.addSpanAttribute('order.id', ctx.input.orderId)
-    ctx.observe.addSpanAttribute('order.priority', 'high')
-
-    // Add events to mark important points
-    ctx.observe.addSpanEvent('order.processing.started')
-
-    const result = await ctx.step('process', async () => {
-      // ... processing logic
+    const result = await ctx.step('process', async ({ telemetry }) => {
+      // Record step-specific metrics
+      telemetry.recordMetric('items.count', 5)
+      telemetry.recordMetric('order.value', 99.99, { currency: 'USD' })
+      
       return { success: true }
     })
 
-    // Record custom metrics
-    const duration = Date.now() - startTime
-    ctx.observe.recordMetric('order.processing.duration_ms', duration)
-    ctx.observe.recordMetric('order.total_value', 99.99, {
-      currency: 'USD',
-    })
-
-    ctx.observe.addSpanEvent('order.processing.completed')
+    // Record action-level metrics
+    ctx.telemetry.recordMetric('processing.duration_ms', Date.now() - startTime)
 
     return result
   },
 })
 ```
 
-### In Step Handlers
+### Creating Custom Spans
+
+Use `startSpan()` for simple custom spans:
 
 ```ts
+const result = await ctx.step('with-custom-span', async ({ telemetry }) => {
+  const span = telemetry.startSpan('custom-operation', {
+    attributes: { 'custom.input': 'value' },
+  })
+
+  try {
+    // Do work...
+    span.setAttribute('custom.output', 'result')
+    return { success: true }
+  } finally {
+    span.end()
+  }
+})
+```
+
+### Integration with External Libraries
+
+Use `getTracer()` to get an OpenTelemetry tracer for external library integration. The tracer automatically links spans to the current job/step trace:
+
+```ts
+import { generateText } from 'ai'
+import { openai } from '@ai-sdk/openai'
+
 const aiAction = defineAction()({
   name: 'ai-generation',
   input: z.object({ prompt: z.string() }),
   handler: async (ctx) => {
-    const response = await ctx.step('call-openai', async (stepCtx) => {
-      // Add step-specific attributes
-      stepCtx.observe.addSpanAttribute('ai.model', 'gpt-4o')
-      stepCtx.observe.addSpanAttribute('ai.prompt.length', ctx.input.prompt.length)
+    const response = await ctx.step('generate', async ({ telemetry }) => {
+      // Pass the tracer to AI SDK - spans are automatically linked
+      const result = await generateText({
+        prompt: ctx.input.prompt,
+        model: openai('gpt-4o-mini'),
+        experimental_telemetry: {
+          isEnabled: true,
+          tracer: telemetry.getTracer('ai'),
+        },
+      })
 
-      // Record token usage as metrics
-      stepCtx.observe.recordMetric('ai.tokens.input', 150, { model: 'gpt-4o' })
-      stepCtx.observe.recordMetric('ai.tokens.output', 300, { model: 'gpt-4o' })
-      stepCtx.observe.recordMetric('ai.cost.usd', 0.005, { model: 'gpt-4o' })
-
-      // Add events for timing
-      stepCtx.observe.addSpanEvent('openai.request.sent')
-
-      // Simulate API call
-      const result = await callOpenAI(ctx.input.prompt)
-
-      stepCtx.observe.addSpanEvent('openai.response.received')
-
-      return result
+      return result.text
     })
 
-    return response
+    return { response }
   },
 })
 ```
 
-## Observe API Reference
+The tracer returned by `getTracer()` is context-aware and automatically injects the parent span, so external libraries don't need to manually handle context propagation.
 
-The `observe` object provides three methods:
+### Working with the Active Span
 
-### `recordMetric(name, value, attributes?)`
-
-Record a numeric metric with optional attributes:
+Access the current span directly for advanced use cases:
 
 ```ts
-ctx.observe.recordMetric('api.request.duration_ms', 150)
-ctx.observe.recordMetric('tokens.consumed', 500, { model: 'gpt-4' })
+const result = await ctx.step('advanced', async ({ telemetry }) => {
+  const span = telemetry.getActiveSpan()
+  
+  if (span) {
+    span.setAttribute('user.id', 'user-123')
+    span.addEvent('processing.started')
+    
+    // Do work...
+    
+    span.addEvent('processing.completed', { items: 5 })
+  }
+
+  return { success: true }
+})
 ```
 
-### `addSpanAttribute(key, value)`
+## Querying Spans
 
-Add an attribute to the current span:
+When local telemetry is enabled, query spans via the client API:
 
 ```ts
-ctx.observe.addSpanAttribute('user.id', 'user-123')
-ctx.observe.addSpanAttribute('order.items.count', 5)
-ctx.observe.addSpanAttribute('payment.method', 'card')
+// Get spans for a specific job
+const { spans, total } = await client.getSpans({
+  jobId: 'job-id',
+  page: 1,
+  pageSize: 50,
+})
+
+// Get spans for a specific step
+const { spans } = await client.getSpans({
+  stepId: 'step-id',
+})
+
+// Filter by name pattern
+const { spans } = await client.getSpans({
+  jobId: 'job-id',
+  filters: {
+    name: 'ai.', // Matches spans starting with 'ai.'
+  },
+})
 ```
 
-### `addSpanEvent(name, attributes?)`
+### Span Structure
 
-Add an event to the current span:
+Each span includes:
 
 ```ts
-ctx.observe.addSpanEvent('payment.authorized')
-ctx.observe.addSpanEvent('email.sent', { recipient: 'user@example.com' })
-```
-
-## Accessing Metrics via Dashboard
-
-When using `localTelemetryAdapter()`, metrics are stored in the database and can be viewed in the Duron Dashboard. The dashboard will show a "View Metrics" button on job and step detail views.
-
-## Accessing Metrics via API
-
-When local telemetry is enabled, you can access metrics through the REST API:
-
-### Get Job Metrics
-
-```http
-GET /api/jobs/:jobId/metrics
-```
-
-Query parameters:
-- `page` - Page number (default: 1)
-- `pageSize` - Items per page (default: 10)
-- `sort` - Sort format: `field:order` (e.g., `timestamp:desc`)
-- `fName` - Filter by metric name
-- `fType` - Filter by metric type
-
-### Get Step Metrics
-
-```http
-GET /api/steps/:stepId/metrics
-```
-
-Same query parameters as job metrics.
-
-### Example Response
-
-```json
-{
-  "metrics": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "jobId": "123e4567-e89b-12d3-a456-426614174000",
-      "stepId": null,
-      "name": "order.processing.duration_ms",
-      "value": 1523,
-      "type": "metric",
-      "attributes": {},
-      "timestamp": "2024-01-15T10:30:00.000Z"
-    }
-  ],
-  "total": 1,
-  "page": 1,
-  "pageSize": 10
+interface Span {
+  traceId: string
+  spanId: string
+  parentSpanId: string | null
+  jobId: string | null
+  stepId: string | null
+  name: string
+  kind: SpanKind
+  startTimeUnixNano: bigint
+  endTimeUnixNano: bigint | null
+  statusCode: SpanStatusCode
+  statusMessage: string | null
+  attributes: Record<string, any>
+  events: SpanEvent[]
 }
 ```
 
@@ -247,63 +246,82 @@ Same query parameters as job metrics.
 
 Duron automatically creates spans for:
 
-- **Job execution** - A root span for each job with action name, group key, and status
-- **Step execution** - Child spans for each step linked to the parent job span
+| Span Type | Name Format | Attributes |
+|-----------|-------------|------------|
+| Job | `job:{actionName}` | `duron.job.id`, `duron.action.name`, `duron.group.key` |
+| Step | `step:{stepName}` | `duron.job.id`, `duron.step.id`, `duron.step.name`, `duron.step.parent_id` |
 
-These spans include:
+Spans include:
 - Start and end timestamps
 - Duration
-- Status (ok, error, cancelled)
+- Status (ok, error)
 - Error details when applicable
+- Parent-child relationships for nested steps
 
 ## Best Practices
 
-### Use Meaningful Metric Names
-
-Follow a consistent naming convention:
+### Use Descriptive Metric Names
 
 ```ts
 // Good: Namespaced and descriptive
-ctx.observe.recordMetric('order.processing.duration_ms', duration)
-ctx.observe.recordMetric('ai.tokens.total', tokens)
+telemetry.recordMetric('order.processing.duration_ms', duration)
+telemetry.recordMetric('ai.tokens.total', tokens)
 
 // Bad: Generic and unclear
-ctx.observe.recordMetric('time', duration)
-ctx.observe.recordMetric('count', tokens)
+telemetry.recordMetric('time', duration)
+telemetry.recordMetric('count', tokens)
 ```
 
 ### Add Context with Attributes
 
-Use attributes to add context that helps with filtering and debugging:
-
 ```ts
-ctx.observe.recordMetric('api.request.duration_ms', 250, {
+telemetry.recordMetric('api.request.duration_ms', 250, {
   endpoint: '/users',
   method: 'GET',
   statusCode: 200,
 })
 ```
 
-### Use Events for Milestones
-
-Mark important points in your job execution:
-
-```ts
-ctx.observe.addSpanEvent('validation.started')
-// ... validation logic
-ctx.observe.addSpanEvent('validation.completed', { valid: true })
-```
-
 ### Track Costs and Resources
-
-Record resource consumption for billing and optimization:
 
 ```ts
 // AI token usage
-stepCtx.observe.recordMetric('ai.tokens.input', inputTokens)
-stepCtx.observe.recordMetric('ai.tokens.output', outputTokens)
-stepCtx.observe.recordMetric('ai.cost.usd', cost)
-
-// API rate limits
-stepCtx.observe.recordMetric('api.ratelimit.remaining', remaining)
+telemetry.recordMetric('ai.tokens.input', inputTokens)
+telemetry.recordMetric('ai.tokens.output', outputTokens)
+telemetry.recordMetric('ai.cost.usd', cost, { model: 'gpt-4o' })
 ```
+
+### Always End Custom Spans
+
+```ts
+const span = telemetry.startSpan('operation')
+try {
+  // Do work...
+} finally {
+  span.end() // Always end the span
+}
+```
+
+## Installation
+
+For external OpenTelemetry export, install the required packages:
+
+```bash
+# Core OpenTelemetry packages (included with duron)
+# @opentelemetry/api and @opentelemetry/sdk-trace-node are peer dependencies
+
+# For OTLP export
+bun add @opentelemetry/exporter-trace-otlp-http
+
+# For Jaeger
+bun add @opentelemetry/exporter-jaeger
+```
+
+## Architecture Notes
+
+Duron's telemetry implementation:
+
+- **Does not globally register** the tracer provider, avoiding conflicts with other telemetry in your application
+- Uses a **context-aware tracer wrapper** that automatically links spans to the correct trace hierarchy
+- Stores spans with `duron.job.id` attribute for job association
+- Queries spans by `trace_id` to include external library spans (like AI SDK) in job results

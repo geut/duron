@@ -1,11 +1,34 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import type { ThemeOption } from './contexts/theme-context'
+/**
+ * Theme values that can be applied to the dashboard.
+ */
+export type Theme = 'light' | 'dark'
 
+/**
+ * Theme options for configuring the dashboard theme.
+ * - 'light': Always use light theme
+ * - 'dark': Always use dark theme
+ * - 'system': Use the system preference (default)
+ */
+export type ThemeOption = Theme | 'system'
+
+/**
+ * Options for generating the dashboard HTML.
+ */
 export interface GetHTMLOptions {
+  /**
+   * The base URL for the Duron API.
+   */
   url: string
+  /**
+   * Enable authentication flow (login/logout) in the dashboard.
+   */
   enableLogin: boolean
+  /**
+   * Controls whether the Duron logo is shown in the navbar.
+   */
   showLogo: boolean
   /**
    * The theme to use for the dashboard.
@@ -17,6 +40,26 @@ export interface GetHTMLOptions {
 }
 
 let cachedHTML: string | null = null
+
+/**
+ * Generate the HTML for the Duron Dashboard.
+ * The HTML is cached after the first call.
+ *
+ * @param options - Configuration options for the dashboard
+ * @returns The complete HTML string for the dashboard
+ *
+ * @example
+ * ```ts
+ * import { getHTML } from 'duron-dashboard/get-html'
+ *
+ * const html = await getHTML({
+ *   url: 'http://localhost:3000/api',
+ *   enableLogin: true,
+ *   showLogo: true,
+ *   theme: 'dark'
+ * })
+ * ```
+ */
 export async function getHTML({ url, enableLogin, showLogo, theme }: GetHTMLOptions): Promise<string> {
   if (cachedHTML) return cachedHTML
 

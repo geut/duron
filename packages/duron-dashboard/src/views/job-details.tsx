@@ -9,6 +9,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { useMetrics } from '@/contexts/metrics-context'
 import { useJobStatusPolling } from '@/hooks/use-job-status-polling'
 import { useCancelJob, useDeleteJob, useJob, useRetryJob } from '@/lib/api'
+import { formatExpirationWindow, formatMsToSeconds } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { JsonView } from '../components/json-view'
@@ -226,7 +227,7 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
             )}
             {job.timeoutMs && (
               <div>
-                <span className="font-medium">Timeout:</span> {job.timeoutMs}ms
+                <span className="font-medium">Timeout:</span> {formatMsToSeconds(job.timeoutMs)}
               </div>
             )}
             {job.expiresAt && (
@@ -244,7 +245,8 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
                       : ''
                   }
                 >
-                  {formatDate(job.expiresAt)}
+                  {formatDate(job.expiresAt)}{' '}
+                  {formatExpirationWindow(job.startedAt, job.expiresAt)}
                 </span>
               </div>
             )}

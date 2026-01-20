@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useMetrics } from '@/contexts/metrics-context'
 import { useStepStatusPolling } from '@/hooks/use-step-status-polling'
 import { useStep } from '@/lib/api'
+import { formatExpirationWindow, formatMsToSeconds } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { isExpiring } from '../lib/is-expiring'
@@ -135,7 +136,7 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
           </div>
           {step.timeoutMs && (
             <div>
-              <span className="font-medium">Timeout:</span> {step.timeoutMs}ms
+              <span className="font-medium">Timeout:</span> {formatMsToSeconds(step.timeoutMs)}
             </div>
           )}
           {step.expiresAt && (
@@ -153,7 +154,8 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
                     : ''
                 }
               >
-                {formatDate(step.expiresAt)}
+                {formatDate(step.expiresAt)}{' '}
+                {formatExpirationWindow(step.startedAt, step.expiresAt)}
               </span>
             </div>
           )}

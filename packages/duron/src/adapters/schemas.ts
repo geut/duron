@@ -46,6 +46,8 @@ export const JobSchema = z.object({
   updatedAt: DateSchema,
   concurrencyLimit: z.coerce.number(),
   clientId: z.string().nullable().optional(),
+  /** Duration in milliseconds (finishedAt - startedAt). Null if job hasn't finished. */
+  durationMs: z.coerce.number().nullable().default(null),
 })
 
 // ============================================================================
@@ -85,7 +87,15 @@ export const JobStepWithoutOutputSchema = JobStepSchema.omit({ output: true })
 
 export const SortOrderSchema = z.enum(['asc', 'desc'])
 
-export const JobSortFieldSchema = z.enum(['createdAt', 'startedAt', 'finishedAt', 'status', 'actionName', 'expiresAt'])
+export const JobSortFieldSchema = z.enum([
+  'createdAt',
+  'startedAt',
+  'finishedAt',
+  'status',
+  'actionName',
+  'expiresAt',
+  'duration',
+])
 
 export const JobSortSchema = z.object({
   field: JobSortFieldSchema,

@@ -15,6 +15,7 @@ import { useJobParams } from '@/hooks/use-job-params'
 import { useJobsPolling } from '@/hooks/use-jobs-polling'
 import type { ActionStats, Job, JobStatus } from '@/lib/api'
 import { useActions, useJobs } from '@/lib/api'
+import { formatExpirationWindow, formatMsToSeconds } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { isExpiring } from '../lib/is-expiring'
@@ -166,6 +167,32 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         enableColumnFilter: true,
       },
       {
+        id: 'duration',
+        accessorKey: 'durationMs',
+        header: ({ column }: { column: Column<Job, unknown> }) => (
+          <DataTableColumnHeader column={column} label="Duration" />
+        ),
+        cell: ({ row }) => {
+          const { durationMs, startedAt, status } = row.original
+          // Only show duration if the job has started
+          if (!startedAt) {
+            return <div>-</div>
+          }
+          // For active jobs (no durationMs yet), show "running" indicator
+          if (durationMs === null) {
+            return (
+              <div className="font-mono text-xs">
+                {status === 'active' && <span className="text-muted-foreground">(running)</span>}
+              </div>
+            )
+          }
+          return <div className="font-mono text-xs">{formatMsToSeconds(durationMs)}</div>
+        },
+        size: 80,
+        enableColumnFilter: false,
+        enableSorting: true,
+      },
+      {
         id: 'Expires At',
         accessorKey: 'expiresAt',
         header: ({ column }: { column: Column<Job, unknown> }) => (
@@ -187,11 +214,12 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
                   : ''
               }
             >
-              {formatDate(dateStr)}
+              {formatDate(dateStr)}{' '}
+              {formatExpirationWindow(row.original.startedAt, dateStr)}
             </div>
           )
         },
-        size: 64,
+        size: 120,
         enableColumnFilter: false,
       },
       {

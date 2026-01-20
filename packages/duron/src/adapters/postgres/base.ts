@@ -1011,26 +1011,38 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Internal method to get a job by its ID. Does not include step information.
    */
   protected async _getJobById(jobId: string): Promise<Job | null> {
+    const jobsTable = this.tables.jobsTable
+
+    // Calculate duration as a SQL expression (finishedAt - startedAt in milliseconds)
+    const durationMs = sql<number | null>`
+      CASE 
+        WHEN ${jobsTable.started_at} IS NOT NULL AND ${jobsTable.finished_at} IS NOT NULL 
+        THEN EXTRACT(EPOCH FROM (${jobsTable.finished_at} - ${jobsTable.started_at})) * 1000
+        ELSE NULL 
+      END
+    `.as('duration_ms')
+
     const [job] = await this.db
       .select({
-        id: this.tables.jobsTable.id,
-        actionName: this.tables.jobsTable.action_name,
-        groupKey: this.tables.jobsTable.group_key,
-        input: this.tables.jobsTable.input,
-        output: this.tables.jobsTable.output,
-        error: this.tables.jobsTable.error,
-        status: this.tables.jobsTable.status,
-        timeoutMs: this.tables.jobsTable.timeout_ms,
-        expiresAt: this.tables.jobsTable.expires_at,
-        startedAt: this.tables.jobsTable.started_at,
-        finishedAt: this.tables.jobsTable.finished_at,
-        createdAt: this.tables.jobsTable.created_at,
-        updatedAt: this.tables.jobsTable.updated_at,
-        concurrencyLimit: this.tables.jobsTable.concurrency_limit,
-        clientId: this.tables.jobsTable.client_id,
+        id: jobsTable.id,
+        actionName: jobsTable.action_name,
+        groupKey: jobsTable.group_key,
+        input: jobsTable.input,
+        output: jobsTable.output,
+        error: jobsTable.error,
+        status: jobsTable.status,
+        timeoutMs: jobsTable.timeout_ms,
+        expiresAt: jobsTable.expires_at,
+        startedAt: jobsTable.started_at,
+        finishedAt: jobsTable.finished_at,
+        createdAt: jobsTable.created_at,
+        updatedAt: jobsTable.updated_at,
+        concurrencyLimit: jobsTable.concurrency_limit,
+        clientId: jobsTable.client_id,
+        durationMs,
       })
-      .from(this.tables.jobsTable)
-      .where(eq(this.tables.jobsTable.id, jobId))
+      .from(jobsTable)
+      .where(eq(jobsTable.id, jobId))
       .limit(1)
 
     return job ?? null
@@ -1194,6 +1206,15 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       }
     }
 
+    // Calculate duration as a SQL expression (finishedAt - startedAt in milliseconds)
+    const durationMs = sql<number | null>`
+      CASE 
+        WHEN ${jobsTable.started_at} IS NOT NULL AND ${jobsTable.finished_at} IS NOT NULL 
+        THEN EXTRACT(EPOCH FROM (${jobsTable.finished_at} - ${jobsTable.started_at})) * 1000
+        ELSE NULL 
+      END
+    `.as('duration_ms')
+
     const sortFieldMap: Record<JobSort['field'], any> = {
       createdAt: jobsTable.created_at,
       startedAt: jobsTable.started_at,
@@ -1201,6 +1222,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       status: jobsTable.status,
       actionName: jobsTable.action_name,
       expiresAt: jobsTable.expires_at,
+      duration: durationMs,
     }
 
     const jobs = await this.db
@@ -1220,6 +1242,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         updatedAt: jobsTable.updated_at,
         concurrencyLimit: jobsTable.concurrency_limit,
         clientId: jobsTable.client_id,
+        durationMs,
       })
       .from(jobsTable)
       .where(where)

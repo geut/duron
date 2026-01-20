@@ -513,6 +513,7 @@ export class StepManager {
 
         let result: any = null
         let aborted = false
+        let callbackError: Error | null = null
 
         await Promise.race([
           abortPromise.promise.then(() => {
@@ -524,10 +525,24 @@ export class StepManager {
                 result = res
               }
             })
+            .catch((err) => {
+              callbackError = err
+            })
             .finally(() => {
               abortPromise.release()
             }),
         ])
+
+        // If callback threw an error, abort children and wait for them before re-throwing
+        if (callbackError) {
+          if (childSteps.length > 0) {
+            // Abort all children with the callback error as reason
+            childAbortController.abort(callbackError)
+            // Wait for all children to settle
+            await Promise.allSettled(childSteps.map((c) => c.promise))
+          }
+          throw callbackError
+        }
 
         // If aborted, wait for child steps to settle before propagating
         if (aborted) {

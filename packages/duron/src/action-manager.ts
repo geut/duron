@@ -9,7 +9,7 @@ import type { Adapter, Job } from './adapters/adapter.js'
 export interface ActionManagerOptions<TAction extends Action<any, any, any>> {
   action: TAction
   database: Adapter
-  tracer: Tracer | null
+  tracer: Tracer
   variables: Record<string, unknown>
   logger: Logger
   concurrencyLimit: number
@@ -24,7 +24,7 @@ export interface ActionManagerOptions<TAction extends Action<any, any, any>> {
 export class ActionManager<TAction extends Action<any, any, any>> {
   #action: TAction
   #database: Adapter
-  #tracer: Tracer | null
+  #tracer: Tracer
   #variables: Record<string, unknown>
   #logger: Logger
   #queue: fastq.queueAsPromised<Job, void>

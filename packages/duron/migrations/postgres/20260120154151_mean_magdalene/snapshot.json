@@ -2,9 +2,7 @@
   "version": "8",
   "dialect": "postgres",
   "id": "9ff8be1d-ba8f-4014-bed4-e7428b9368c2",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "duron",
@@ -1368,14 +1366,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "job_id"
-      ],
+      "columns": ["job_id"],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "job_steps_job_id_jobs_id_fkey",
@@ -1385,14 +1379,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "job_id"
-      ],
+      "columns": ["job_id"],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "spans_job_id_jobs_id_fkey",
@@ -1402,14 +1392,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "step_id"
-      ],
+      "columns": ["step_id"],
       "schemaTo": "duron",
       "tableTo": "job_steps",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "spans_step_id_job_steps_id_fkey",
@@ -1418,9 +1404,7 @@
       "table": "spans"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "job_steps_pkey",
       "schema": "duron",
@@ -1428,9 +1412,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "jobs_pkey",
       "schema": "duron",
@@ -1438,9 +1420,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "spans_pkey",
       "schema": "duron",
@@ -1449,11 +1429,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "job_id",
-        "name",
-        "parent_step_id"
-      ],
+      "columns": ["job_id", "name", "parent_step_id"],
       "nullsNotDistinct": true,
       "name": "unique_job_step_name_parent",
       "entityType": "uniques",

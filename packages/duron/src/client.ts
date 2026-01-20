@@ -292,7 +292,7 @@ export class Client<
   #actions: TActions | null
   #database: Adapter
   #tracerProvider: NodeTracerProvider | null = null
-  #tracer: Tracer | null = null
+  #tracer: Tracer
   #telemetryOptions: TelemetryOptions | null = null
   #localSpansEnabled: boolean = false
   #variables: Record<string, unknown>
@@ -335,10 +335,16 @@ export class Client<
     this.#database.setId(this.#id)
     this.#database.setLogger(this.#logger)
 
-    // Initialize OpenTelemetry if telemetry options are provided
+    // Initialize OpenTelemetry TracerProvider if telemetry options are provided
+    // When no options are provided, the tracer will be a no-op (from OpenTelemetry API)
     if (this.#telemetryOptions) {
       this.#initTelemetry(this.#telemetryOptions)
     }
+
+    // Always get a tracer - it's a no-op tracer when no SDK is registered
+    // This follows the OpenTelemetry pattern where the API always returns a tracer
+    // (either a real one if SDK is configured, or a no-op one otherwise)
+    this.#tracer = trace.getTracer('duron')
   }
 
   /**
@@ -382,10 +388,8 @@ export class Client<
       })
 
       // Register the provider globally
+      // Once registered, the tracer obtained via trace.getTracer() will use this provider
       this.#tracerProvider.register()
-
-      // Get the tracer
-      this.#tracer = trace.getTracer('duron')
     }
   }
 
@@ -411,9 +415,9 @@ export class Client<
 
   /**
    * Get the OpenTelemetry tracer for creating custom spans.
-   * Returns null if telemetry is not configured.
+   * Always returns a tracer - it's a no-op tracer when no SDK is configured.
    */
-  get tracer(): Tracer | null {
+  get tracer(): Tracer {
     return this.#tracer
   }
 

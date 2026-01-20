@@ -69,23 +69,6 @@ function createTelemetryContext(span: Span | null): TelemetryContext {
   }
 }
 
-/**
- * Create a no-op TelemetryContext when no tracer is configured.
- */
-function createNoopTelemetryContext(): TelemetryContext {
-  return {
-    getActiveSpan(): Span | undefined {
-      return undefined
-    },
-    getTracer(name: string): Tracer {
-      return trace.getTracer(name)
-    },
-    recordMetric(): void {
-      // No-op
-    },
-  }
-}
-
 import pRetry from './utils/p-retry.js'
 import waitForAbort from './utils/wait-for-abort.js'
 
@@ -194,7 +177,7 @@ export interface StepManagerOptions {
   jobId: string
   actionName: string
   adapter: Adapter
-  tracer: Tracer | null
+  tracer: Tracer
   logger: Logger
   concurrencyLimit: number
 }
@@ -207,7 +190,7 @@ export class StepManager {
   #jobId: string
   #actionName: string
   #stepStore: StepStore
-  #tracer: Tracer | null
+  #tracer: Tracer
   #queue: fastq.queueAsPromised<TaskStep, any>
   #logger: Logger
   // each step name should be executed only once per parent (name + parentStepId)
@@ -215,7 +198,7 @@ export class StepManager {
   // Store step spans for nested step tracking
   #stepSpans = new Map<string, Span>()
   // Store the job span for creating step spans
-  #jobSpan: Span | null = null
+  #jobSpan!: Span
   // Factory function to create run functions with the correct parent step ID and abort signal
   #runFnFactory: ((parentStepId: string | null, abortSignal: AbortSignal) => StepHandlerContext['run']) | null = null
 
@@ -249,7 +232,7 @@ export class StepManager {
    * Set the job span for this step manager.
    * Called from ActionJob after the job span is created.
    */
-  setJobSpan(span: Span | null): void {
+  setJobSpan(span: Span): void {
     this.#jobSpan = span
   }
 
@@ -285,7 +268,7 @@ export class StepManager {
     abortSignal: AbortSignal,
     logger: Logger,
   ): ActionHandlerContext<TInput, TVariables> {
-    const telemetryContext = this.#jobSpan ? createTelemetryContext(this.#jobSpan) : createNoopTelemetryContext()
+    const telemetryContext = createTelemetryContext(this.#jobSpan)
     return new ActionContext(this, job, action, variables, abortSignal, logger, telemetryContext)
   }
 
@@ -298,11 +281,7 @@ export class StepManager {
       return createTelemetryContext(stepSpan)
     }
     // Fallback to job span if step span not found
-    if (this.#jobSpan) {
-      return createTelemetryContext(this.#jobSpan)
-    }
-    // No-op telemetry context
-    return createNoopTelemetryContext()
+    return createTelemetryContext(this.#jobSpan)
   }
 
   /**
@@ -389,25 +368,23 @@ export class StepManager {
 
         step = newStep
 
-        // Start step span if tracer is available
-        if (this.#tracer) {
-          const parentSpan = parentStepId ? this.#stepSpans.get(parentStepId) : this.#jobSpan
-          const parentContext = parentSpan ? trace.setSpan(context.active(), parentSpan) : context.active()
-          const stepSpan = this.#tracer.startSpan(
-            `step:${name}`,
-            {
-              kind: SpanKind.INTERNAL,
-              attributes: {
-                'duron.job.id': this.#jobId,
-                'duron.step.id': step.id,
-                'duron.step.name': name,
-                'duron.step.parent_id': parentStepId ?? undefined,
-              },
+        // Start step span - uses no-op tracer if no SDK is configured
+        const parentSpan = parentStepId ? this.#stepSpans.get(parentStepId) : this.#jobSpan
+        const parentContext = parentSpan ? trace.setSpan(context.active(), parentSpan) : context.active()
+        const stepSpan = this.#tracer.startSpan(
+          `step:${name}`,
+          {
+            kind: SpanKind.INTERNAL,
+            attributes: {
+              'duron.job.id': this.#jobId,
+              'duron.step.id': step.id,
+              'duron.step.name': name,
+              'duron.step.parent_id': parentStepId ?? undefined,
             },
-            parentContext,
-          )
-          this.#stepSpans.set(step.id, stepSpan)
-        }
+          },
+          parentContext,
+        )
+        this.#stepSpans.set(step.id, stepSpan)
 
         if (abortSignal.aborted) {
           throw new ActionCancelError(this.#actionName, this.#jobId, { cause: 'step cancelled after create step' })

@@ -11,7 +11,7 @@ export interface ActionJobOptions<TAction extends Action<any, any, any>> {
   job: { id: string; input: any; groupKey: string; timeoutMs: number; actionName: string }
   action: TAction
   database: Adapter
-  tracer: Tracer | null
+  tracer: Tracer
   variables: Record<string, unknown>
   logger: Logger
 }
@@ -26,7 +26,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
   #job: { id: string; input: any; groupKey: string; timeoutMs: number; actionName: string }
   #action: TAction
   #database: Adapter
-  #tracer: Tracer | null
+  #tracer: Tracer
   #variables: Record<string, unknown>
   #logger: Logger
   #stepManager: StepManager
@@ -34,7 +34,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
   #timeoutId: NodeJS.Timeout | null = null
   #done: Promise<void>
   #resolve: (() => void) | null = null
-  #jobSpan: Span | null = null
+  #jobSpan!: Span
 
   // ============================================================================
   // Constructor
@@ -84,17 +84,15 @@ export class ActionJob<TAction extends Action<any, any, any>> {
    * @throws Error if the job fails or output validation fails
    */
   async execute() {
-    // Start job span if tracer is available
-    if (this.#tracer) {
-      this.#jobSpan = this.#tracer.startSpan(`job:${this.#action.name}`, {
-        kind: SpanKind.INTERNAL,
-        attributes: {
-          'duron.job.id': this.#job.id,
-          'duron.action.name': this.#action.name,
-          'duron.group.key': this.#job.groupKey,
-        },
-      })
-    }
+    // Start job span - uses no-op tracer if no SDK is configured
+    this.#jobSpan = this.#tracer.startSpan(`job:${this.#action.name}`, {
+      kind: SpanKind.INTERNAL,
+      attributes: {
+        'duron.job.id': this.#job.id,
+        'duron.action.name': this.#action.name,
+        'duron.group.key': this.#job.groupKey,
+      },
+    })
 
     // Set the job span on the step manager
     this.#stepManager.setJobSpan(this.#jobSpan)
@@ -127,7 +125,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       let result: any = null
 
       // Execute handler within the job span context so that child spans inherit the trace
-      const spanContext = this.#jobSpan ? trace.setSpan(context.active(), this.#jobSpan) : context.active()
+      const spanContext = trace.setSpan(context.active(), this.#jobSpan)
 
       await Promise.race([
         context
@@ -164,10 +162,8 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       )
 
       // End job span successfully
-      if (this.#jobSpan) {
-        this.#jobSpan.setStatus({ code: SpanStatusCode.OK })
-        this.#jobSpan.end()
-      }
+      this.#jobSpan.setStatus({ code: SpanStatusCode.OK })
+      this.#jobSpan.end()
 
       return result
     } catch (error) {
@@ -188,10 +184,8 @@ export class ActionJob<TAction extends Action<any, any, any>> {
         await this.#database.cancelJob({ jobId: this.#job.id })
 
         // End job span as cancelled
-        if (this.#jobSpan) {
-          this.#jobSpan.setStatus({ code: SpanStatusCode.ERROR, message: 'Job cancelled' })
-          this.#jobSpan.end()
-        }
+        this.#jobSpan.setStatus({ code: SpanStatusCode.ERROR, message: 'Job cancelled' })
+        this.#jobSpan.end()
         return
       }
 
@@ -201,16 +195,14 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       await this.#database.failJob({ jobId: this.#job.id, error: serializeError(error) })
 
       // End job span with error
-      if (this.#jobSpan) {
-        this.#jobSpan.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : String(error),
-        })
-        if (error instanceof Error) {
-          this.#jobSpan.recordException(error)
-        }
-        this.#jobSpan.end()
+      this.#jobSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      if (error instanceof Error) {
+        this.#jobSpan.recordException(error)
       }
+      this.#jobSpan.end()
 
       throw error
     } finally {

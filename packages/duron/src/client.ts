@@ -437,6 +437,16 @@ export class Client<
   }
 
   /**
+   * Force flush any pending telemetry data.
+   * Useful in tests or when you need to ensure spans are exported before querying.
+   */
+  async flushTelemetry(): Promise<void> {
+    if (this.#tracerProvider) {
+      await this.#tracerProvider.forceFlush()
+    }
+  }
+
+  /**
    * Get the current configuration of this Duron instance.
    *
    * @returns Configuration object including options, actions, and variables
@@ -644,10 +654,10 @@ export class Client<
    * Fetch and process jobs from the database.
    * Concurrency limits are determined from the latest job created for each groupKey.
    *
-   * @param options - Fetch options including batch size
+   * @param [options.batchSize] - Maximum number of jobs to fetch in this batch (defaults to `batchSize` from client options)
    * @returns Promise resolving to the array of fetched jobs
    */
-  async fetch(options: FetchOptions) {
+  async fetch(options: FetchOptions = {}) {
     await this.start()
 
     if (!this.#actions) {

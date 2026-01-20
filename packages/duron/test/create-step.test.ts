@@ -975,4 +975,7 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
 
 // Run tests with both adapters
 runCreateStepTests(pgliteFactory)
-runCreateStepTests(postgresFactory)
+// biome-ignore lint/complexity/useLiteralKeys: type safety
+if (process.env['POSTGRES_TEST'] === 'true') {
+  runCreateStepTests(postgresFactory)
+}

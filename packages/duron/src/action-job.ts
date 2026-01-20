@@ -116,7 +116,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       )
 
       this.#timeoutId = setTimeout(() => {
-        const timeoutError = new ActionTimeoutError(this.#action.name, this.#job.timeoutMs)
+        const timeoutError = new ActionTimeoutError(this.#action.name, this.#job.id, this.#job.timeoutMs)
         this.#abortController.abort(timeoutError)
       }, this.#job.timeoutMs)
 

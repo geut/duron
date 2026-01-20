@@ -3,6 +3,16 @@ import { generateText } from 'ai'
 import { defineAction, NonRetriableError } from 'duron/index'
 import * as z from 'zod'
 
+const abortableSleep = async (sleepMs: number, signal: AbortSignal) => {
+  await new Promise((resolve) => {
+    const timeout = setTimeout(resolve, sleepMs)
+    signal.addEventListener('abort', () => {
+      clearTimeout(timeout)
+      throw new Error('abortableSleep aborted')
+    })
+  })
+}
+
 export const variables = {
   sendEmail: async (args: { email: string; subject: string; body: string; timeout: number }, signal: AbortSignal) => {
     await new Promise((resolve) => {
@@ -361,14 +371,16 @@ export const processOrder = defineAction<typeof variables>()({
     // =========================================================================
     const validation = await ctx.step('validate-order', async ({ step: nestedStep }) => {
       // Child step: Check inventory for all items
-      const inventoryCheck = await nestedStep('check-inventory', async () => {
+      const inventoryCheckP = nestedStep('check-inventory', async (ctx) => {
+        await abortableSleep(10_000, ctx.signal)
         const allInStock = items.every((item) => item.quantity <= 10) // Mock: max 10 per item
         addTimeline('check-inventory', allInStock ? 'success' : 'failed', `Checked ${items.length} items`)
         return { allInStock, checkedItems: items.length }
       })
 
       // Child step: Verify customer
-      const customerVerification = await nestedStep('verify-customer', async (ctx) => {
+      const customerVerificationP = nestedStep('verify-customer', async (ctx) => {
+        await abortableSleep(10_000, ctx.signal)
         await Promise.all([
           ctx.step(
             'more deeph',
@@ -393,6 +405,17 @@ export const processOrder = defineAction<typeof variables>()({
         addTimeline('verify-customer', isValid ? 'success' : 'failed', `Customer: ${customerId}`)
         return { isValid, customerId }
       })
+
+      async function throwError() {
+        await new Promise((resolve) => setTimeout(resolve, 4_000))
+        throw new Error('test error')
+      }
+
+      const [inventoryCheck, customerVerification] = await Promise.all([
+        inventoryCheckP,
+        customerVerificationP,
+        throwError(),
+      ])
 
       addTimeline(
         'validate-order',

@@ -584,4 +584,7 @@ function runServerTests(adapterFactory: AdapterFactory) {
 }
 
 runServerTests(postgresFactory)
-runServerTests(pgliteFactory)
+// biome-ignore lint/complexity/useLiteralKeys: type safety
+if (process.env['POSTGRES_TEST'] === 'true') {
+  runServerTests(pgliteFactory)
+}

@@ -524,4 +524,7 @@ function runRecoverTests(adapterFactory: AdapterFactory) {
 }
 
 // Only run with PostgreSQL since PGLite doesn't support multi-process
-runRecoverTests(postgresFactory)
+// biome-ignore lint/complexity/useLiteralKeys: type safety
+if (process.env['POSTGRES_TEST'] === 'true') {
+  runRecoverTests(postgresFactory)
+}

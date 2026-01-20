@@ -427,7 +427,11 @@ export class StepManager {
       // Create abort controller for this step's timeout
       const stepAbortController = new AbortController()
       const timeoutId = setTimeout(() => {
-        const timeoutError = new StepTimeoutError(name, this.#jobId, expire)
+        const timeoutError = new StepTimeoutError(name, this.#jobId, expire, {
+          stepId: step?.id,
+          parentStepId,
+          actionName: this.#actionName,
+        })
         stepAbortController.abort(timeoutError)
       }, expire)
 
@@ -550,7 +554,12 @@ export class StepManager {
           )
 
           // Abort all pending children
-          const unhandledError = new UnhandledChildStepsError(name, unsettledChildren.length)
+          const unhandledError = new UnhandledChildStepsError(name, unsettledChildren.length, {
+            stepId: step.id,
+            parentStepId,
+            jobId: this.#jobId,
+            actionName: this.#actionName,
+          })
           childAbortController.abort(unhandledError)
 
           // Wait for all children to settle (they'll reject with cancellation)
@@ -599,12 +608,27 @@ export class StepManager {
         if (
           isNonRetriableError(error) ||
           (error.cause && isNonRetriableError(error.cause)) ||
-          (error instanceof Error && error.name === 'AbortError' && isNonRetriableError(error.cause))
+          (error instanceof Error && error.name === 'AbortError')
         ) {
-          throw error
+          const err = isNonRetriableError(error)
+            ? error
+            : error instanceof Error && error.name === 'AbortError'
+              ? new NonRetriableError(error.message, { cause: error.cause })
+              : (error.cause as NonRetriableError)
+
+          if (Object.keys(err.metadata).length === 0) {
+            err.setMetadata({
+              stepId: step?.id,
+              parentStepId,
+              jobId: this.#jobId,
+              actionName: this.#actionName,
+            })
+          }
+          throw err
         }
 
         if (ctx.retriesLeft > 0 && step) {
+          this.#clearHistoryForStep(step.id)
           const delayed = await this.#stepStore.delay(step.id, ctx.finalDelay, serializeError(error))
           if (!delayed) {
             throw new Error(`Failed to delay step "${name}" for job "${this.#jobId}" action "${this.#actionName}"`)
@@ -614,11 +638,16 @@ export class StepManager {
             ;(error as any).nonRetriable = true
             throw error
           }
+
           const errorMessage = error instanceof Error ? error.message : String(error)
-          throw new NonRetriableError(
-            `Failed to execute step="${name}", jobId="${this.#jobId}", action="${this.#actionName}", parentStepId="${parentStepId}": ${errorMessage}`,
-            { cause: error },
-          )
+          const err = new NonRetriableError(errorMessage, { cause: error })
+          err.setMetadata({
+            stepId: step?.id,
+            parentStepId,
+            jobId: this.#jobId,
+            actionName: this.#actionName,
+          })
+          throw err
         }
       },
     }).catch(async (error) => {
@@ -641,6 +670,19 @@ export class StepManager {
         }
       }
       throw error
+    })
+  }
+
+  /**
+   * Clear the history of nested steps for a given step.
+   * We do't need to clear the history for the root step because it's not a parent step, it's the action itself.
+   * @param stepId - The ID of the step to clear the history for
+   */
+  #clearHistoryForStep(stepId: string): void {
+    this.#historySteps.forEach((stepKey) => {
+      if (stepKey.startsWith(stepId)) {
+        this.#historySteps.delete(stepKey)
+      }
     })
   }
 }

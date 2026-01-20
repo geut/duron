@@ -286,6 +286,125 @@ const parallelStepsAction = defineAction()({
     return {}
   },
 })
+
+/**
+ * Action that tries to create duplicate step names at root level
+ */
+const duplicateRootStepsAction = defineAction()({
+  name: 'duplicate-root-steps-action',
+  version: '1.0.0',
+  input: z.object({}),
+  output: z.object({}),
+  handler: async (ctx) => {
+    await ctx.step('same-name', async () => {
+      return { first: true }
+    })
+
+    // This should throw StepAlreadyExecutedError
+    await ctx.step('same-name', async () => {
+      return { second: true }
+    })
+
+    return {}
+  },
+})
+
+/**
+ * Action that tries to create duplicate step names under the same parent
+ */
+const duplicateNestedStepsAction = defineAction()({
+  name: 'duplicate-nested-steps-action',
+  version: '1.0.0',
+  input: z.object({}),
+  output: z.object({}),
+  handler: async (ctx) => {
+    await ctx.step('parent', async ({ step }) => {
+      await step('child-name', async () => {
+        return { first: true }
+      })
+
+      // This should throw StepAlreadyExecutedError
+      await step('child-name', async () => {
+        return { second: true }
+      })
+
+      return {}
+    })
+
+    return {}
+  },
+})
+
+/**
+ * Action that verifies same step name under different parents is allowed
+ */
+const sameNameDifferentParentsAction = defineAction()({
+  name: 'same-name-different-parents-action',
+  version: '1.0.0',
+  input: z.object({}),
+  output: z.object({
+    results: z.array(z.string()),
+  }),
+  handler: async (ctx) => {
+    const results: string[] = []
+
+    await ctx.step('parent-1', async ({ step }) => {
+      await step('shared-name', async () => {
+        results.push('parent-1:shared-name')
+        return {}
+      })
+      return {}
+    })
+
+    await ctx.step('parent-2', async ({ step }) => {
+      // Same name as under parent-1, but different parent - should be allowed
+      await step('shared-name', async () => {
+        results.push('parent-2:shared-name')
+        return {}
+      })
+      return {}
+    })
+
+    return { results }
+  },
+})
+
+/**
+ * Action with retryable step to verify history is cleared on retry
+ */
+let retryAttemptCounter = 0
+const retryHistoryClearAction = defineAction()({
+  name: 'retry-history-clear-action',
+  version: '1.0.0',
+  input: z.object({}),
+  output: z.object({
+    attempts: z.number(),
+  }),
+  steps: {
+    retry: {
+      limit: 2,
+      minTimeout: 10,
+      maxTimeout: 50,
+    },
+  },
+  handler: async (ctx) => {
+    await ctx.step('parent-step', async ({ step }) => {
+      // This child step should be re-executable after parent retries
+      await step('child-step', async () => {
+        retryAttemptCounter++
+        if (retryAttemptCounter < 3) {
+          throw new Error('Intentional failure to trigger retry')
+        }
+        return { success: true }
+      })
+
+      return {}
+    })
+
+    return { attempts: retryAttemptCounter }
+  },
+})
+
 // =============================================================================
 // Test Suite
 // =============================================================================
@@ -301,6 +420,10 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         parentTimeoutAction: typeof parentTimeoutAction
         parentStepIdVerificationAction: typeof parentStepIdVerificationAction
         parallelStepsAction: typeof parallelStepsAction
+        duplicateRootStepsAction: typeof duplicateRootStepsAction
+        duplicateNestedStepsAction: typeof duplicateNestedStepsAction
+        sameNameDifferentParentsAction: typeof sameNameDifferentParentsAction
+        retryHistoryClearAction: typeof retryHistoryClearAction
       },
       Record<string, unknown>
     >
@@ -323,11 +446,18 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
             parentTimeoutAction,
             parentStepIdVerificationAction,
             parallelStepsAction,
+            duplicateRootStepsAction,
+            duplicateNestedStepsAction,
+            sameNameDifferentParentsAction,
+            retryHistoryClearAction,
           },
           syncPattern: false,
           recoverJobsOnStart: false,
           logger: 'error',
         })
+
+        // Reset retry counter for each test
+        retryAttemptCounter = 0
       },
       { timeout: 60_000 },
     )
@@ -587,9 +717,73 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         { timeout: 10000 },
       )
     })
+
+    describe('StepAlreadyExecutedError', () => {
+      it('should throw error when duplicate step name at root level', async () => {
+        const jobId = await client.runAction('duplicateRootStepsAction', {})
+        await client.fetch({ batchSize: 10 })
+
+        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        expectToBeDefined(job)
+        expect(job.status).toBe(JOB_STATUS_FAILED)
+        expect(job.error).toBeDefined()
+        expect(job.error.name).toBe('StepAlreadyExecutedError')
+        expect(job.error.message).toContain('same-name')
+      })
+
+      it('should throw error when duplicate step name under same parent', async () => {
+        const jobId = await client.runAction('duplicateNestedStepsAction', {})
+        await client.fetch({ batchSize: 10 })
+
+        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        expectToBeDefined(job)
+        expect(job.status).toBe(JOB_STATUS_FAILED)
+        expect(job.error).toBeDefined()
+        expect(job.error.name).toBe('StepAlreadyExecutedError')
+        expect(job.error.message).toContain('child-name')
+      })
+
+      it('should allow same step name under different parents', async () => {
+        const jobId = await client.runAction('sameNameDifferentParentsAction', {})
+        await client.fetch({ batchSize: 10 })
+
+        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        expectToBeDefined(job)
+        expect(job.status).toBe(JOB_STATUS_COMPLETED)
+
+        const output = job.output as { results: string[] }
+        expect(output.results).toContain('parent-1:shared-name')
+        expect(output.results).toContain('parent-2:shared-name')
+      })
+
+      it(
+        'should clear history when step fails and allow re-execution on retry',
+        async () => {
+          const jobId = await client.runAction('retryHistoryClearAction', {})
+
+          // Process the job (may need multiple fetches for retries)
+          for (let i = 0; i < 10; i++) {
+            await client.fetch({ batchSize: 10 })
+            await new Promise((resolve) => setTimeout(resolve, 100))
+          }
+
+          const job = await client.waitForJob(jobId, { timeout: 10000 })
+          expectToBeDefined(job)
+          expect(job.status).toBe(JOB_STATUS_COMPLETED)
+
+          // The step was called 3 times (failed twice, succeeded on third)
+          const output = job.output as { attempts: number }
+          expect(output.attempts).toBe(3)
+        },
+        { timeout: 15000 },
+      )
+    })
   })
 }
 
 // Run tests with both adapters
 runNestedStepsTests(pgliteFactory)
-runNestedStepsTests(postgresFactory)
+// biome-ignore lint/complexity/useLiteralKeys: type safety
+if (process.env['POSTGRES_TEST'] === 'true') {
+  runNestedStepsTests(postgresFactory)
+}

@@ -463,4 +463,7 @@ function runTelemetryTests(adapterFactory: AdapterFactory) {
 }
 
 runTelemetryTests(postgresFactory)
-runTelemetryTests(pgliteFactory)
+// biome-ignore lint/complexity/useLiteralKeys: type safety
+if (process.env['POSTGRES_TEST'] === 'true') {
+  runTelemetryTests(pgliteFactory)
+}

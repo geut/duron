@@ -12,6 +12,17 @@ export const ERROR_CODES = {
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
 
 /**
+ * Metadata about the context where an error occurred.
+ */
+export interface ErrorMetadata {
+  jobId?: string
+  stepId?: string
+  parentStepId?: string | null
+  actionName?: string
+  stepName?: string
+}
+
+/**
  * Base class for all built-in errors in Duron.
  * All errors include a cause property that can be serialized.
  */
@@ -33,6 +44,11 @@ export abstract class DuronError extends Error {
    */
   public override readonly cause?: unknown
 
+  /**
+   * Metadata about the context where the error occurred.
+   */
+  public metadata: ErrorMetadata
+
   constructor(
     message: string,
     options?: {
@@ -42,16 +58,33 @@ export abstract class DuronError extends Error {
        * This will be serialized and stored in the database.
        */
       cause?: unknown
+      /**
+       * Metadata about the context where the error occurred.
+       */
+      metadata?: ErrorMetadata
     },
   ) {
     super(message)
     this.cause = options?.cause
+    this.metadata = options?.metadata ?? {}
     // Set the name to the class name
     this.name = this.constructor.name
     // Ensure stack trace points to the error location
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor)
     }
+  }
+
+  /**
+   * Set or update metadata about the context where the error occurred.
+   * Merges with existing metadata (new values override existing ones).
+   *
+   * @param metadata - The metadata to set or merge
+   * @returns this - Returns the error instance for chaining
+   */
+  setMetadata(metadata: ErrorMetadata): this {
+    this.metadata = { ...this.metadata, ...metadata }
+    return this
   }
 }
 
@@ -70,7 +103,9 @@ export class StepAlreadyExecutedError extends DuronError {
    * @param actionName - The name of the action containing the step
    */
   constructor(stepName: string, jobId: string, actionName: string) {
-    super(`Step "${stepName}" has already been executed for job "${jobId}" and action "${actionName}"`)
+    super(`Step "${stepName}" has already been executed for job "${jobId}" and action "${actionName}"`, {
+      metadata: { stepName, jobId, actionName },
+    })
   }
 }
 
@@ -96,17 +131,22 @@ export class ActionTimeoutError extends DuronError {
    * Create a new ActionTimeoutError.
    *
    * @param actionName - The name of the action that timed out
+   * @param jobId - The ID of the job containing the action
    * @param timeoutMs - The timeout value in milliseconds
    * @param options - Optional error options including cause
    */
   constructor(
     actionName: string,
+    jobId: string,
     timeoutMs: number,
     options?: {
       cause?: unknown
     },
   ) {
-    super(`Action "${actionName}" timed out after ${timeoutMs}ms`, options)
+    super(`Action "${actionName}" in job "${jobId}" timed out after ${timeoutMs}ms`, {
+      cause: options?.cause,
+      metadata: { actionName, jobId },
+    })
   }
 }
 
@@ -123,7 +163,7 @@ export class StepTimeoutError extends DuronError {
    * @param stepName - The name of the step that timed out
    * @param jobId - The ID of the job containing the step
    * @param timeoutMs - The timeout value in milliseconds
-   * @param options - Optional error options including cause
+   * @param options - Optional error options including cause and additional metadata
    */
   constructor(
     stepName: string,
@@ -131,9 +171,21 @@ export class StepTimeoutError extends DuronError {
     timeoutMs: number,
     options?: {
       cause?: unknown
+      stepId?: string
+      parentStepId?: string | null
+      actionName?: string
     },
   ) {
-    super(`Step "${stepName}" in job "${jobId}" timed out after ${timeoutMs}ms`, options)
+    super(`Step "${stepName}" in job "${jobId}" timed out after ${timeoutMs}ms`, {
+      cause: options?.cause,
+      metadata: {
+        stepName,
+        jobId,
+        stepId: options?.stepId,
+        parentStepId: options?.parentStepId,
+        actionName: options?.actionName,
+      },
+    })
   }
 }
 
@@ -158,7 +210,10 @@ export class ActionCancelError extends DuronError {
       cause?: unknown
     },
   ) {
-    super(`Action "${actionName}" in job "${jobId}" was cancelled`, options)
+    super(`Action "${actionName}" in job "${jobId}" was cancelled`, {
+      cause: options?.cause,
+      metadata: { actionName, jobId },
+    })
   }
 }
 
@@ -172,11 +227,6 @@ export class UnhandledChildStepsError extends NonRetriableError {
   public override readonly code = ERROR_CODES.UNHANDLED_CHILD_STEPS
 
   /**
-   * The name of the parent step that completed with unhandled children.
-   */
-  public readonly stepName: string
-
-  /**
    * The number of unhandled child steps.
    */
   public readonly pendingCount: number
@@ -186,12 +236,30 @@ export class UnhandledChildStepsError extends NonRetriableError {
    *
    * @param stepName - The name of the parent step
    * @param pendingCount - The number of unhandled child steps
+   * @param options - Optional metadata
    */
-  constructor(stepName: string, pendingCount: number) {
+  constructor(
+    stepName: string,
+    pendingCount: number,
+    options?: {
+      stepId?: string
+      parentStepId?: string | null
+      jobId?: string
+      actionName?: string
+    },
+  ) {
     super(
       `Parent step "${stepName}" completed with ${pendingCount} unhandled child step(s). All child steps must be awaited before the parent returns.`,
+      {
+        metadata: {
+          stepName,
+          stepId: options?.stepId,
+          parentStepId: options?.parentStepId,
+          jobId: options?.jobId,
+          actionName: options?.actionName,
+        },
+      },
     )
-    this.stepName = stepName
     this.pendingCount = pendingCount
   }
 }
@@ -238,6 +306,7 @@ export type SerializableError = {
   message: string
   code?: ErrorCode
   nonRetriable?: boolean
+  metadata?: ErrorMetadata
   cause?: unknown
   stack?: string
 }
@@ -249,6 +318,7 @@ export type SerializableError = {
 export function serializeError(error: unknown): SerializableError {
   const code = (error as any)?.code
   const nonRetriable = (error as any)?.nonRetriable
+  const metadata = (error as any)?.metadata
 
   if (isTimeoutError(error)) {
     return {
@@ -256,6 +326,7 @@ export function serializeError(error: unknown): SerializableError {
       message: error.message,
       code,
       nonRetriable,
+      metadata,
       cause: error.cause,
       stack: undefined,
     }
@@ -267,6 +338,7 @@ export function serializeError(error: unknown): SerializableError {
       message: error.message,
       code,
       nonRetriable,
+      metadata,
       cause: error.cause,
       stack: error.stack,
     }

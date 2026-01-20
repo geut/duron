@@ -640,4 +640,7 @@ function runTests(name: string, factory: AdapterFactory) {
 // =============================================================================
 
 runTests('pglite', pgliteFactory)
-runTests('postgres', postgresFactory)
+// biome-ignore lint/complexity/useLiteralKeys: type safety
+if (process.env['POSTGRES_TEST'] === 'true') {
+  runTests('postgres', postgresFactory)
+}

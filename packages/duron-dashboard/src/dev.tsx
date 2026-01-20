@@ -49,3 +49,7 @@ const server = serve({
 })
 
 client.logger.info(`🚀 Server running at ${server.url}`)
+
+process.on('uncaughtException', (error) => {
+  client.logger.error(error, 'Uncaught exception')
+})

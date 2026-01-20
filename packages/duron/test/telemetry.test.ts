@@ -117,6 +117,8 @@ const customSpanAction = defineAction()({
 })
 
 // Action with named tracer (simulating AI SDK pattern)
+// Note: The tracer returned by getTracer() automatically injects the parent context,
+// so external libraries (like AI SDK) don't need to manually pass parent context
 const namedTracerAction = defineAction()({
   name: 'named-tracer-action',
   version: '1.0.0',
@@ -130,14 +132,10 @@ const namedTracerAction = defineAction()({
     const result = await ctx.step('with-named-tracer', async ({ telemetry }) => {
       // Get a tracer with a custom name (like AI SDK does)
       const aiTracer = telemetry.getTracer('ai')
-      const activeSpan = telemetry.getActiveSpan()
 
-      // Create a span with the named tracer, using the active span as parent
-      const parentContext = activeSpan
-        ? require('@opentelemetry/api').trace.setSpan(require('@opentelemetry/api').context.active(), activeSpan)
-        : require('@opentelemetry/api').context.active()
-
-      const aiSpan = aiTracer.startSpan('ai.generate', { attributes: { 'ai.model': 'gpt-4' } }, parentContext)
+      // Create a span WITHOUT passing parent context - the tracer automatically handles it
+      // This simulates how AI SDK and other libraries use tracers
+      const aiSpan = aiTracer.startSpan('ai.generate', { attributes: { 'ai.model': 'gpt-4' } })
 
       // Simulate AI work
       const processed = ctx.input.value * 5

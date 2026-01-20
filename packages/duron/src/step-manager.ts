@@ -1,4 +1,13 @@
-import { context, type Span, SpanKind, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api'
+import {
+  type Context,
+  context,
+  type Span,
+  SpanKind,
+  type SpanOptions,
+  SpanStatusCode,
+  type Tracer,
+  trace,
+} from '@opentelemetry/api'
 import fastq from 'fastq'
 import type { Logger } from 'pino'
 import type { z } from 'zod'
@@ -42,21 +51,90 @@ export interface TelemetryContext {
   getTracer(name: string): Tracer
 
   /**
+   * Start a new span as a child of the current job/step span.
+   * This is a convenience method that properly links the span to the trace hierarchy.
+   */
+  startSpan(name: string, options?: { attributes?: Record<string, any> }): Span
+
+  /**
    * Record a custom metric as a span event.
    */
   recordMetric(name: string, value: number, attributes?: Record<string, any>): void
 }
 
 /**
+ * Inject parent span into a context if we have one.
+ */
+function injectParentSpan(ctx: Context, parentSpan: Span | null): Context {
+  return parentSpan ? trace.setSpan(ctx, parentSpan) : ctx
+}
+
+/**
+ * Create a context-aware tracer wrapper that automatically injects the parent span.
+ * This ensures spans created by external libraries (like AI SDK) are properly linked
+ * to the current job/step trace hierarchy.
+ */
+function createContextAwareTracer(tracer: Tracer, parentSpan: Span | null): Tracer {
+  return {
+    startSpan(name: string, options?: SpanOptions, ctx?: Context): Span {
+      // Always inject our parent span into the context, regardless of what context is passed.
+      // This is necessary because without global registration, context.active() returns
+      // ROOT_CONTEXT, so external libraries (like AI SDK) that pass context.active()
+      // would otherwise create orphan spans.
+      const baseContext = ctx ?? context.active()
+      const effectiveContext = injectParentSpan(baseContext, parentSpan)
+      return tracer.startSpan(name, options, effectiveContext)
+    },
+    // startActiveSpan has multiple overloads, we need to handle them all
+    startActiveSpan<F extends (span: Span) => unknown>(
+      name: string,
+      optionsOrFn: SpanOptions | F,
+      ctxOrFn?: Context | F,
+      fn?: F,
+    ): ReturnType<F> {
+      // Parse the overloaded arguments
+      let options: SpanOptions | undefined
+      let ctx: Context | undefined
+      let callback: F
+
+      if (typeof optionsOrFn === 'function') {
+        // startActiveSpan(name, fn)
+        callback = optionsOrFn
+      } else if (typeof ctxOrFn === 'function') {
+        // startActiveSpan(name, options, fn)
+        options = optionsOrFn
+        callback = ctxOrFn
+      } else {
+        // startActiveSpan(name, options, context, fn)
+        options = optionsOrFn
+        ctx = ctxOrFn
+        callback = fn!
+      }
+
+      const baseContext = ctx ?? context.active()
+      const effectiveContext = injectParentSpan(baseContext, parentSpan)
+
+      return tracer.startActiveSpan(name, options ?? {}, effectiveContext, callback)
+    },
+  } as Tracer
+}
+
+/**
  * Create a TelemetryContext that wraps an OTel span.
  */
-function createTelemetryContext(span: Span | null): TelemetryContext {
+function createTelemetryContext(span: Span | null, tracer: Tracer): TelemetryContext {
   return {
     getActiveSpan(): Span | undefined {
       return span ?? undefined
     },
-    getTracer(name: string): Tracer {
-      return trace.getTracer(name)
+    getTracer(_name: string): Tracer {
+      // Return a context-aware tracer that automatically links spans to the current trace
+      return createContextAwareTracer(tracer, span)
+    },
+    startSpan(name: string, options?: { attributes?: Record<string, any> }): Span {
+      // Create a child span linked to the current span (job or step)
+      const parentContext = span ? trace.setSpan(context.active(), span) : context.active()
+      return tracer.startSpan(name, { attributes: options?.attributes }, parentContext)
     },
     recordMetric(name: string, value: number, attributes?: Record<string, any>): void {
       if (span) {
@@ -268,7 +346,7 @@ export class StepManager {
     abortSignal: AbortSignal,
     logger: Logger,
   ): ActionHandlerContext<TInput, TVariables> {
-    const telemetryContext = createTelemetryContext(this.#jobSpan)
+    const telemetryContext = createTelemetryContext(this.#jobSpan, this.#tracer)
     return new ActionContext(this, job, action, variables, abortSignal, logger, telemetryContext)
   }
 
@@ -278,10 +356,10 @@ export class StepManager {
   createStepTelemetryContext(stepId: string): TelemetryContext {
     const stepSpan = this.#stepSpans.get(stepId)
     if (stepSpan) {
-      return createTelemetryContext(stepSpan)
+      return createTelemetryContext(stepSpan, this.#tracer)
     }
     // Fallback to job span if step span not found
-    return createTelemetryContext(this.#jobSpan)
+    return createTelemetryContext(this.#jobSpan, this.#tracer)
   }
 
   /**

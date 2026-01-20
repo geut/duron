@@ -341,10 +341,9 @@ export class Client<
       this.#initTelemetry(this.#telemetryOptions)
     }
 
-    // Always get a tracer - it's a no-op tracer when no SDK is registered
-    // This follows the OpenTelemetry pattern where the API always returns a tracer
-    // (either a real one if SDK is configured, or a no-op one otherwise)
-    this.#tracer = trace.getTracer('duron')
+    // Get tracer from our provider if configured, otherwise use global no-op tracer
+    // This keeps telemetry scoped to this client instance rather than globally registered
+    this.#tracer = this.#tracerProvider?.getTracer('duron') ?? trace.getTracer('duron')
   }
 
   /**
@@ -386,10 +385,8 @@ export class Client<
         }),
         spanProcessors: processors,
       })
-
-      // Register the provider globally
-      // Once registered, the tracer obtained via trace.getTracer() will use this provider
-      this.#tracerProvider.register()
+      // Note: We do NOT call .register() here to avoid global state pollution
+      // The tracer is obtained directly from this provider instance
     }
   }
 

@@ -526,7 +526,11 @@ export class StepManager {
       try {
         // Race between abort signal and callback execution
         const abortPromise = waitForAbort(stepSignal)
-        const callbackPromise = cb(stepContext)
+
+        // Execute callback within the span context so that child spans inherit the trace
+        const currentStepSpan = step?.id ? this.#stepSpans.get(step.id) : undefined
+        const spanContext = currentStepSpan ? trace.setSpan(context.active(), currentStepSpan) : context.active()
+        const callbackPromise = context.with(spanContext, () => cb(stepContext))
 
         let result: any = null
         let aborted = false

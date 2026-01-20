@@ -788,7 +788,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       step_existed AS (
         SELECT EXISTS(
           SELECT 1 FROM ${this.tables.jobStepsTable} s
-          WHERE s.job_id = ${jobId} 
+          WHERE s.job_id = ${jobId}
             AND s.name = ${name}
             AND s.parent_step_id IS NOT DISTINCT FROM ${parentStepId}
         ) AS existed
@@ -1015,10 +1015,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
 
     // Calculate duration as a SQL expression (finishedAt - startedAt in milliseconds)
     const durationMs = sql<number | null>`
-      CASE 
-        WHEN ${jobsTable.started_at} IS NOT NULL AND ${jobsTable.finished_at} IS NOT NULL 
+      CASE
+        WHEN ${jobsTable.started_at} IS NOT NULL AND ${jobsTable.finished_at} IS NOT NULL
         THEN EXTRACT(EPOCH FROM (${jobsTable.finished_at} - ${jobsTable.started_at})) * 1000
-        ELSE NULL 
+        ELSE NULL
       END
     `.as('duration_ms')
 
@@ -1208,10 +1208,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
 
     // Calculate duration as a SQL expression (finishedAt - startedAt in milliseconds)
     const durationMs = sql<number | null>`
-      CASE 
-        WHEN ${jobsTable.started_at} IS NOT NULL AND ${jobsTable.finished_at} IS NOT NULL 
+      CASE
+        WHEN ${jobsTable.started_at} IS NOT NULL AND ${jobsTable.finished_at} IS NOT NULL
         THEN EXTRACT(EPOCH FROM (${jobsTable.finished_at} - ${jobsTable.started_at})) * 1000
-        ELSE NULL 
+        ELSE NULL
       END
     `.as('duration_ms')
 
@@ -1497,13 +1497,33 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
 
   /**
    * Build WHERE clause for spans queries.
+   * When querying by jobId or stepId, we find all spans that share the same trace_id
+   * as spans with that job/step. This includes spans from external libraries that
+   * don't have the duron.job.id attribute but are part of the same trace.
    */
   protected _buildSpansWhereClause(jobId?: string, stepId?: string, filters?: GetSpansOptions['filters']) {
     const spansTable = this.tables.spansTable
 
+    // Build condition for finding spans by trace_id (includes external spans)
+    let traceCondition: ReturnType<typeof eq> | undefined
+
+    if (jobId) {
+      // Find all spans that share a trace_id with any span that has this job_id
+      // This includes external spans (like from AI SDK) that don't have duron.job.id
+      traceCondition = inArray(
+        spansTable.trace_id,
+        this.db.select({ traceId: spansTable.trace_id }).from(spansTable).where(eq(spansTable.job_id, jobId)),
+      )
+    } else if (stepId) {
+      // Find all spans that share a trace_id with any span that has this step_id
+      traceCondition = inArray(
+        spansTable.trace_id,
+        this.db.select({ traceId: spansTable.trace_id }).from(spansTable).where(eq(spansTable.step_id, stepId)),
+      )
+    }
+
     return and(
-      jobId ? eq(spansTable.job_id, jobId) : undefined,
-      stepId ? eq(spansTable.step_id, stepId) : undefined,
+      traceCondition,
       filters?.name
         ? Array.isArray(filters.name)
           ? or(...filters.name.map((n) => ilike(spansTable.name, `%${n}%`)))

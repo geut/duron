@@ -45,8 +45,12 @@ export function JsonView({ value, title = 'JSON', height = '200px' }: JsonViewPr
             },
             wordWrap: 'on',
             automaticLayout: true,
+            padding: {
+              top: 16,
+              bottom: 16,
+            },
             find: {
-              addExtraSpaceOnTop: false,
+              addExtraSpaceOnTop: true,
               autoFindInSelection: 'never',
               seedSearchStringFromSelection: 'never',
             },
@@ -65,7 +69,7 @@ export function JsonView({ value, title = 'JSON', height = '200px' }: JsonViewPr
       </Button>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+        <DialogContent className="max-w-4xl! h-[80vh] w-[90vw]! flex flex-col">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
@@ -77,7 +81,7 @@ export function JsonView({ value, title = 'JSON', height = '200px' }: JsonViewPr
               theme={monacoTheme}
               options={{
                 readOnly: true,
-                minimap: { enabled: true },
+                minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 folding: true,
                 lineNumbers: 'on',
@@ -91,8 +95,12 @@ export function JsonView({ value, title = 'JSON', height = '200px' }: JsonViewPr
                 },
                 wordWrap: 'on',
                 automaticLayout: true,
+                padding: {
+                  top: 16,
+                  bottom: 16,
+                },
                 find: {
-                  addExtraSpaceOnTop: false,
+                  addExtraSpaceOnTop: true,
                   autoFindInSelection: 'never',
                   seedSearchStringFromSelection: 'never',
                 },

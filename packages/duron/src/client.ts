@@ -35,7 +35,7 @@ type InferActionSchema<T> = T extends z.ZodTypeAny ? z.infer<T> : Record<string,
  * Result returned from waitForJob with untyped input and output.
  */
 export interface JobResult {
-  jobId: string
+  id: string
   actionName: string
   status: JobStatus
   groupKey: string
@@ -48,7 +48,7 @@ export interface JobResult {
  * Result returned from runActionAndWait with typed input and output based on the action's Zod schemas.
  */
 export interface TypedJobResult<TAction extends Action<any, any, any>> {
-  jobId: string
+  id: string
   actionName: string
   status: JobStatus
   groupKey: string
@@ -848,7 +848,7 @@ export class Client<
           return null
         }
         return {
-          jobId: job.id,
+          id: job.id,
           actionName: job.actionName,
           status: job.status,
           groupKey: job.groupKey,
@@ -1107,7 +1107,7 @@ export class Client<
         // Transform to JobResult
         const result: JobResult | null = job
           ? {
-              jobId: job.id,
+              id: job.id,
               actionName: job.actionName,
               status: job.status,
               groupKey: job.groupKey,

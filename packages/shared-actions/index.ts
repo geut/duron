@@ -192,6 +192,7 @@ export const getWeather = defineAction<typeof variables>()({
           temperature: 1,
           abortSignal: ctx.signal,
           experimental_telemetry: {
+            isEnabled: true,
             tracer: ctx.telemetry.getTracer('generate-nice-message-2'),
           },
         })

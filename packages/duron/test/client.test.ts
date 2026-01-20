@@ -560,7 +560,7 @@ function runClientTests(adapterFactory: AdapterFactory) {
         const result = await client.waitForJob(jobId, { timeout: 5000 })
 
         expect(result).toBeTruthy()
-        expect(result?.jobId).toBe(jobId)
+        expect(result?.id).toBe(jobId)
         expect(result?.status).toBe(JOB_STATUS_COMPLETED)
         expect(result?.output).toEqual({ result: 'Processed: Wait for me' })
       })
@@ -577,7 +577,7 @@ function runClientTests(adapterFactory: AdapterFactory) {
         const result = await client.waitForJob(jobId, { timeout: 5000 })
 
         expect(result).toBeTruthy()
-        expect(result?.jobId).toBe(jobId)
+        expect(result?.id).toBe(jobId)
         expect(result?.status).toBe(JOB_STATUS_FAILED)
         expect(result?.error).toBeTruthy()
       })
@@ -595,7 +595,7 @@ function runClientTests(adapterFactory: AdapterFactory) {
         const result = await client.waitForJob(jobId)
 
         expect(result).toBeTruthy()
-        expect(result?.jobId).toBe(jobId)
+        expect(result?.id).toBe(jobId)
         expect(result?.status).toBe(JOB_STATUS_COMPLETED)
       })
 
@@ -644,9 +644,9 @@ function runClientTests(adapterFactory: AdapterFactory) {
         expect(result1).toBeTruthy()
         expect(result2).toBeTruthy()
         expect(result3).toBeTruthy()
-        expect(result1?.jobId).toBe(jobId)
-        expect(result2?.jobId).toBe(jobId)
-        expect(result3?.jobId).toBe(jobId)
+        expect(result1?.id).toBe(jobId)
+        expect(result2?.id).toBe(jobId)
+        expect(result3?.id).toBe(jobId)
         expect(result1?.status).toBe(JOB_STATUS_COMPLETED)
         expect(result2?.status).toBe(JOB_STATUS_COMPLETED)
         expect(result3?.status).toBe(JOB_STATUS_COMPLETED)
@@ -672,8 +672,8 @@ function runClientTests(adapterFactory: AdapterFactory) {
 
         expect(result1).toBeTruthy()
         expect(result2).toBeTruthy()
-        expect(result1?.jobId).toBe(jobId1)
-        expect(result2?.jobId).toBe(jobId2)
+        expect(result1?.id).toBe(jobId1)
+        expect(result2?.id).toBe(jobId2)
         expect(result1?.status).toBe(JOB_STATUS_COMPLETED)
         expect(result2?.status).toBe(JOB_STATUS_COMPLETED)
       })
@@ -706,7 +706,7 @@ function runClientTests(adapterFactory: AdapterFactory) {
         })
 
         expect(result).toBeTruthy()
-        expect(result.jobId).toBeTruthy()
+        expect(result.id).toBeTruthy()
         expect(result.actionName).toBe('test-action')
         expect(result.status).toBe(JOB_STATUS_COMPLETED)
         expect(result.groupKey).toBe('@default')

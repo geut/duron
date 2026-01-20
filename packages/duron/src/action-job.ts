@@ -1,4 +1,4 @@
-import { type Span, SpanKind, SpanStatusCode, type Tracer } from '@opentelemetry/api'
+import { context, type Span, SpanKind, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api'
 import type { Logger } from 'pino'
 
 import type { Action } from './action.js'
@@ -125,9 +125,13 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       // Execute handler with timeout - race between handler and abort signal
       const abortWaiter = waitForAbort(this.#abortController.signal)
       let result: any = null
+
+      // Execute handler within the job span context so that child spans inherit the trace
+      const spanContext = this.#jobSpan ? trace.setSpan(context.active(), this.#jobSpan) : context.active()
+
       await Promise.race([
-        this.#action
-          .handler(ctx)
+        context
+          .with(spanContext, () => this.#action.handler(ctx))
           .then((res) => {
             if (res !== undefined) {
               result = res

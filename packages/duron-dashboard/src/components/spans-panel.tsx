@@ -45,6 +45,7 @@ function SpanItem({ span }: SpanItemProps) {
       ? BigInt(span.endTimeUnixNano) - BigInt(span.startTimeUnixNano)
       : null
   const durationMs = durationNs ? Number(durationNs / BigInt(1_000_000)) : null
+  const durationSec = durationMs !== null ? (durationMs / 1000).toFixed(2) : null
   const startTime = nanosToDate(span.startTimeUnixNano)
 
   return (
@@ -68,10 +69,10 @@ function SpanItem({ span }: SpanItemProps) {
       </div>
 
       <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-        {durationMs !== null && (
+        {durationSec !== null && (
           <div className="flex items-center gap-1">
             <Hash className="h-3 w-3" />
-            <span className="font-mono">{durationMs}ms</span>
+            <span className="font-mono">{durationSec}s</span>
           </div>
         )}
         {startTime && (
@@ -135,7 +136,7 @@ function VirtualizedSpansList({ spans }: VirtualizedSpansListProps) {
   const virtualItems = virtualizer.getVirtualItems()
 
   return (
-    <div ref={parentRef} className="h-full overflow-auto">
+    <div ref={parentRef} className="h-full overflow-auto pr-2">
       <div
         style={{
           height: `${virtualizer.getTotalSize()}px`,

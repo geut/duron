@@ -12,6 +12,7 @@ export * from './client.js'
 export * from './constants.js'
 export { NonRetriableError, UnhandledChildStepsError } from './errors.js'
 export * from './server.js'
+export type { TelemetryContext } from './step-manager.js'
 export * from './telemetry/index.js'
 
 export const duron = <

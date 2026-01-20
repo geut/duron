@@ -10,46 +10,107 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { type Metric, useJobMetrics, useStepMetrics } from '@/hooks/use-job-metrics'
+import { type Span, useJobSpans, useStepSpans } from '@/hooks/use-job-spans'
 import { formatDate } from '@/lib/format'
 import { JsonView } from './json-view'
 
-interface MetricItemProps {
-  metric: Metric
+const SpanKindLabels: Record<number, string> = {
+  0: 'INTERNAL',
+  1: 'SERVER',
+  2: 'CLIENT',
+  3: 'PRODUCER',
+  4: 'CONSUMER',
 }
 
-function MetricItem({ metric }: MetricItemProps) {
+const SpanStatusLabels: Record<number, string> = {
+  0: 'UNSET',
+  1: 'OK',
+  2: 'ERROR',
+}
+
+interface SpanItemProps {
+  span: Span
+}
+
+function nanosToDate(nanos: string | null): Date | null {
+  if (!nanos) return null
+  // Convert nanoseconds to milliseconds
+  const ms = Number(BigInt(nanos) / BigInt(1_000_000))
+  return new Date(ms)
+}
+
+function SpanItem({ span }: SpanItemProps) {
+  const durationNs =
+    span.endTimeUnixNano && span.startTimeUnixNano
+      ? BigInt(span.endTimeUnixNano) - BigInt(span.startTimeUnixNano)
+      : null
+  const durationMs = durationNs ? Number(durationNs / BigInt(1_000_000)) : null
+  const startTime = nanosToDate(span.startTimeUnixNano)
+
   return (
     <div className="p-3 border rounded-lg space-y-2 bg-card">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <Activity className="h-4 w-4 text-primary shrink-0" />
-          <span className="font-medium text-sm truncate">{metric.name}</span>
+          <span className="font-medium text-sm truncate">{span.name}</span>
         </div>
-        <Badge variant="outline" className="text-xs shrink-0">
-          {metric.type}
-        </Badge>
-      </div>
-
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <Hash className="h-3 w-3" />
-          <span className="font-mono">{metric.value}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          <span>{formatDate(metric.timestamp)}</span>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs shrink-0">
+            {SpanKindLabels[span.kind] ?? 'UNKNOWN'}
+          </Badge>
+          <Badge
+            variant={span.statusCode === 2 ? 'destructive' : span.statusCode === 1 ? 'default' : 'secondary'}
+            className="text-xs shrink-0"
+          >
+            {SpanStatusLabels[span.statusCode] ?? 'UNKNOWN'}
+          </Badge>
         </div>
       </div>
 
-      {Object.keys(metric.attributes).length > 0 && (
+      <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+        {durationMs !== null && (
+          <div className="flex items-center gap-1">
+            <Hash className="h-3 w-3" />
+            <span className="font-mono">{durationMs}ms</span>
+          </div>
+        )}
+        {startTime && (
+          <div className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            <span>{formatDate(startTime.toISOString())}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1 text-muted-foreground/70">
+          <span className="font-mono text-[10px] truncate max-w-[120px]" title={span.traceId}>
+            trace: {span.traceId.slice(0, 8)}...
+          </span>
+        </div>
+      </div>
+
+      {span.statusMessage && (
+        <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">{span.statusMessage}</div>
+      )}
+
+      {span.attributes && Object.keys(span.attributes).length > 0 && (
         <div className="pt-2 border-t">
           <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
             <Tag className="h-3 w-3" />
             <span>Attributes</span>
           </div>
           <div className="text-xs">
-            <JsonView value={metric.attributes} title="Metric Attributes" height="100px" />
+            <JsonView value={span.attributes} title="Span Attributes" height="100px" />
+          </div>
+        </div>
+      )}
+
+      {span.events && span.events.length > 0 && (
+        <div className="pt-2 border-t">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+            <Activity className="h-3 w-3" />
+            <span>Events ({span.events.length})</span>
+          </div>
+          <div className="text-xs">
+            <JsonView value={span.events} title="Span Events" height="100px" />
           </div>
         </div>
       )}
@@ -57,17 +118,17 @@ function MetricItem({ metric }: MetricItemProps) {
   )
 }
 
-interface VirtualizedMetricsListProps {
-  metrics: Metric[]
+interface VirtualizedSpansListProps {
+  spans: Span[]
 }
 
-function VirtualizedMetricsList({ metrics }: VirtualizedMetricsListProps) {
+function VirtualizedSpansList({ spans }: VirtualizedSpansListProps) {
   const parentRef = useRef<HTMLDivElement>(null)
 
   const virtualizer = useVirtualizer({
-    count: metrics.length,
+    count: spans.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 100,
+    estimateSize: () => 120,
     overscan: 5,
   })
 
@@ -83,7 +144,7 @@ function VirtualizedMetricsList({ metrics }: VirtualizedMetricsListProps) {
         }}
       >
         {virtualItems.map((virtualItem) => {
-          const metric = metrics[virtualItem.index]!
+          const span = spans[virtualItem.index]!
           return (
             <div
               key={virtualItem.key}
@@ -98,7 +159,7 @@ function VirtualizedMetricsList({ metrics }: VirtualizedMetricsListProps) {
               }}
             >
               <div className="pb-2">
-                <MetricItem metric={metric} />
+                <SpanItem span={span} />
               </div>
             </div>
           )
@@ -109,33 +170,32 @@ function VirtualizedMetricsList({ metrics }: VirtualizedMetricsListProps) {
 }
 
 interface JsonataResult {
-  type: 'metrics' | 'primitive' | 'error' | 'empty'
-  metrics?: Metric[]
+  type: 'spans' | 'primitive' | 'error' | 'empty'
+  spans?: Span[]
   primitiveValue?: unknown
   error?: string
 }
 
-function isMetricLike(item: unknown): item is Metric {
+function isSpanLike(item: unknown): item is Span {
   return (
     typeof item === 'object' &&
     item !== null &&
     'id' in item &&
     'name' in item &&
-    'value' in item &&
-    'type' in item &&
-    'jobId' in item &&
-    'timestamp' in item
+    'traceId' in item &&
+    'spanId' in item &&
+    'kind' in item
   )
 }
 
-async function evaluateJsonata(expression: string, metrics: Metric[]): Promise<JsonataResult> {
+async function evaluateJsonata(expression: string, spans: Span[]): Promise<JsonataResult> {
   if (!expression.trim()) {
     return { type: 'empty' }
   }
 
   try {
     const compiled = jsonata(expression)
-    const result = await compiled.evaluate(metrics)
+    const result = await compiled.evaluate(spans)
 
     // Check if result is undefined/null
     if (result === undefined || result === null) {
@@ -144,40 +204,40 @@ async function evaluateJsonata(expression: string, metrics: Metric[]): Promise<J
 
     // Check if result is an array
     if (Array.isArray(result)) {
-      // Check if it looks like an array of metrics
-      const isMetricsArray = result.every(isMetricLike)
+      // Check if it looks like an array of spans
+      const isSpansArray = result.every(isSpanLike)
 
-      if (isMetricsArray) {
-        return { type: 'metrics', metrics: result }
+      if (isSpansArray) {
+        return { type: 'spans', spans: result }
       }
 
-      // It's an array but not metrics - show as primitive
+      // It's an array but not spans - show as primitive
       return { type: 'primitive', primitiveValue: result }
     }
 
-    // Check if it's a single metric object
-    if (isMetricLike(result)) {
-      return { type: 'metrics', metrics: [result] }
+    // Check if it's a single span object
+    if (isSpanLike(result)) {
+      return { type: 'spans', spans: [result] }
     }
 
-    // It's a primitive value (string, number, boolean, object without metric shape)
+    // It's a primitive value (string, number, boolean, object without span shape)
     return { type: 'primitive', primitiveValue: result }
   } catch (err) {
     return { type: 'error', error: err instanceof Error ? err.message : 'Unknown error' }
   }
 }
 
-interface MetricsModalProps {
+interface SpansModalProps {
   open: boolean
   onClose: () => void
   title: string
-  metrics: Metric[]
+  spans: Span[]
   total: number
   isLoading: boolean
   error: Error | null
 }
 
-function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }: MetricsModalProps) {
+function SpansModal({ open, onClose, title, spans, total, isLoading, error }: SpansModalProps) {
   const [query, setQuery] = useState('')
   const [debouncedQuery] = useDebounceValue(query, 300)
   const [jsonataResult, setJsonataResult] = useState<JsonataResult>({ type: 'empty' })
@@ -186,7 +246,7 @@ function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }
   useEffect(() => {
     let cancelled = false
 
-    evaluateJsonata(debouncedQuery, metrics).then((result) => {
+    evaluateJsonata(debouncedQuery, spans).then((result) => {
       if (!cancelled) {
         setJsonataResult(result)
       }
@@ -195,14 +255,14 @@ function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }
     return () => {
       cancelled = true
     }
-  }, [metrics, debouncedQuery])
+  }, [spans, debouncedQuery])
 
-  // Determine which metrics to display
-  const displayMetrics = jsonataResult.type === 'metrics' ? jsonataResult.metrics! : metrics
+  // Determine which spans to display
+  const displaySpans = jsonataResult.type === 'spans' ? jsonataResult.spans! : spans
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-4xl! w-[90vw]! h-[85vh]! flex flex-col p-0">
+      <DialogContent className="!max-w-4xl !w-[90vw] !h-[85vh] flex flex-col p-0">
         <DialogHeader className="shrink-0 px-6 pt-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Activity className="h-5 w-5" />
@@ -218,7 +278,7 @@ function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }
               <span className="text-xs text-muted-foreground">JSONata Query</span>
             </div>
             <Textarea
-              placeholder="Enter JSONata expression to filter metrics... e.g. $[name='duron.job.span.end'] or $sum(value)"
+              placeholder="Enter JSONata expression to filter spans... e.g. $[name='step:processOrder'] or $[statusCode=2]"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="font-mono text-sm min-h-[60px] resize-y"
@@ -260,12 +320,12 @@ function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }
 
           {/* Results count */}
           <div className="text-xs text-muted-foreground shrink-0">
-            {jsonataResult.type === 'metrics' ? (
+            {jsonataResult.type === 'spans' ? (
               <>
-                Showing {displayMetrics.length} of {total} metrics (filtered by query)
+                Showing {displaySpans.length} of {total} spans (filtered by query)
               </>
             ) : (
-              <>{total} metrics total</>
+              <>{total} spans total</>
             )}
           </div>
 
@@ -273,25 +333,25 @@ function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }
           <div className="flex-1 min-h-0 overflow-hidden">
             {isLoading && (
               <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                Loading metrics...
+                Loading spans...
               </div>
             )}
 
             {error && (
               <div className="h-full flex items-center justify-center text-sm text-destructive">
-                Failed to load metrics: {error.message}
+                Failed to load spans: {error.message}
               </div>
             )}
 
-            {!isLoading && !error && displayMetrics.length === 0 && (
+            {!isLoading && !error && displaySpans.length === 0 && (
               <div className="h-full flex items-center justify-center text-sm text-muted-foreground italic">
-                {query ? 'No metrics match your query' : 'No metrics recorded'}
+                {query ? 'No spans match your query' : 'No spans recorded'}
               </div>
             )}
 
-            {!isLoading && !error && displayMetrics.length > 0 && (
+            {!isLoading && !error && displaySpans.length > 0 && (
               <div className="h-full p-3">
-                <VirtualizedMetricsList metrics={displayMetrics} />
+                <VirtualizedSpansList spans={displaySpans} />
               </div>
             )}
           </div>
@@ -301,21 +361,21 @@ function MetricsModal({ open, onClose, title, metrics, total, isLoading, error }
   )
 }
 
-interface JobMetricsModalProps {
+interface JobSpansModalProps {
   jobId: string | null
   open: boolean
   onClose: () => void
 }
 
-export function JobMetricsModal({ jobId, open, onClose }: JobMetricsModalProps) {
-  const { data, isLoading, error } = useJobMetrics({ jobId, enabled: open && !!jobId })
+export function JobSpansModal({ jobId, open, onClose }: JobSpansModalProps) {
+  const { data, isLoading, error } = useJobSpans({ jobId, enabled: open && !!jobId })
 
   return (
-    <MetricsModal
+    <SpansModal
       open={open}
       onClose={onClose}
-      title="Job Metrics"
-      metrics={data?.metrics ?? []}
+      title="Job Spans"
+      spans={data?.spans ?? []}
       total={data?.total ?? 0}
       isLoading={isLoading}
       error={error}
@@ -323,21 +383,21 @@ export function JobMetricsModal({ jobId, open, onClose }: JobMetricsModalProps) 
   )
 }
 
-interface StepMetricsModalProps {
+interface StepSpansModalProps {
   stepId: string | null
   open: boolean
   onClose: () => void
 }
 
-export function StepMetricsModal({ stepId, open, onClose }: StepMetricsModalProps) {
-  const { data, isLoading, error } = useStepMetrics({ stepId, enabled: open && !!stepId })
+export function StepSpansModal({ stepId, open, onClose }: StepSpansModalProps) {
+  const { data, isLoading, error } = useStepSpans({ stepId, enabled: open && !!stepId })
 
   return (
-    <MetricsModal
+    <SpansModal
       open={open}
       onClose={onClose}
-      title="Step Metrics"
-      metrics={data?.metrics ?? []}
+      title="Step Spans"
+      spans={data?.spans ?? []}
       total={data?.total ?? 0}
       isLoading={isLoading}
       error={error}

@@ -214,8 +214,7 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
                   : ''
               }
             >
-              {formatDate(dateStr)}{' '}
-              {formatExpirationWindow(row.original.startedAt, dateStr)}
+              {formatDate(dateStr)} {formatExpirationWindow(row.original.startedAt, dateStr)}
             </div>
           )
         },

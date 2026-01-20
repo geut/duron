@@ -124,7 +124,7 @@ const contextVerificationStep = createStep<typeof variables>()({
       hasSignal: ctx.signal instanceof AbortSignal,
       hasStepId: typeof ctx.stepId === 'string' && ctx.stepId.length > 0,
       hasParentStepId: ctx.parentStepId === null, // Root step has no parent
-      hasObserve: typeof ctx.observe === 'object',
+      hasTelemetry: typeof ctx.telemetry === 'object',
       hasVar: typeof ctx.var === 'object',
       hasLogger: typeof ctx.logger === 'object',
       hasJobId: typeof ctx.jobId === 'string' && ctx.jobId.length > 0,
@@ -346,7 +346,7 @@ const contextVerificationAction = defineAction<typeof variables>()({
     hasSignal: z.boolean(),
     hasStepId: z.boolean(),
     hasParentStepId: z.boolean(),
-    hasObserve: z.boolean(),
+    hasTelemetry: z.boolean(),
     hasVar: z.boolean(),
     hasLogger: z.boolean(),
     hasJobId: z.boolean(),
@@ -710,7 +710,7 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
           hasSignal: boolean
           hasStepId: boolean
           hasParentStepId: boolean
-          hasObserve: boolean
+          hasTelemetry: boolean
           hasVar: boolean
           hasLogger: boolean
           hasJobId: boolean
@@ -720,7 +720,7 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         expect(output.hasSignal).toBe(true)
         expect(output.hasStepId).toBe(true)
         expect(output.hasParentStepId).toBe(true)
-        expect(output.hasObserve).toBe(true)
+        expect(output.hasTelemetry).toBe(true)
         expect(output.hasVar).toBe(true)
         expect(output.hasLogger).toBe(true)
         expect(output.hasJobId).toBe(true)

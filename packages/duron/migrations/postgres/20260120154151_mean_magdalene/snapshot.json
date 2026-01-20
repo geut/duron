@@ -1,8 +1,10 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "4e93c0bf-b135-40b4-b130-0cf0968bffe3",
-  "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "id": "9ff8be1d-ba8f-4014-bed4-e7428b9368c2",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
   "ddl": [
     {
       "name": "duron",
@@ -22,7 +24,7 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "metrics",
+      "name": "spans",
       "entityType": "tables",
       "schema": "duron"
     },
@@ -469,22 +471,61 @@
       "table": "jobs"
     },
     {
-      "type": "uuid",
+      "type": "bigserial",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "gen_random_uuid()",
+      "default": null,
       "generated": null,
       "identity": null,
       "name": "id",
       "entityType": "columns",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "trace_id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "spans"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "span_id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "spans"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "parent_span_id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "spans"
     },
     {
       "type": "uuid",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -492,7 +533,7 @@
       "name": "job_id",
       "entityType": "columns",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "type": "uuid",
@@ -505,7 +546,7 @@
       "name": "step_id",
       "entityType": "columns",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "type": "text",
@@ -518,20 +559,72 @@
       "name": "name",
       "entityType": "columns",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
-      "type": "double precision",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "spans"
+    },
+    {
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "value",
+      "name": "start_time_unix_nano",
       "entityType": "columns",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "end_time_unix_nano",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "spans"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "status_code",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "spans"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status_message",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "spans"
     },
     {
       "type": "jsonb",
@@ -544,46 +637,20 @@
       "name": "attributes",
       "entityType": "columns",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
-      "type": "text",
+      "type": "jsonb",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": null,
+      "default": "'[]'",
       "generated": null,
       "identity": null,
-      "name": "type",
+      "name": "events",
       "entityType": "columns",
       "schema": "duron",
-      "table": "metrics"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "timestamp",
-      "entityType": "columns",
-      "schema": "duron",
-      "table": "metrics"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "nameExplicit": true,
@@ -1058,6 +1125,48 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "trace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_spans_trace_id",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "spans"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "span_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_spans_span_id",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "spans"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "job_id",
           "isExpression": false,
           "asc": true,
@@ -1070,10 +1179,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_metrics_job_id",
+      "name": "idx_spans_job_id",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "nameExplicit": true,
@@ -1091,10 +1200,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_metrics_step_id",
+      "name": "idx_spans_step_id",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "nameExplicit": true,
@@ -1112,16 +1221,16 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_metrics_name",
+      "name": "idx_spans_name",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "nameExplicit": true,
       "columns": [
         {
-          "value": "type",
+          "value": "kind",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -1133,16 +1242,16 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_metrics_type",
+      "name": "idx_spans_kind",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "nameExplicit": true,
       "columns": [
         {
-          "value": "timestamp",
+          "value": "status_code",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -1154,10 +1263,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_metrics_timestamp",
+      "name": "idx_spans_status_code",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "nameExplicit": true,
@@ -1182,23 +1291,23 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_metrics_job_step",
+      "name": "idx_spans_job_step",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "nameExplicit": true,
       "columns": [
         {
-          "value": "job_id",
+          "value": "trace_id",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
           "opclass": null
         },
         {
-          "value": "name",
+          "value": "parent_span_id",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -1210,38 +1319,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_metrics_job_name",
+      "name": "idx_spans_trace_parent",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "metrics"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "job_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "type",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_metrics_job_type",
-      "entityType": "indexes",
-      "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "nameExplicit": true,
@@ -1259,17 +1340,42 @@
       "with": "",
       "method": "gin",
       "concurrently": false,
-      "name": "idx_metrics_attributes",
+      "name": "idx_spans_attributes",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "events",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "gin",
+      "concurrently": false,
+      "name": "idx_spans_events",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "spans"
     },
     {
       "nameExplicit": false,
-      "columns": ["job_id"],
+      "columns": [
+        "job_id"
+      ],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": ["id"],
+      "columnsTo": [
+        "id"
+      ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "job_steps_job_id_jobs_id_fkey",
@@ -1279,32 +1385,42 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["job_id"],
+      "columns": [
+        "job_id"
+      ],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": ["id"],
+      "columnsTo": [
+        "id"
+      ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "metrics_job_id_jobs_id_fkey",
+      "name": "spans_job_id_jobs_id_fkey",
       "entityType": "fks",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
       "nameExplicit": false,
-      "columns": ["step_id"],
+      "columns": [
+        "step_id"
+      ],
       "schemaTo": "duron",
       "tableTo": "job_steps",
-      "columnsTo": ["id"],
+      "columnsTo": [
+        "id"
+      ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "metrics_step_id_job_steps_id_fkey",
+      "name": "spans_step_id_job_steps_id_fkey",
       "entityType": "fks",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
     },
     {
-      "columns": ["id"],
+      "columns": [
+        "id"
+      ],
       "nameExplicit": false,
       "name": "job_steps_pkey",
       "schema": "duron",
@@ -1312,7 +1428,9 @@
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
+      "columns": [
+        "id"
+      ],
       "nameExplicit": false,
       "name": "jobs_pkey",
       "schema": "duron",
@@ -1320,16 +1438,22 @@
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
+      "columns": [
+        "id"
+      ],
       "nameExplicit": false,
-      "name": "metrics_pkey",
+      "name": "spans_pkey",
       "schema": "duron",
-      "table": "metrics",
+      "table": "spans",
       "entityType": "pks"
     },
     {
       "nameExplicit": true,
-      "columns": ["job_id", "name", "parent_step_id"],
+      "columns": [
+        "job_id",
+        "name",
+        "parent_step_id"
+      ],
       "nullsNotDistinct": true,
       "name": "unique_job_step_name_parent",
       "entityType": "uniques",
@@ -1351,11 +1475,18 @@
       "table": "jobs"
     },
     {
-      "value": "\"type\" IN ('metric', 'span_event', 'span_attribute')",
-      "name": "metrics_type_check",
+      "value": "\"kind\" IN (0, 1, 2, 3, 4)",
+      "name": "spans_kind_check",
       "entityType": "checks",
       "schema": "duron",
-      "table": "metrics"
+      "table": "spans"
+    },
+    {
+      "value": "\"status_code\" IN (0, 1, 2)",
+      "name": "spans_status_code_check",
+      "entityType": "checks",
+      "schema": "duron",
+      "table": "spans"
     }
   ],
   "renames": []

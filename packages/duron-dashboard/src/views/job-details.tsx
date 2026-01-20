@@ -6,14 +6,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { useMetrics } from '@/contexts/metrics-context'
+import { useSpans } from '@/contexts/spans-context'
 import { useJobStatusPolling } from '@/hooks/use-job-status-polling'
 import { useCancelJob, useDeleteJob, useJob, useRetryJob } from '@/lib/api'
 import { formatExpirationWindow, formatMsToSeconds } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { JsonView } from '../components/json-view'
-import { JobMetricsModal } from '../components/metrics-panel'
+import { JobSpansModal } from '../components/spans-panel'
 import { isExpiring } from '../lib/is-expiring'
 
 interface JobDetailsProps {
@@ -23,8 +23,8 @@ interface JobDetailsProps {
 
 export function JobDetails({ jobId, onClose }: JobDetailsProps) {
   const { data: job, isLoading: jobLoading } = useJob(jobId)
-  const { metricsEnabled } = useMetrics()
-  const [showMetrics, setShowMetrics] = useState(false)
+  const { spansEnabled } = useSpans()
+  const [showSpans, setShowSpans] = useState(false)
 
   // Enable polling for job status updates - refetches entire job detail when status changes
   useJobStatusPolling(jobId, true)
@@ -136,10 +136,10 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
                 <Play className="h-4 w-4 mr-2" />
                 Retry
               </DropdownMenuItem>
-              {metricsEnabled && (
-                <DropdownMenuItem onClick={() => setShowMetrics(!showMetrics)}>
+              {spansEnabled && (
+                <DropdownMenuItem onClick={() => setShowSpans(!showSpans)}>
                   <Activity className="h-4 w-4 mr-2" />
-                  {showMetrics ? 'Hide Metrics' : 'Show Metrics'}
+                  {showSpans ? 'Hide Spans' : 'Show Spans'}
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem
@@ -245,8 +245,7 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
                       : ''
                   }
                 >
-                  {formatDate(job.expiresAt)}{' '}
-                  {formatExpirationWindow(job.startedAt, job.expiresAt)}
+                  {formatDate(job.expiresAt)} {formatExpirationWindow(job.startedAt, job.expiresAt)}
                 </span>
               </div>
             )}
@@ -283,8 +282,8 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
 
-      {/* Metrics Modal */}
-      {metricsEnabled && <JobMetricsModal jobId={job.id} open={showMetrics} onClose={() => setShowMetrics(false)} />}
+      {/* Spans Modal */}
+      {spansEnabled && <JobSpansModal jobId={job.id} open={showSpans} onClose={() => setShowSpans(false)} />}
     </div>
   )
 }

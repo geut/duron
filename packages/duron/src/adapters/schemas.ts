@@ -305,59 +305,94 @@ export const JobStepStatusResultSchema = z.object({
 })
 
 // ============================================================================
-// Metrics Schemas
+// Span Schemas (OpenTelemetry compatible)
 // ============================================================================
 
-export const MetricTypeSchema = z.enum(['metric', 'span_event', 'span_attribute'])
+/**
+ * SpanKind values (OpenTelemetry standard):
+ * 0 = INTERNAL - Default, internal operation
+ * 1 = SERVER - Server-side handling of RPC/HTTP request
+ * 2 = CLIENT - Client-side of RPC/HTTP request
+ * 3 = PRODUCER - Producer of async message
+ * 4 = CONSUMER - Consumer of async message
+ */
+export const SpanKindSchema = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
 
-export const MetricSchema = z.object({
-  id: z.string(),
-  jobId: z.string(),
-  stepId: z.string().nullable(),
+/**
+ * SpanStatusCode values (OpenTelemetry standard):
+ * 0 = UNSET - Status not set
+ * 1 = OK - Operation completed successfully
+ * 2 = ERROR - Operation failed
+ */
+export const SpanStatusCodeSchema = z.union([z.literal(0), z.literal(1), z.literal(2)])
+
+export const SpanEventSchema = z.object({
   name: z.string(),
-  value: z.number(),
-  attributes: z.record(z.string(), z.any()),
-  type: MetricTypeSchema,
-  timestamp: DateSchema,
-  createdAt: DateSchema,
+  timeUnixNano: z.string(),
+  attributes: z.record(z.string(), z.any()).optional(),
 })
 
-export const MetricSortFieldSchema = z.enum(['name', 'value', 'timestamp', 'createdAt'])
+export const SpanSchema = z.object({
+  id: z.number(),
+  traceId: z.string(),
+  spanId: z.string(),
+  parentSpanId: z.string().nullable(),
+  jobId: z.string().nullable(),
+  stepId: z.string().nullable(),
+  name: z.string(),
+  kind: SpanKindSchema,
+  startTimeUnixNano: z.string().nullable(), // Stored as bigint but serialized as string for JSON
+  endTimeUnixNano: z.string().nullable(), // Stored as bigint but serialized as string for JSON
+  statusCode: SpanStatusCodeSchema,
+  statusMessage: z.string().nullable(),
+  attributes: z.record(z.string(), z.any()),
+  events: z.array(SpanEventSchema),
+})
 
-export const MetricSortSchema = z.object({
-  field: MetricSortFieldSchema,
+export const SpanSortFieldSchema = z.enum(['name', 'startTimeUnixNano', 'endTimeUnixNano'])
+
+export const SpanSortSchema = z.object({
+  field: SpanSortFieldSchema,
   order: SortOrderSchema,
 })
 
-export const MetricFiltersSchema = z.object({
+export const SpanFiltersSchema = z.object({
   name: z.union([z.string(), z.array(z.string())]).optional(),
-  type: z.union([MetricTypeSchema, z.array(MetricTypeSchema)]).optional(),
+  kind: z.union([SpanKindSchema, z.array(SpanKindSchema)]).optional(),
+  statusCode: z.union([SpanStatusCodeSchema, z.array(SpanStatusCodeSchema)]).optional(),
+  traceId: z.string().optional(),
   attributesFilter: z.record(z.string(), z.any()).optional(),
-  timestampRange: z.array(DateSchema).length(2).optional(),
 })
 
-export const InsertMetricOptionsSchema = z.object({
-  jobId: z.string(),
-  stepId: z.string().optional(),
+export const InsertSpanOptionsSchema = z.object({
+  traceId: z.string(),
+  spanId: z.string(),
+  parentSpanId: z.string().nullable(),
+  jobId: z.string().nullable(),
+  stepId: z.string().nullable(),
   name: z.string(),
-  value: z.number(),
+  kind: SpanKindSchema,
+  startTimeUnixNano: z.bigint(),
+  endTimeUnixNano: z.bigint().nullable(),
+  statusCode: SpanStatusCodeSchema,
+  statusMessage: z.string().nullable(),
   attributes: z.record(z.string(), z.any()).optional(),
-  type: MetricTypeSchema,
+  events: z.array(SpanEventSchema).optional(),
 })
 
-export const GetMetricsOptionsSchema = z.object({
+export const GetSpansOptionsSchema = z.object({
   jobId: z.string().optional(),
   stepId: z.string().optional(),
-  filters: MetricFiltersSchema.optional(),
-  sort: MetricSortSchema.optional(),
+  filters: SpanFiltersSchema.optional(),
+  sort: SpanSortSchema.optional(),
 })
 
-export const GetMetricsResultSchema = z.object({
-  metrics: z.array(MetricSchema),
+export const GetSpansResultSchema = z.object({
+  spans: z.array(SpanSchema),
   total: z.number().int().nonnegative(),
 })
 
-export const DeleteMetricsOptionsSchema = z.object({
+export const DeleteSpansOptionsSchema = z.object({
   jobId: z.string(),
 })
 
@@ -396,12 +431,14 @@ export type DelayJobStepOptions = z.infer<typeof DelayJobStepOptionsSchema>
 export type CancelJobStepOptions = z.infer<typeof CancelJobStepOptionsSchema>
 export type CreateOrRecoverJobStepResult = z.infer<typeof CreateOrRecoverJobStepResultSchema>
 export type TimeTravelJobOptions = z.infer<typeof TimeTravelJobOptionsSchema>
-export type MetricType = z.infer<typeof MetricTypeSchema>
-export type Metric = z.infer<typeof MetricSchema>
-export type MetricSortField = z.infer<typeof MetricSortFieldSchema>
-export type MetricSort = z.infer<typeof MetricSortSchema>
-export type MetricFilters = z.infer<typeof MetricFiltersSchema>
-export type InsertMetricOptions = z.infer<typeof InsertMetricOptionsSchema>
-export type GetMetricsOptions = z.infer<typeof GetMetricsOptionsSchema>
-export type GetMetricsResult = z.infer<typeof GetMetricsResultSchema>
-export type DeleteMetricsOptions = z.infer<typeof DeleteMetricsOptionsSchema>
+export type SpanKind = z.infer<typeof SpanKindSchema>
+export type SpanStatusCode = z.infer<typeof SpanStatusCodeSchema>
+export type SpanEvent = z.infer<typeof SpanEventSchema>
+export type Span = z.infer<typeof SpanSchema>
+export type SpanSortField = z.infer<typeof SpanSortFieldSchema>
+export type SpanSort = z.infer<typeof SpanSortSchema>
+export type SpanFilters = z.infer<typeof SpanFiltersSchema>
+export type InsertSpanOptions = z.infer<typeof InsertSpanOptionsSchema>
+export type GetSpansOptions = z.infer<typeof GetSpansOptionsSchema>
+export type GetSpansResult = z.infer<typeof GetSpansResultSchema>
+export type DeleteSpansOptions = z.infer<typeof DeleteSpansOptionsSchema>

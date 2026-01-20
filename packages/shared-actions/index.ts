@@ -1,4 +1,5 @@
 import { openai } from '@ai-sdk/openai'
+import { context, trace } from '@opentelemetry/api'
 import { generateText } from 'ai'
 import { defineAction, NonRetriableError } from 'duron/index'
 import * as z from 'zod'
@@ -15,24 +16,6 @@ export const variables = {
 
     return {
       success: true,
-    }
-  },
-  generateText: async (args: { prompt: string; model: string; temperature: number }, signal: AbortSignal) => {
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      throw new NonRetriableError('OPENAI_API_KEY environment variable is not set')
-    }
-
-    const result = await generateText({
-      model: openai(args.model),
-      prompt: args.prompt,
-      temperature: args.temperature,
-      abortSignal: signal,
-    })
-
-    return {
-      text: result.text,
-      usage: result.usage,
     }
   },
   getWeather: async (args: { city: string }, signal: AbortSignal) => {
@@ -171,46 +154,6 @@ export const sendEmail = defineAction<typeof variables>()({
   },
 })
 
-/**
- * It requires an OpenAI API key to be set in the environment variables: OPENAI_API_KEY.
- */
-export const openaiChat = defineAction<typeof variables>()({
-  name: 'openaiChat',
-  input: z.object({
-    prompt: z.string().min(1).describe('The prompt to send to OpenAI'),
-    model: z.string().default('gpt-4o-mini').describe('The model to use (e.g., gpt-4o-mini, gpt-4o)'),
-    temperature: z.number().min(0).max(1).default(1).describe('Temperature for text generation (0-1)'),
-  }),
-  output: z.object({
-    text: z.string().describe('The generated text response'),
-    usage: z
-      .object({
-        inputTokens: z.number().optional(),
-        outputTokens: z.number().optional(),
-        totalTokens: z.number().optional(),
-      })
-      .describe('Token usage information'),
-  }),
-  handler: async (ctx) => {
-    const { prompt, model, temperature } = ctx.input
-
-    const result = await ctx.step(
-      `generate text model=${model} temp=${temperature}`,
-      async ({ signal }) => {
-        return ctx.var.generateText({ prompt, model, temperature }, signal)
-      },
-      {
-        expire: 60_000, // 60 seconds for AI generation
-      },
-    )
-
-    return {
-      text: result.text,
-      usage: result.usage,
-    }
-  },
-})
-
 export const getWeather = defineAction<typeof variables>()({
   name: 'getWeather',
   input: z.object({
@@ -242,15 +185,16 @@ export const getWeather = defineAction<typeof variables>()({
 
     const niceMessage = await ctx.step(
       `generate nice message`,
-      async ({ signal }) => {
-        return ctx.var.generateText(
-          {
-            prompt: `Generate a nice message for the weather in ${city} based on the following weather data: ${JSON.stringify(weather)}`,
-            model: 'gpt-4o-mini',
-            temperature: 1,
+      async (ctx) => {
+        return generateText({
+          prompt: `Generate a nice message for the weather in ${city} based on the following weather data: ${JSON.stringify(weather)}`,
+          model: openai('gpt-4o-mini'),
+          temperature: 1,
+          abortSignal: ctx.signal,
+          experimental_telemetry: {
+            tracer: ctx.telemetry.getTracer('generate-nice-message-2'),
           },
-          signal,
-        )
+        })
       },
       {
         expire: 60_000, // 60 seconds for AI generation
@@ -361,13 +305,30 @@ export const processOrder = defineAction<typeof variables>()({
     // =========================================================================
     const validation = await ctx.step('validate-order', async ({ step: nestedStep }) => {
       // Child step: Check inventory for all items
-      const inventoryCheck = await nestedStep('check-inventory', async () => {
+      // TELEMETRY EXAMPLE 1: Add attributes/events to the current span
+      const inventoryCheck = await nestedStep('check-inventory', async (ctx) => {
         const allInStock = items.every((item) => item.quantity <= 10) // Mock: max 10 per item
+
+        // Get the active span (this is the step:check-inventory span created by Duron)
+        const span = ctx.telemetry.getActiveSpan()
+
+        // Add attributes to the current span - these will appear in the span's attributes
+        span?.setAttribute('inventory.allInStock', allInStock)
+        span?.setAttribute('inventory.itemCount', items.length)
+        span?.setAttribute('inventory.productIds', items.map((i) => i.productId).join(', '))
+
+        // Add an event to the span - this will appear in the span's events array
+        span?.addEvent('inventory-check-complete', {
+          allInStock,
+          checkedAt: new Date().toISOString(),
+        })
+
         addTimeline('check-inventory', allInStock ? 'success' : 'failed', `Checked ${items.length} items`)
         return { allInStock, checkedItems: items.length }
       })
 
       // Child step: Verify customer
+      // TELEMETRY EXAMPLE 2: Create a custom child span for sub-operations
       const customerVerification = await nestedStep('verify-customer', async (ctx) => {
         await Promise.all([
           ctx.step(
@@ -387,11 +348,41 @@ export const processOrder = defineAction<typeof variables>()({
             { parallel: true },
           ),
         ])
-        // Simulate customer verification
-        await new Promise((resolve) => setTimeout(resolve, 80))
-        const isValid = customerId.length > 0
-        addTimeline('verify-customer', isValid ? 'success' : 'failed', `Customer: ${customerId}`)
-        return { isValid, customerId }
+
+        // Get a tracer and create a child span for a specific sub-operation
+        const tracer = ctx.telemetry.getTracer('customer-verification')
+
+        // Get the parent context from the active span
+        const parentSpan = ctx.telemetry.getActiveSpan()
+        const parentContext = parentSpan ? trace.setSpan(context.active(), parentSpan) : context.active()
+
+        // Create a child span - it will be properly linked to the parent step span
+        const dbLookupSpan = tracer.startSpan(
+          'database-lookup',
+          {
+            attributes: {
+              'db.system': 'postgresql',
+              'db.operation': 'SELECT',
+              'customer.id': customerId,
+            },
+          },
+          parentContext,
+        )
+
+        try {
+          // Simulate customer verification (database lookup)
+          await new Promise((resolve) => setTimeout(resolve, 80))
+          const isValid = customerId.length > 0
+
+          dbLookupSpan.setAttribute('customer.verified', isValid)
+          dbLookupSpan.addEvent('lookup-complete', { found: isValid })
+
+          addTimeline('verify-customer', isValid ? 'success' : 'failed', `Customer: ${customerId}`)
+          return { isValid, customerId }
+        } finally {
+          // Always end the span
+          dbLookupSpan.end()
+        }
       })
 
       addTimeline(
@@ -426,11 +417,25 @@ export const processOrder = defineAction<typeof variables>()({
         // Child step: Authorize payment (contains grandchild step)
         const authorization = await paymentStep('authorize-payment', async ({ step: authStep }) => {
           // Grandchild step: Fraud check (3 levels deep!)
-          const fraudCheck = await authStep('fraud-check', async () => {
+          // TELEMETRY EXAMPLE 3: Use recordMetric for simple metric events
+          const fraudCheck = await authStep('fraud-check', async (ctx) => {
             await new Promise((resolve) => setTimeout(resolve, 5000))
             const isSafe = totalAmount < 10000 // Mock: flag large orders
+            const riskScore = isSafe ? 0.1 : 0.9
+
+            // Record metrics - these appear as events on the span with the metric value
+            // Great for tracking numerical values like latency, counts, scores, etc.
+            ctx.telemetry.recordMetric('fraud.amount.checked', totalAmount, {
+              currency: 'USD',
+            })
+            ctx.telemetry.recordMetric('fraud.risk.score', riskScore, {
+              threshold: '0.5',
+              result: isSafe ? 'safe' : 'flagged',
+            })
+            ctx.telemetry.recordMetric('fraud.processing.time.ms', 5000)
+
             addTimeline('fraud-check', isSafe ? 'success' : 'failed', `Amount: $${totalAmount.toFixed(2)}`)
-            return { isSafe, riskScore: isSafe ? 0.1 : 0.9 }
+            return { isSafe, riskScore }
           })
 
           if (!fraudCheck.isSafe) {

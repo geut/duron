@@ -4,9 +4,9 @@ import { NuqsAdapter } from 'nuqs/adapters/react'
 import { ApiProvider, type CustomFetch } from './contexts/api-context'
 import { AuthProvider, useAuth } from './contexts/auth-context'
 import { LayoutProvider } from './contexts/layout-context'
-import { MetricsProvider } from './contexts/metrics-context'
 import { PollingProvider } from './contexts/polling-context'
-import { ThemeProvider, type ThemeOption } from './contexts/theme-context'
+import { SpansProvider } from './contexts/spans-context'
+import { type ThemeOption, ThemeProvider } from './contexts/theme-context'
 import { Dashboard } from './views/dashboard'
 import Login from './views/login'
 
@@ -105,14 +105,14 @@ export function DuronDashboard({
           <PollingProvider pollingInterval={pollingInterval}>
             <ApiProvider baseUrl={url} customFetch={customFetch}>
               <AuthProvider>
-                <MetricsProvider>
+                <SpansProvider>
                   <AppContent
                     enableLogin={enableLogin}
                     showLogo={showLogo}
                     showThemeToggle={showThemeToggle}
                     className={className}
                   />
-                </MetricsProvider>
+                </SpansProvider>
               </AuthProvider>
             </ApiProvider>
           </PollingProvider>

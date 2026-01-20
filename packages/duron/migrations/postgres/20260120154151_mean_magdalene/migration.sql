@@ -43,17 +43,23 @@ CREATE TABLE "duron"."jobs" (
 	CONSTRAINT "jobs_status_check" CHECK ("status" IN ('created','active','completed','failed','cancelled'))
 );
 --> statement-breakpoint
-CREATE TABLE "duron"."metrics" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-	"job_id" uuid NOT NULL,
+CREATE TABLE "duron"."spans" (
+	"id" bigserial PRIMARY KEY,
+	"trace_id" text NOT NULL,
+	"span_id" text NOT NULL,
+	"parent_span_id" text,
+	"job_id" uuid,
 	"step_id" uuid,
 	"name" text NOT NULL,
-	"value" double precision NOT NULL,
+	"kind" integer DEFAULT 0 NOT NULL,
+	"start_time_unix_nano" bigint NOT NULL,
+	"end_time_unix_nano" bigint,
+	"status_code" integer DEFAULT 0 NOT NULL,
+	"status_message" text,
 	"attributes" jsonb DEFAULT '{}' NOT NULL,
-	"type" text NOT NULL,
-	"timestamp" timestamp with time zone DEFAULT now() NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "metrics_type_check" CHECK ("type" IN ('metric', 'span_event', 'span_attribute'))
+	"events" jsonb DEFAULT '[]' NOT NULL,
+	CONSTRAINT "spans_kind_check" CHECK ("kind" IN (0, 1, 2, 3, 4)),
+	CONSTRAINT "spans_status_code_check" CHECK ("status_code" IN (0, 1, 2))
 );
 --> statement-breakpoint
 CREATE INDEX "idx_job_steps_job_id" ON "duron"."job_steps" ("job_id");--> statement-breakpoint
@@ -77,15 +83,17 @@ CREATE INDEX "idx_jobs_action_status" ON "duron"."jobs" ("action_name","status")
 CREATE INDEX "idx_jobs_action_group" ON "duron"."jobs" ("action_name","group_key");--> statement-breakpoint
 CREATE INDEX "idx_jobs_input_fts" ON "duron"."jobs" USING gin (to_tsvector('english', "input"::text));--> statement-breakpoint
 CREATE INDEX "idx_jobs_output_fts" ON "duron"."jobs" USING gin (to_tsvector('english', "output"::text));--> statement-breakpoint
-CREATE INDEX "idx_metrics_job_id" ON "duron"."metrics" ("job_id");--> statement-breakpoint
-CREATE INDEX "idx_metrics_step_id" ON "duron"."metrics" ("step_id");--> statement-breakpoint
-CREATE INDEX "idx_metrics_name" ON "duron"."metrics" ("name");--> statement-breakpoint
-CREATE INDEX "idx_metrics_type" ON "duron"."metrics" ("type");--> statement-breakpoint
-CREATE INDEX "idx_metrics_timestamp" ON "duron"."metrics" ("timestamp");--> statement-breakpoint
-CREATE INDEX "idx_metrics_job_step" ON "duron"."metrics" ("job_id","step_id");--> statement-breakpoint
-CREATE INDEX "idx_metrics_job_name" ON "duron"."metrics" ("job_id","name");--> statement-breakpoint
-CREATE INDEX "idx_metrics_job_type" ON "duron"."metrics" ("job_id","type");--> statement-breakpoint
-CREATE INDEX "idx_metrics_attributes" ON "duron"."metrics" USING gin ("attributes");--> statement-breakpoint
+CREATE INDEX "idx_spans_trace_id" ON "duron"."spans" ("trace_id");--> statement-breakpoint
+CREATE INDEX "idx_spans_span_id" ON "duron"."spans" ("span_id");--> statement-breakpoint
+CREATE INDEX "idx_spans_job_id" ON "duron"."spans" ("job_id");--> statement-breakpoint
+CREATE INDEX "idx_spans_step_id" ON "duron"."spans" ("step_id");--> statement-breakpoint
+CREATE INDEX "idx_spans_name" ON "duron"."spans" ("name");--> statement-breakpoint
+CREATE INDEX "idx_spans_kind" ON "duron"."spans" ("kind");--> statement-breakpoint
+CREATE INDEX "idx_spans_status_code" ON "duron"."spans" ("status_code");--> statement-breakpoint
+CREATE INDEX "idx_spans_job_step" ON "duron"."spans" ("job_id","step_id");--> statement-breakpoint
+CREATE INDEX "idx_spans_trace_parent" ON "duron"."spans" ("trace_id","parent_span_id");--> statement-breakpoint
+CREATE INDEX "idx_spans_attributes" ON "duron"."spans" USING gin ("attributes");--> statement-breakpoint
+CREATE INDEX "idx_spans_events" ON "duron"."spans" USING gin ("events");--> statement-breakpoint
 ALTER TABLE "duron"."job_steps" ADD CONSTRAINT "job_steps_job_id_jobs_id_fkey" FOREIGN KEY ("job_id") REFERENCES "duron"."jobs"("id") ON DELETE CASCADE;--> statement-breakpoint
-ALTER TABLE "duron"."metrics" ADD CONSTRAINT "metrics_job_id_jobs_id_fkey" FOREIGN KEY ("job_id") REFERENCES "duron"."jobs"("id") ON DELETE CASCADE;--> statement-breakpoint
-ALTER TABLE "duron"."metrics" ADD CONSTRAINT "metrics_step_id_job_steps_id_fkey" FOREIGN KEY ("step_id") REFERENCES "duron"."job_steps"("id") ON DELETE CASCADE;
+ALTER TABLE "duron"."spans" ADD CONSTRAINT "spans_job_id_jobs_id_fkey" FOREIGN KEY ("job_id") REFERENCES "duron"."jobs"("id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "duron"."spans" ADD CONSTRAINT "spans_step_id_job_steps_id_fkey" FOREIGN KEY ("step_id") REFERENCES "duron"."job_steps"("id") ON DELETE CASCADE;

@@ -1,8 +1,9 @@
 import { sql } from 'drizzle-orm'
 import {
+  bigint,
+  bigserial,
   boolean,
   check,
-  doublePrecision,
   index,
   integer,
   jsonb,
@@ -129,35 +130,58 @@ export default function createSchema(schemaName: string) {
     ],
   )
 
-  const metricsTable = schema.table(
-    'metrics',
+  /**
+   * OpenTelemetry spans table.
+   * Stores span data exported by PostgresSpanExporter.
+   *
+   * SpanKind values: 0=INTERNAL, 1=SERVER, 2=CLIENT, 3=PRODUCER, 4=CONSUMER
+   * StatusCode values: 0=UNSET, 1=OK, 2=ERROR
+   */
+  const spansTable = schema.table(
+    'spans',
     {
-      id: uuid('id').primaryKey().defaultRandom(),
-      job_id: uuid('job_id')
-        .notNull()
-        .references(() => jobsTable.id, { onDelete: 'cascade' }),
+      id: bigserial('id', { mode: 'number' }).primaryKey(),
+      // OpenTelemetry span identifiers
+      trace_id: text('trace_id').notNull(), // 32-char hex
+      span_id: text('span_id').notNull(), // 16-char hex
+      parent_span_id: text('parent_span_id'), // 16-char hex, null for root spans
+      // Duron-specific references (extracted from span attributes)
+      job_id: uuid('job_id').references(() => jobsTable.id, { onDelete: 'cascade' }),
       step_id: uuid('step_id').references(() => jobStepsTable.id, { onDelete: 'cascade' }),
+      // Span metadata
       name: text('name').notNull(),
-      value: doublePrecision('value').notNull(),
+      kind: integer('kind').notNull().default(0), // SpanKind enum
+      // Timing (stored as nanoseconds since epoch for precision)
+      start_time_unix_nano: bigint('start_time_unix_nano', { mode: 'bigint' }).notNull(),
+      end_time_unix_nano: bigint('end_time_unix_nano', { mode: 'bigint' }),
+      // Status
+      status_code: integer('status_code').notNull().default(0), // SpanStatusCode enum
+      status_message: text('status_message'),
+      // Span data
       attributes: jsonb('attributes').$type<Record<string, any>>().notNull().default({}),
-      type: text('type').$type<'metric' | 'span_event' | 'span_attribute'>().notNull(),
-      timestamp: timestamp('timestamp', { withTimezone: true }).notNull().defaultNow(),
-      created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+      events: jsonb('events')
+        .$type<Array<{ name: string; timeUnixNano: string; attributes?: Record<string, any> }>>()
+        .notNull()
+        .default([]),
     },
     (table) => [
       // Single column indexes
-      index('idx_metrics_job_id').on(table.job_id),
-      index('idx_metrics_step_id').on(table.step_id),
-      index('idx_metrics_name').on(table.name),
-      index('idx_metrics_type').on(table.type),
-      index('idx_metrics_timestamp').on(table.timestamp),
+      index('idx_spans_trace_id').on(table.trace_id),
+      index('idx_spans_span_id').on(table.span_id),
+      index('idx_spans_job_id').on(table.job_id),
+      index('idx_spans_step_id').on(table.step_id),
+      index('idx_spans_name').on(table.name),
+      index('idx_spans_kind').on(table.kind),
+      index('idx_spans_status_code').on(table.status_code),
       // Composite indexes
-      index('idx_metrics_job_step').on(table.job_id, table.step_id),
-      index('idx_metrics_job_name').on(table.job_id, table.name),
-      index('idx_metrics_job_type').on(table.job_id, table.type),
-      // GIN index for JSONB attributes filtering
-      index('idx_metrics_attributes').using('gin', table.attributes),
-      check('metrics_type_check', sql`${table.type} IN ('metric', 'span_event', 'span_attribute')`),
+      index('idx_spans_job_step').on(table.job_id, table.step_id),
+      index('idx_spans_trace_parent').on(table.trace_id, table.parent_span_id),
+      // GIN indexes for JSONB querying
+      index('idx_spans_attributes').using('gin', table.attributes),
+      index('idx_spans_events').using('gin', table.events),
+      // Constraints
+      check('spans_kind_check', sql`${table.kind} IN (0, 1, 2, 3, 4)`),
+      check('spans_status_code_check', sql`${table.status_code} IN (0, 1, 2)`),
     ],
   )
 
@@ -165,6 +189,6 @@ export default function createSchema(schemaName: string) {
     schema,
     jobsTable,
     jobStepsTable,
-    metricsTable,
+    spansTable,
   }
 }

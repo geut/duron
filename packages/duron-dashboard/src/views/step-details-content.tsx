@@ -4,10 +4,10 @@ import { Activity } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { JsonView } from '@/components/json-view'
-import { StepMetricsModal } from '@/components/metrics-panel'
+import { StepSpansModal } from '@/components/spans-panel'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useMetrics } from '@/contexts/metrics-context'
+import { useSpans } from '@/contexts/spans-context'
 import { useStepStatusPolling } from '@/hooks/use-step-status-polling'
 import { useStep } from '@/lib/api'
 import { formatExpirationWindow, formatMsToSeconds } from '@/lib/duration'
@@ -23,8 +23,8 @@ interface StepDetailsContentProps {
 export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
   // Fetch the full step data including output
   const { data: step, isLoading, error } = useStep(stepId)
-  const { metricsEnabled } = useMetrics()
-  const [showMetrics, setShowMetrics] = useState(false)
+  const { spansEnabled } = useSpans()
+  const [showSpans, setShowSpans] = useState(false)
 
   // Enable polling for individual step status updates
   useStepStatusPolling(stepId, jobId, true)
@@ -154,8 +154,7 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
                     : ''
                 }
               >
-                {formatDate(step.expiresAt)}{' '}
-                {formatExpirationWindow(step.startedAt, step.expiresAt)}
+                {formatDate(step.expiresAt)} {formatExpirationWindow(step.startedAt, step.expiresAt)}
               </span>
             </div>
           )}
@@ -204,18 +203,18 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
         </div>
       )}
 
-      {/* Metrics Button */}
-      {metricsEnabled && (
+      {/* Spans Button */}
+      {spansEnabled && (
         <div>
-          <Button variant="outline" size="sm" onClick={() => setShowMetrics(true)} className="w-full">
+          <Button variant="outline" size="sm" onClick={() => setShowSpans(true)} className="w-full">
             <Activity className="h-4 w-4 mr-2" />
-            View Metrics
+            View Spans
           </Button>
         </div>
       )}
 
-      {/* Metrics Modal */}
-      {metricsEnabled && <StepMetricsModal stepId={step.id} open={showMetrics} onClose={() => setShowMetrics(false)} />}
+      {/* Spans Modal */}
+      {spansEnabled && <StepSpansModal stepId={step.id} open={showSpans} onClose={() => setShowSpans(false)} />}
     </div>
   )
 }

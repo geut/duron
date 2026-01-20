@@ -1,3 +1,8 @@
+import { type Span, type Tracer, trace } from '@opentelemetry/api'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { BatchSpanProcessor, type SpanExporter, type SpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
+import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 import pino, { type Logger } from 'pino'
 import { zocker } from 'zocker'
 import * as z from 'zod'
@@ -11,14 +16,14 @@ import type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
-  GetMetricsOptions,
-  GetMetricsResult,
+  GetSpansOptions,
+  GetSpansResult,
   Job,
   JobStep,
 } from './adapters/adapter.js'
 import type { JobStatusResult, JobStepStatusResult } from './adapters/schemas.js'
 import { JOB_STATUS_CANCELLED, JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, type JobStatus } from './constants.js'
-import { LocalTelemetryAdapter, noopTelemetryAdapter, type TelemetryAdapter } from './telemetry/index.js'
+import { LocalSpanExporter } from './telemetry/local-span-exporter.js'
 
 /**
  * Extracts the inferred type from an action's input/output schema.
@@ -50,6 +55,79 @@ export interface TypedJobResult<TAction extends Action<any, any, any>> {
   input: InferActionSchema<NonNullable<TAction['input']>>
   output: InferActionSchema<NonNullable<TAction['output']>>
   error: Job['error']
+}
+
+/**
+ * Telemetry context provided to action and step handlers.
+ * Provides access to OpenTelemetry APIs for recording traces and metrics.
+ */
+export interface TelemetryContext {
+  /**
+   * Get the active OpenTelemetry span for the current job/step.
+   * Use standard OTel Span methods: setAttribute, addEvent, recordException, etc.
+   */
+  getActiveSpan(): Span
+
+  /**
+   * Get an OpenTelemetry tracer for creating custom spans.
+   *
+   * @param name - The name of the tracer (typically your service or library name)
+   */
+  getTracer(name: string): Tracer
+
+  /**
+   * Record a custom metric as a span event.
+   * This is a convenience method that stores metrics as span events
+   * which can be queried from the local database when telemetry.local is enabled.
+   *
+   * @param name - The metric name (e.g., 'tokens.input', 'latency.ms')
+   * @param value - The metric value
+   * @param attributes - Optional attributes for the metric
+   */
+  recordMetric(name: string, value: number, attributes?: Record<string, any>): void
+}
+
+/**
+ * Options for local telemetry storage.
+ */
+export interface LocalTelemetryOptions {
+  /**
+   * Delay in milliseconds before flushing spans to the database.
+   * Uses BatchSpanProcessor with this delay.
+   * @default 5000
+   */
+  flushDelayMs?: number
+}
+
+/**
+ * Telemetry configuration options.
+ * Uses OpenTelemetry SDK for tracing.
+ */
+export interface TelemetryOptions {
+  /**
+   * Enable local span storage in the database.
+   * When enabled, spans are stored in the database and can be queried via getSpans().
+   * Set to true for default options, or provide LocalTelemetryOptions for custom config.
+   */
+  local?: LocalTelemetryOptions | boolean
+
+  /**
+   * Additional span processors to add to the tracer provider.
+   * These are merged with the local processor (if enabled).
+   */
+  spanProcessors?: SpanProcessor[]
+
+  /**
+   * Additional span exporter to use.
+   * Will be wrapped in a BatchSpanProcessor and merged with other processors.
+   */
+  traceExporter?: SpanExporter
+
+  /**
+   * Service name for OpenTelemetry resource.
+   * @default 'duron'
+   */
+  serviceName?: string
 }
 
 const BaseOptionsSchema = z.object({
@@ -173,15 +251,25 @@ export interface ClientOptions<
   variables?: TVariables
 
   /**
-   * Optional telemetry adapter for observability.
-   * When provided, traces job and step execution with spans and allows recording custom metrics.
+   * Optional telemetry configuration for observability.
+   * Uses OpenTelemetry SDK for tracing.
    *
-   * Available adapters:
-   * - `openTelemetryAdapter()` - Export traces to external systems (Jaeger, OTLP, etc.)
-   * - `localTelemetryAdapter({ database })` - Store metrics in the Duron database
-   * - `noopTelemetryAdapter()` - No-op adapter (default)
+   * @example
+   * ```typescript
+   * // Enable local span storage (stored in the database)
+   * telemetry: { local: true }
+   *
+   * // Enable local storage with custom flush delay
+   * telemetry: { local: { flushDelayMs: 10000 } }
+   *
+   * // Export to external systems (e.g., OTLP)
+   * telemetry: { traceExporter: new OTLPTraceExporter() }
+   *
+   * // Both local storage and external export
+   * telemetry: { local: true, traceExporter: new OTLPTraceExporter() }
+   * ```
    */
-  telemetry?: TelemetryAdapter
+  telemetry?: TelemetryOptions
 }
 
 interface FetchOptions {
@@ -203,7 +291,10 @@ export class Client<
   #id: string
   #actions: TActions | null
   #database: Adapter
-  #telemetry: TelemetryAdapter
+  #tracerProvider: NodeTracerProvider | null = null
+  #tracer: Tracer | null = null
+  #telemetryOptions: TelemetryOptions | null = null
+  #localSpansEnabled: boolean = false
   #variables: Record<string, unknown>
   #logger: Logger
   #started: boolean = false
@@ -237,14 +328,65 @@ export class Client<
     this.#options = BaseOptionsSchema.parse(options)
     this.#id = options.id ?? globalThis.crypto.randomUUID()
     this.#database = options.database
-    this.#telemetry = options.telemetry ?? noopTelemetryAdapter()
+    this.#telemetryOptions = options.telemetry ?? null
     this.#actions = options.actions ?? null
     this.#variables = options?.variables ?? {}
     this.#logger = this.#normalizeLogger(options?.logger)
     this.#database.setId(this.#id)
     this.#database.setLogger(this.#logger)
-    this.#telemetry.setLogger(this.#logger)
-    this.#telemetry.setClient(this)
+
+    // Initialize OpenTelemetry if telemetry options are provided
+    if (this.#telemetryOptions) {
+      this.#initTelemetry(this.#telemetryOptions)
+    }
+  }
+
+  /**
+   * Initialize OpenTelemetry TracerProvider with configured processors.
+   */
+  #initTelemetry(options: TelemetryOptions): void {
+    const serviceName = options.serviceName ?? 'duron'
+    const processors: SpanProcessor[] = []
+
+    // Add local span exporter if enabled
+    if (options.local) {
+      const localOptions = typeof options.local === 'boolean' ? {} : options.local
+      const flushDelayMs = localOptions.flushDelayMs ?? 5000
+
+      const localExporter = new LocalSpanExporter({ adapter: this.#database })
+      processors.push(
+        new BatchSpanProcessor(localExporter, {
+          scheduledDelayMillis: flushDelayMs,
+        }),
+      )
+      this.#localSpansEnabled = true
+    }
+
+    // Add custom span processors
+    if (options.spanProcessors) {
+      processors.push(...options.spanProcessors)
+    }
+
+    // Add custom trace exporter wrapped in BatchSpanProcessor
+    if (options.traceExporter) {
+      processors.push(new BatchSpanProcessor(options.traceExporter))
+    }
+
+    // Only create TracerProvider if we have processors
+    if (processors.length > 0) {
+      this.#tracerProvider = new NodeTracerProvider({
+        resource: resourceFromAttributes({
+          [ATTR_SERVICE_NAME]: serviceName,
+        }),
+        spanProcessors: processors,
+      })
+
+      // Register the provider globally
+      this.#tracerProvider.register()
+
+      // Get the tracer
+      this.#tracer = trace.getTracer('duron')
+    }
   }
 
   #normalizeLogger(logger?: Logger | 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent'): Logger {
@@ -268,10 +410,11 @@ export class Client<
   }
 
   /**
-   * Get the telemetry adapter instance.
+   * Get the OpenTelemetry tracer for creating custom spans.
+   * Returns null if telemetry is not configured.
    */
-  get telemetry(): TelemetryAdapter {
-    return this.#telemetry
+  get tracer(): Tracer | null {
+    return this.#tracer
   }
 
   /**
@@ -282,11 +425,11 @@ export class Client<
   }
 
   /**
-   * Check if local telemetry is enabled.
-   * Returns true if using LocalTelemetryAdapter.
+   * Check if local span storage is enabled.
+   * Returns true if telemetry.local is enabled.
    */
-  get metricsEnabled(): boolean {
-    return this.#telemetry instanceof LocalTelemetryAdapter
+  get spansEnabled(): boolean {
+    return this.#localSpansEnabled
   }
 
   /**
@@ -770,19 +913,19 @@ export class Client<
   }
 
   /**
-   * Get metrics for a job or step.
-   * Only available when using LocalTelemetryAdapter.
+   * Get spans for a job or step.
+   * Only available when telemetry.local is enabled.
    *
-   * @param options - Query options including jobId/stepId, filters, sort, and pagination
-   * @returns Promise resolving to metrics result with pagination info
-   * @throws Error if not using LocalTelemetryAdapter
+   * @param options - Query options including jobId/stepId, filters, and sort
+   * @returns Promise resolving to spans result
+   * @throws Error if local telemetry is not enabled
    */
-  async getMetrics(options: GetMetricsOptions): Promise<GetMetricsResult> {
+  async getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
     await this.start()
-    if (!this.metricsEnabled) {
-      throw new Error('Metrics are only available when using LocalTelemetryAdapter')
+    if (!this.spansEnabled) {
+      throw new Error('Spans are only available when telemetry.local is enabled')
     }
-    return this.#database.getMetrics(options)
+    return this.#database.getSpans(options)
   }
 
   /**
@@ -846,9 +989,6 @@ export class Client<
       if (!dbStarted) {
         return false
       }
-
-      // Start telemetry adapter
-      await this.#telemetry.start()
 
       if (this.#actions) {
         if (this.#options.recoverJobsOnStart) {
@@ -920,8 +1060,10 @@ export class Client<
         }),
       )
 
-      // Stop telemetry adapter
-      await this.#telemetry.stop()
+      // Shutdown TracerProvider if configured
+      if (this.#tracerProvider) {
+        await this.#tracerProvider.shutdown()
+      }
 
       const dbStopped = await this.#database.stop()
       if (!dbStopped) {
@@ -1051,7 +1193,7 @@ export class Client<
       actionManager = new ActionManager({
         action,
         database: this.#database,
-        telemetry: this.#telemetry,
+        tracer: this.#tracer,
         variables: this.#variables,
         logger: this.#logger,
         concurrencyLimit: this.#options.actionConcurrencyLimit,

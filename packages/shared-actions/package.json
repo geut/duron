@@ -2,8 +2,9 @@
   "name": "shared-actions",
   "private": true,
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.73",
-    "ai": "^5.0.102",
+    "@ai-sdk/openai": "^3.0.12",
+    "@opentelemetry/api": "^1.9.0",
+    "ai": "^6.0.42",
     "zod": "^4.1.12"
   },
   "devDependencies": {

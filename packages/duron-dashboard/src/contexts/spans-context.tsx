@@ -4,14 +4,14 @@ import { createContext, type ReactNode, useContext } from 'react'
 import { useApi, useFetch } from './api-context'
 import { useAuth } from './auth-context'
 
-interface MetricsContextType {
-  metricsEnabled: boolean
+interface SpansContextType {
+  spansEnabled: boolean
   isLoading: boolean
 }
 
-const MetricsContext = createContext<MetricsContextType | undefined>(undefined)
+const SpansContext = createContext<SpansContextType | undefined>(undefined)
 
-export function MetricsProvider({ children }: { children: ReactNode }) {
+export function SpansProvider({ children }: { children: ReactNode }) {
   const { baseUrl } = useApi()
   const { token } = useAuth()
   const fetchFn = useFetch()
@@ -27,22 +27,22 @@ export function MetricsProvider({ children }: { children: ReactNode }) {
       if (!response.ok) {
         throw new Error('Failed to fetch config')
       }
-      return response.json() as Promise<{ metricsEnabled: boolean; authEnabled: boolean }>
+      return response.json() as Promise<{ spansEnabled: boolean; authEnabled: boolean }>
     },
     staleTime: Number.POSITIVE_INFINITY, // Config rarely changes
   })
 
   return (
-    <MetricsContext.Provider value={{ metricsEnabled: data?.metricsEnabled ?? false, isLoading }}>
+    <SpansContext.Provider value={{ spansEnabled: data?.spansEnabled ?? false, isLoading }}>
       {children}
-    </MetricsContext.Provider>
+    </SpansContext.Provider>
   )
 }
 
-export function useMetrics() {
-  const context = useContext(MetricsContext)
+export function useSpans() {
+  const context = useContext(SpansContext)
   if (context === undefined) {
-    throw new Error('useMetrics must be used within a MetricsProvider')
+    throw new Error('useSpans must be used within a SpansProvider')
   }
   return context
 }

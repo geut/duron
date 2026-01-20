@@ -2,21 +2,21 @@ import { Elysia } from 'elysia'
 import { jwtVerify, SignJWT } from 'jose'
 import { z } from 'zod'
 
-import type { GetJobStepsOptions, GetJobsOptions, GetMetricsOptions } from './adapters/adapter.js'
+import type { GetJobStepsOptions, GetJobsOptions, GetSpansOptions } from './adapters/adapter.js'
 import {
   GetActionsResultSchema,
   GetJobStepsResultSchema,
   GetJobsResultSchema,
-  GetMetricsResultSchema,
+  GetSpansResultSchema,
   JobSchema,
   JobSortFieldSchema,
   JobStatusResultSchema,
   JobStatusSchema,
   JobStepSchema,
   JobStepStatusResultSchema,
-  MetricSortFieldSchema,
-  MetricTypeSchema,
   SortOrderSchema,
+  SpanKindSchema,
+  SpanSortFieldSchema,
 } from './adapters/schemas.js'
 import type { Client } from './client.js'
 
@@ -176,13 +176,13 @@ export const GetActionsMetadataResponseSchema = z.array(
 export type GetJobsQueryInput = z.input<typeof GetJobsQuerySchema>
 export type GetJobStepsQueryInput = z.input<typeof GetJobStepsQuerySchema>
 
-// Metrics query schema
-export const GetMetricsQuerySchema = z
+// Spans query schema
+export const GetSpansQuerySchema = z
   .object({
     // Filters
     fName: z.union([z.string(), z.array(z.string())]).optional(),
-    fType: z.union([MetricTypeSchema, z.array(MetricTypeSchema)]).optional(),
-    fTimestampRange: z.array(z.coerce.date()).length(2).optional(),
+    fKind: z.union([SpanKindSchema, z.array(SpanKindSchema)]).optional(),
+    fTraceId: z.string().optional(),
     fAttributesFilter: z.record(z.string(), z.any()).optional(),
 
     // Sort - format: "field:asc" or "field:desc"
@@ -192,16 +192,16 @@ export const GetMetricsQuerySchema = z
     const filters: any = {}
 
     if (data.fName) filters.name = data.fName
-    if (data.fType) filters.type = data.fType
-    if (data.fTimestampRange) filters.timestampRange = data.fTimestampRange
+    if (data.fKind) filters.kind = data.fKind
+    if (data.fTraceId) filters.traceId = data.fTraceId
     if (data.fAttributesFilter) filters.attributesFilter = data.fAttributesFilter
 
     // Parse sort string: "field:asc" -> { field: 'field', order: 'asc' }
-    let sort: { field: z.infer<typeof MetricSortFieldSchema>; order: z.infer<typeof SortOrderSchema> } | undefined
+    let sort: { field: z.infer<typeof SpanSortFieldSchema>; order: z.infer<typeof SortOrderSchema> } | undefined
     if (data.sort) {
       const [field, order] = data.sort.split(':').map((s) => s.trim())
       if (field && order) {
-        const fieldResult = MetricSortFieldSchema.safeParse(field)
+        const fieldResult = SpanSortFieldSchema.safeParse(field)
         const orderResult = SortOrderSchema.safeParse(order.toLowerCase())
         if (fieldResult.success && orderResult.success) {
           sort = {
@@ -218,7 +218,7 @@ export const GetMetricsQuerySchema = z
     }
   })
 
-export type GetMetricsQueryInput = z.input<typeof GetMetricsQuerySchema>
+export type GetSpansQueryInput = z.input<typeof GetSpansQuerySchema>
 
 export const ErrorResponseSchema = z.object({
   error: z.string(),
@@ -269,12 +269,12 @@ export interface CreateServerOptions<P extends string> {
   prefix?: P
 
   /**
-   * Enable metrics endpoints (/jobs/:id/metrics, /steps/:id/metrics).
-   * Only works when client is configured with LocalTelemetryAdapter.
-   * When true, enables the dashboard to show metrics buttons.
-   * @default auto-detected from client.metricsEnabled
+   * Enable spans endpoints (/jobs/:id/spans, /steps/:id/spans).
+   * Only works when client is configured with telemetry.local enabled.
+   * When true, enables the dashboard to show spans buttons.
+   * @default auto-detected from client.spansEnabled
    */
-  metricsEnabled?: boolean
+  spansEnabled?: boolean
 
   login?: {
     onLogin: (body: { email: string; password: string }) => Promise<boolean>
@@ -297,14 +297,14 @@ export interface CreateServerOptions<P extends string> {
  * @param options - Configuration options
  * @returns Elysia server instance
  */
-export function createServer<P extends string>({ client, prefix, login, metricsEnabled }: CreateServerOptions<P>) {
+export function createServer<P extends string>({ client, prefix, login, spansEnabled }: CreateServerOptions<P>) {
   // Convert string secret to Uint8Array if needed
   const secretKey = typeof login?.jwtSecret === 'string' ? new TextEncoder().encode(login?.jwtSecret) : login?.jwtSecret
 
   const routePrefix = (prefix ?? '/api') as P
 
-  // Auto-detect metricsEnabled from client if not explicitly set
-  const isMetricsEnabled = metricsEnabled ?? client.metricsEnabled
+  // Auto-detect spansEnabled from client if not explicitly set
+  const isSpansEnabled = spansEnabled ?? client.spansEnabled
 
   return new Elysia({
     prefix: routePrefix,
@@ -670,14 +670,14 @@ export function createServer<P extends string>({ client, prefix, login, metricsE
       '/config',
       async () => {
         return {
-          metricsEnabled: isMetricsEnabled,
+          spansEnabled: isSpansEnabled,
           authEnabled: !!login,
         }
       },
       {
         response: {
           200: z.object({
-            metricsEnabled: z.boolean(),
+            spansEnabled: z.boolean(),
             authEnabled: z.boolean(),
           }),
           500: ErrorResponseSchema,
@@ -685,23 +685,23 @@ export function createServer<P extends string>({ client, prefix, login, metricsE
       },
     )
     .get(
-      '/jobs/:id/metrics',
+      '/jobs/:id/spans',
       async ({ params, query }) => {
-        if (!isMetricsEnabled) {
-          throw new Error('Metrics are not enabled. Use LocalTelemetryAdapter to enable metrics.')
+        if (!isSpansEnabled) {
+          throw new Error('Spans are not enabled. Enable telemetry.local to enable spans.')
         }
-        const options: GetMetricsOptions = {
+        const options: GetSpansOptions = {
           jobId: params.id,
           filters: query.filters,
           sort: query.sort,
         }
-        return client.getMetrics(options)
+        return client.getSpans(options)
       },
       {
         params: JobIdParamsSchema,
-        query: GetMetricsQuerySchema,
+        query: GetSpansQuerySchema,
         response: {
-          200: GetMetricsResultSchema,
+          200: GetSpansResultSchema,
           400: ErrorResponseSchema,
           500: ErrorResponseSchema,
           401: ErrorResponseSchema,
@@ -710,23 +710,23 @@ export function createServer<P extends string>({ client, prefix, login, metricsE
       },
     )
     .get(
-      '/steps/:id/metrics',
+      '/steps/:id/spans',
       async ({ params, query }) => {
-        if (!isMetricsEnabled) {
-          throw new Error('Metrics are not enabled. Use LocalTelemetryAdapter to enable metrics.')
+        if (!isSpansEnabled) {
+          throw new Error('Spans are not enabled. Enable telemetry.local to enable spans.')
         }
-        const options: GetMetricsOptions = {
+        const options: GetSpansOptions = {
           stepId: params.id,
           filters: query.filters,
           sort: query.sort,
         }
-        return client.getMetrics(options)
+        return client.getSpans(options)
       },
       {
         params: StepIdParamsSchema,
-        query: GetMetricsQuerySchema,
+        query: GetSpansQuerySchema,
         response: {
-          200: GetMetricsResultSchema,
+          200: GetSpansResultSchema,
           400: ErrorResponseSchema,
           500: ErrorResponseSchema,
           401: ErrorResponseSchema,

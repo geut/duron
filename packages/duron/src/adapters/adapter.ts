@@ -24,7 +24,7 @@ import type {
   DelayJobStepOptions,
   DeleteJobOptions,
   DeleteJobsOptions,
-  DeleteMetricsOptions,
+  DeleteSpansOptions,
   FailJobOptions,
   FailJobStepOptions,
   FetchOptions,
@@ -33,9 +33,9 @@ import type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
-  GetMetricsOptions,
-  GetMetricsResult,
-  InsertMetricOptions,
+  GetSpansOptions,
+  GetSpansResult,
+  InsertSpanOptions,
   Job,
   JobStatusResult,
   JobStep,
@@ -56,7 +56,7 @@ import {
   DelayJobStepOptionsSchema,
   DeleteJobOptionsSchema,
   DeleteJobsOptionsSchema,
-  DeleteMetricsOptionsSchema,
+  DeleteSpansOptionsSchema,
   FailJobOptionsSchema,
   FailJobStepOptionsSchema,
   FetchOptionsSchema,
@@ -65,9 +65,9 @@ import {
   GetJobStepsResultSchema,
   GetJobsOptionsSchema,
   GetJobsResultSchema,
-  GetMetricsOptionsSchema,
-  GetMetricsResultSchema,
-  InsertMetricOptionsSchema,
+  GetSpansOptionsSchema,
+  GetSpansResultSchema,
+  InsertSpanOptionsSchema,
   JobIdResultSchema,
   JobSchema,
   JobStatusResultSchema,
@@ -93,7 +93,7 @@ export type {
   DelayJobStepOptions,
   DeleteJobOptions,
   DeleteJobsOptions,
-  DeleteMetricsOptions,
+  DeleteSpansOptions,
   FailJobOptions,
   FailJobStepOptions,
   FetchOptions,
@@ -102,9 +102,9 @@ export type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
-  GetMetricsOptions,
-  GetMetricsResult,
-  InsertMetricOptions,
+  GetSpansOptions,
+  GetSpansResult,
+  InsertSpanOptions,
   Job,
   JobFilters,
   JobSort,
@@ -112,14 +112,16 @@ export type {
   JobStatusResult,
   JobStep,
   JobStepStatusResult,
-  Metric,
-  MetricFilters,
-  MetricSort,
-  MetricSortField,
-  MetricType,
   RecoverJobsOptions,
   RetryJobOptions,
   SortOrder,
+  Span,
+  SpanEvent,
+  SpanFilters,
+  SpanKind,
+  SpanSort,
+  SpanSortField,
+  SpanStatusCode,
   TimeTravelJobOptions,
 } from './schemas.js'
 
@@ -993,100 +995,98 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
   protected abstract _getActions(): Promise<GetActionsResult>
 
   // ============================================================================
-  // Metrics Methods
+  // Span Methods (OpenTelemetry)
   // ============================================================================
 
   /**
-   * Insert multiple metric records in a single batch operation.
-   * Note: This method bypasses telemetry tracing to prevent infinite loops.
+   * Insert multiple span records in a single batch operation.
+   * Used by LocalSpanExporter to store spans from the OpenTelemetry SDK.
    *
-   * @param metrics - Array of metric data to insert
-   * @returns Promise resolving to the number of metrics inserted
+   * @param spans - Array of span data to insert
+   * @returns Promise resolving to the number of spans inserted
    */
-  async insertMetrics(metrics: InsertMetricOptions[]): Promise<number> {
+  async insertSpans(spans: InsertSpanOptions[]): Promise<number> {
     try {
-      if (metrics.length === 0) {
+      if (spans.length === 0) {
         return 0
       }
       await this.start()
-      const parsedMetrics = metrics.map((m) => InsertMetricOptionsSchema.parse(m))
-      const result = await this._insertMetrics(parsedMetrics)
+      const parsedSpans = spans.map((s) => InsertSpanOptionsSchema.parse(s))
+      const result = await this._insertSpans(parsedSpans)
       return NumberResultSchema.parse(result)
     } catch (error) {
-      this.#logger?.error(error, 'Error in Adapter.insertMetrics()')
+      this.#logger?.error(error, 'Error in Adapter.insertSpans()')
       throw error
     }
   }
 
   /**
-   * Get metrics for a job or step.
-   * Note: This method bypasses telemetry tracing to prevent infinite loops.
+   * Get spans for a job or step.
    *
-   * @param options - Query options including jobId/stepId, filters, sort, and pagination
-   * @returns Promise resolving to metrics result with pagination info
+   * @param options - Query options including jobId/stepId, filters, and sort
+   * @returns Promise resolving to spans result
    */
-  async getMetrics(options: GetMetricsOptions): Promise<GetMetricsResult> {
+  async getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
     try {
       await this.start()
-      const parsedOptions = GetMetricsOptionsSchema.parse(options)
+      const parsedOptions = GetSpansOptionsSchema.parse(options)
       // Validate that at least one of jobId or stepId is provided
       if (!parsedOptions.jobId && !parsedOptions.stepId) {
         throw new Error('At least one of jobId or stepId must be provided')
       }
-      const result = await this._getMetrics(parsedOptions)
-      return GetMetricsResultSchema.parse(result)
+      const result = await this._getSpans(parsedOptions)
+      return GetSpansResultSchema.parse(result)
     } catch (error) {
-      this.#logger?.error(error, 'Error in Adapter.getMetrics()')
+      this.#logger?.error(error, 'Error in Adapter.getSpans()')
       throw error
     }
   }
 
   /**
-   * Delete all metrics for a job.
-   * Note: This method bypasses telemetry tracing to prevent infinite loops.
+   * Delete all spans for a job.
    *
    * @param options - Options containing the jobId
-   * @returns Promise resolving to the number of metrics deleted
+   * @returns Promise resolving to the number of spans deleted
    */
-  async deleteMetrics(options: DeleteMetricsOptions): Promise<number> {
+  async deleteSpans(options: DeleteSpansOptions): Promise<number> {
     try {
       await this.start()
-      const parsedOptions = DeleteMetricsOptionsSchema.parse(options)
-      const result = await this._deleteMetrics(parsedOptions)
+      const parsedOptions = DeleteSpansOptionsSchema.parse(options)
+      const result = await this._deleteSpans(parsedOptions)
       return NumberResultSchema.parse(result)
     } catch (error) {
-      this.#logger?.error(error, 'Error in Adapter.deleteMetrics()')
+      this.#logger?.error(error, 'Error in Adapter.deleteSpans()')
       throw error
     }
   }
 
   // ============================================================================
-  // Private Metrics Methods (to be implemented by adapters)
+  // Private Span Methods (to be implemented by adapters)
   // ============================================================================
 
   /**
-   * Internal method to insert multiple metric records in a single batch.
+   * Internal method to insert multiple span records in a single batch.
    *
-   * @param metrics - Array of validated metric data
-   * @returns Promise resolving to the number of metrics inserted
+   * @param spans - Array of validated span data
+   * @returns Promise resolving to the number of spans inserted
    */
-  protected abstract _insertMetrics(metrics: InsertMetricOptions[]): Promise<number>
+  protected abstract _insertSpans(spans: InsertSpanOptions[]): Promise<number>
 
   /**
-   * Internal method to get metrics for a job or step.
+   * Internal method to get spans for a job or step.
    *
    * @param options - Validated query options
-   * @returns Promise resolving to metrics result with pagination info
+   * @returns Promise resolving to spans result
    */
-  protected abstract _getMetrics(options: GetMetricsOptions): Promise<GetMetricsResult>
+  protected abstract _getSpans(options: GetSpansOptions): Promise<GetSpansResult>
 
   /**
-   * Internal method to delete all metrics for a job.
+   * Internal method to delete all spans for a job.
    *
    * @param options - Validated options containing the jobId
-   * @returns Promise resolving to the number of metrics deleted
+   * @returns Promise resolving to the number of spans deleted
    */
-  protected abstract _deleteMetrics(options: DeleteMetricsOptions): Promise<number>
+  protected abstract _deleteSpans(options: DeleteSpansOptions): Promise<number>
 
   // ============================================================================
   // Protected Abstract Methods (to be implemented by adapters)

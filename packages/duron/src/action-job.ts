@@ -1,17 +1,17 @@
+import { type Span, SpanKind, SpanStatusCode, type Tracer } from '@opentelemetry/api'
 import type { Logger } from 'pino'
 
 import type { Action } from './action.js'
 import type { Adapter } from './adapters/adapter.js'
 import { ActionCancelError, ActionTimeoutError, isCancelError, isTimeoutError, serializeError } from './errors.js'
 import { StepManager } from './step-manager.js'
-import type { Span, TelemetryAdapter } from './telemetry/adapter.js'
 import waitForAbort from './utils/wait-for-abort.js'
 
 export interface ActionJobOptions<TAction extends Action<any, any, any>> {
   job: { id: string; input: any; groupKey: string; timeoutMs: number; actionName: string }
   action: TAction
   database: Adapter
-  telemetry: TelemetryAdapter
+  tracer: Tracer | null
   variables: Record<string, unknown>
   logger: Logger
 }
@@ -26,7 +26,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
   #job: { id: string; input: any; groupKey: string; timeoutMs: number; actionName: string }
   #action: TAction
   #database: Adapter
-  #telemetry: TelemetryAdapter
+  #tracer: Tracer | null
   #variables: Record<string, unknown>
   #logger: Logger
   #stepManager: StepManager
@@ -49,7 +49,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
     this.#job = options.job
     this.#action = options.action
     this.#database = options.database
-    this.#telemetry = options.telemetry
+    this.#tracer = options.tracer
     this.#variables = options.variables
     this.#logger = options.logger
     this.#abortController = new AbortController()
@@ -59,7 +59,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       jobId: options.job.id,
       actionName: options.job.actionName,
       adapter: options.database,
-      telemetry: options.telemetry,
+      tracer: options.tracer,
       logger: options.logger,
       concurrencyLimit: options.action.steps.concurrency,
     })
@@ -84,13 +84,17 @@ export class ActionJob<TAction extends Action<any, any, any>> {
    * @throws Error if the job fails or output validation fails
    */
   async execute() {
-    // Start job telemetry span
-    this.#jobSpan = await this.#telemetry.startJobSpan({
-      jobId: this.#job.id,
-      actionName: this.#action.name,
-      groupKey: this.#job.groupKey,
-      input: this.#job.input,
-    })
+    // Start job span if tracer is available
+    if (this.#tracer) {
+      this.#jobSpan = this.#tracer.startSpan(`job:${this.#action.name}`, {
+        kind: SpanKind.INTERNAL,
+        attributes: {
+          'duron.job.id': this.#job.id,
+          'duron.action.name': this.#action.name,
+          'duron.group.key': this.#job.groupKey,
+        },
+      })
+    }
 
     // Set the job span on the step manager
     this.#stepManager.setJobSpan(this.#jobSpan)
@@ -102,9 +106,6 @@ export class ActionJob<TAction extends Action<any, any, any>> {
         actionName: this.#action.name,
       })
 
-      // Create observe context for the action handler
-      const observeContext = this.#telemetry.createObserveContext(this.#job.id, null, this.#jobSpan)
-
       // Create action context with step manager
       const ctx = this.#stepManager.createActionContext(
         this.#job,
@@ -112,7 +113,6 @@ export class ActionJob<TAction extends Action<any, any, any>> {
         this.#variables as any,
         this.#abortController.signal,
         jobLogger,
-        observeContext,
       )
 
       this.#timeoutId = setTimeout(() => {
@@ -160,7 +160,10 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       )
 
       // End job span successfully
-      await this.#telemetry.endJobSpan(this.#jobSpan, { status: 'ok' })
+      if (this.#jobSpan) {
+        this.#jobSpan.setStatus({ code: SpanStatusCode.OK })
+        this.#jobSpan.end()
+      }
 
       return result
     } catch (error) {
@@ -182,22 +185,27 @@ export class ActionJob<TAction extends Action<any, any, any>> {
 
         // End job span as cancelled
         if (this.#jobSpan) {
-          await this.#telemetry.endJobSpan(this.#jobSpan, { status: 'cancelled' })
+          this.#jobSpan.setStatus({ code: SpanStatusCode.ERROR, message: 'Job cancelled' })
+          this.#jobSpan.end()
         }
         return
       }
 
-      const message =
-        isTimeoutError(error)
-          ? '[ActionJob] Job timed out'
-          : '[ActionJob] Job failed'
+      const message = isTimeoutError(error) ? '[ActionJob] Job timed out' : '[ActionJob] Job failed'
 
       this.#logger.error({ jobId: this.#job.id, actionName: this.#action.name }, message)
       await this.#database.failJob({ jobId: this.#job.id, error: serializeError(error) })
 
       // End job span with error
       if (this.#jobSpan) {
-        await this.#telemetry.endJobSpan(this.#jobSpan, { status: 'error', error })
+        this.#jobSpan.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        if (error instanceof Error) {
+          this.#jobSpan.recordException(error)
+        }
+        this.#jobSpan.end()
       }
 
       throw error

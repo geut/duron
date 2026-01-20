@@ -1,3 +1,4 @@
+import { context, type Span, SpanKind, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api'
 import fastq from 'fastq'
 import type { Logger } from 'pino'
 import type { z } from 'zod'
@@ -24,45 +25,66 @@ import {
   serializeError,
   UnhandledChildStepsError,
 } from './errors.js'
-import type { ObserveContext, Span, TelemetryAdapter, Tracer, TracerSpan } from './telemetry/adapter.js'
 
-// ============================================================================
-// Noop Tracer (for fallback observe context)
-// ============================================================================
+/**
+ * Telemetry context provided to action and step handlers.
+ * Provides access to OpenTelemetry APIs for recording traces and metrics.
+ */
+export interface TelemetryContext {
+  /**
+   * Get the active OpenTelemetry span for the current job/step.
+   */
+  getActiveSpan(): Span | undefined
 
-const noopTracerSpan: TracerSpan = {
-  setAttribute() {
-    // No-op
-  },
-  setAttributes() {
-    // No-op
-  },
-  addEvent() {
-    // No-op
-  },
-  recordException() {
-    // No-op
-  },
-  setStatusOk() {
-    // No-op
-  },
-  setStatusError() {
-    // No-op
-  },
-  end() {
-    // No-op
-  },
-  isRecording() {
-    return false
-  },
+  /**
+   * Get an OpenTelemetry tracer for creating custom spans.
+   */
+  getTracer(name: string): Tracer
+
+  /**
+   * Record a custom metric as a span event.
+   */
+  recordMetric(name: string, value: number, attributes?: Record<string, any>): void
 }
 
-const createNoopTracer = (name: string): Tracer => ({
-  name,
-  startSpan(): TracerSpan {
-    return noopTracerSpan
-  },
-})
+/**
+ * Create a TelemetryContext that wraps an OTel span.
+ */
+function createTelemetryContext(span: Span | null): TelemetryContext {
+  return {
+    getActiveSpan(): Span | undefined {
+      return span ?? undefined
+    },
+    getTracer(name: string): Tracer {
+      return trace.getTracer(name)
+    },
+    recordMetric(name: string, value: number, attributes?: Record<string, any>): void {
+      if (span) {
+        span.addEvent(`metric:${name}`, {
+          'metric.value': value,
+          ...attributes,
+        })
+      }
+    },
+  }
+}
+
+/**
+ * Create a no-op TelemetryContext when no tracer is configured.
+ */
+function createNoopTelemetryContext(): TelemetryContext {
+  return {
+    getActiveSpan(): Span | undefined {
+      return undefined
+    },
+    getTracer(name: string): Tracer {
+      return trace.getTracer(name)
+    },
+    recordMetric(): void {
+      // No-op
+    },
+  }
+}
 
 import pRetry from './utils/p-retry.js'
 import waitForAbort from './utils/wait-for-abort.js'
@@ -172,7 +194,7 @@ export interface StepManagerOptions {
   jobId: string
   actionName: string
   adapter: Adapter
-  telemetry: TelemetryAdapter
+  tracer: Tracer | null
   logger: Logger
   concurrencyLimit: number
 }
@@ -185,7 +207,7 @@ export class StepManager {
   #jobId: string
   #actionName: string
   #stepStore: StepStore
-  #telemetry: TelemetryAdapter
+  #tracer: Tracer | null
   #queue: fastq.queueAsPromised<TaskStep, any>
   #logger: Logger
   // each step name should be executed only once per parent (name + parentStepId)
@@ -210,7 +232,7 @@ export class StepManager {
     this.#jobId = options.jobId
     this.#actionName = options.actionName
     this.#logger = options.logger
-    this.#telemetry = options.telemetry
+    this.#tracer = options.tracer
     this.#stepStore = new StepStore(options.adapter)
     this.#queue = fastq.promise(async (task: TaskStep) => {
       // Create composite key: name + parentStepId (allows same name under different parents)
@@ -227,7 +249,7 @@ export class StepManager {
    * Set the job span for this step manager.
    * Called from ActionJob after the job span is created.
    */
-  setJobSpan(span: Span): void {
+  setJobSpan(span: Span | null): void {
     this.#jobSpan = span
   }
 
@@ -254,7 +276,6 @@ export class StepManager {
    * @param variables - Variables available to the action
    * @param abortSignal - Abort signal for cancelling the action
    * @param logger - Pino child logger for this job
-   * @param observeContext - Observability context for telemetry
    * @returns ActionHandlerContext instance
    */
   createActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVariables = Record<string, unknown>>(
@@ -263,38 +284,25 @@ export class StepManager {
     variables: TVariables,
     abortSignal: AbortSignal,
     logger: Logger,
-    observeContext: ObserveContext,
   ): ActionHandlerContext<TInput, TVariables> {
-    return new ActionContext(this, job, action, variables, abortSignal, logger, observeContext)
+    const telemetryContext = this.#jobSpan ? createTelemetryContext(this.#jobSpan) : createNoopTelemetryContext()
+    return new ActionContext(this, job, action, variables, abortSignal, logger, telemetryContext)
   }
 
   /**
-   * Create an observe context for a step.
+   * Create a telemetry context for a step.
    */
-  createStepObserveContext(stepId: string): ObserveContext {
+  createStepTelemetryContext(stepId: string): TelemetryContext {
     const stepSpan = this.#stepSpans.get(stepId)
     if (stepSpan) {
-      return this.#telemetry.createObserveContext(this.#jobId, stepId, stepSpan)
+      return createTelemetryContext(stepSpan)
     }
     // Fallback to job span if step span not found
     if (this.#jobSpan) {
-      return this.#telemetry.createObserveContext(this.#jobId, stepId, this.#jobSpan)
+      return createTelemetryContext(this.#jobSpan)
     }
-    // No-op observe context
-    return {
-      recordMetric: () => {
-        // No-op
-      },
-      addSpanAttribute: () => {
-        // No-op
-      },
-      addSpanEvent: () => {
-        // No-op
-      },
-      getTracer: (name: string) => {
-        return createNoopTracer(name)
-      },
-    }
+    // No-op telemetry context
+    return createNoopTelemetryContext()
   }
 
   /**
@@ -381,16 +389,25 @@ export class StepManager {
 
         step = newStep
 
-        // Start step telemetry span
-        const parentSpan = parentStepId ? this.#stepSpans.get(parentStepId) : this.#jobSpan
-        const stepSpan = await this.#telemetry.startStepSpan({
-          jobId: this.#jobId,
-          stepId: step.id,
-          stepName: name,
-          parentSpan: parentSpan ?? undefined,
-          parentStepId,
-        })
-        this.#stepSpans.set(step.id, stepSpan)
+        // Start step span if tracer is available
+        if (this.#tracer) {
+          const parentSpan = parentStepId ? this.#stepSpans.get(parentStepId) : this.#jobSpan
+          const parentContext = parentSpan ? trace.setSpan(context.active(), parentSpan) : context.active()
+          const stepSpan = this.#tracer.startSpan(
+            `step:${name}`,
+            {
+              kind: SpanKind.INTERNAL,
+              attributes: {
+                'duron.job.id': this.#jobId,
+                'duron.step.id': step.id,
+                'duron.step.name': name,
+                'duron.step.parent_id': parentStepId ?? undefined,
+              },
+            },
+            parentContext,
+          )
+          this.#stepSpans.set(step.id, stepSpan)
+        }
 
         if (abortSignal.aborted) {
           throw new ActionCancelError(this.#actionName, this.#jobId, { cause: 'step cancelled after create step' })
@@ -451,15 +468,15 @@ export class StepManager {
       const childAbortController = new AbortController()
       const childSignal = AbortSignal.any([stepSignal, childAbortController.signal])
 
-      // Create observe context for this step
-      const stepObserveContext = this.createStepObserveContext(step.id)
+      // Create telemetry context for this step
+      const stepTelemetryContext = this.createStepTelemetryContext(step.id)
 
       // Create StepHandlerContext with nested step support
       const stepContext: StepHandlerContext = {
         signal: stepSignal,
         stepId: step.id,
         parentStepId,
-        observe: stepObserveContext,
+        telemetry: stepTelemetryContext,
         step: <TChildResult>(
           childName: string,
           childCb: (ctx: StepHandlerContext) => Promise<TChildResult>,
@@ -590,10 +607,11 @@ export class StepManager {
           throw new Error(`Failed to complete step "${name}" for job "${this.#jobId}" action "${this.#actionName}"`)
         }
 
-        // End step telemetry span successfully
+        // End step span successfully
         const stepSpan = this.#stepSpans.get(step.id)
         if (stepSpan) {
-          await this.#telemetry.endStepSpan(stepSpan, { status: 'ok' })
+          stepSpan.setStatus({ code: SpanStatusCode.OK })
+          stepSpan.end()
           this.#stepSpans.delete(step.id)
         }
 
@@ -667,14 +685,21 @@ export class StepManager {
       },
     }).catch(async (error) => {
       if (step) {
-        // End step telemetry span with error/cancelled status
+        // End step span with error/cancelled status
         const stepSpan = this.#stepSpans.get(step.id)
         if (stepSpan) {
           if (isCancelError(error)) {
-            await this.#telemetry.endStepSpan(stepSpan, { status: 'cancelled' })
+            stepSpan.setStatus({ code: SpanStatusCode.ERROR, message: 'Step cancelled' })
           } else {
-            await this.#telemetry.endStepSpan(stepSpan, { status: 'error', error })
+            stepSpan.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: error instanceof Error ? error.message : String(error),
+            })
+            if (error instanceof Error) {
+              stepSpan.recordException(error)
+            }
           }
+          stepSpan.end()
           this.#stepSpans.delete(step.id)
         }
 
@@ -721,7 +746,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
   #jobId: string
   #groupKey: string = '@default'
   #action: Action<TInput, TOutput, TVariables>
-  #observeContext: ObserveContext
+  #telemetryContext: TelemetryContext
 
   // ============================================================================
   // Constructor
@@ -734,7 +759,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
     variables: TVariables,
     abortSignal: AbortSignal,
     logger: Logger,
-    observeContext: ObserveContext,
+    telemetryContext: TelemetryContext,
   ) {
     this.#stepManager = stepManager
     this.#variables = variables
@@ -743,7 +768,7 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
     this.#action = action
     this.#jobId = job.id
     this.#groupKey = job.groupKey ?? '@default'
-    this.#observeContext = observeContext
+    this.#telemetryContext = telemetryContext
     if (action.input) {
       this.#input = action.input.parse(job.input, {
         error: () => 'Error parsing action input',
@@ -803,10 +828,10 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
   }
 
   /**
-   * Get the observability context for recording metrics and span data.
+   * Get the telemetry context for recording metrics and span data.
    */
-  get observe(): ObserveContext {
-    return this.#observeContext
+  get telemetry(): TelemetryContext {
+    return this.#telemetryContext
   }
 
   /**

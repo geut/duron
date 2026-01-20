@@ -24,7 +24,7 @@ import {
   type DelayJobStepOptions,
   type DeleteJobOptions,
   type DeleteJobsOptions,
-  type DeleteMetricsOptions,
+  type DeleteSpansOptions,
   type FailJobOptions,
   type FailJobStepOptions,
   type FetchOptions,
@@ -33,17 +33,17 @@ import {
   type GetJobStepsResult,
   type GetJobsOptions,
   type GetJobsResult,
-  type GetMetricsOptions,
-  type GetMetricsResult,
-  type InsertMetricOptions,
+  type GetSpansOptions,
+  type GetSpansResult,
+  type InsertSpanOptions,
   type Job,
   type JobSort,
   type JobStatusResult,
   type JobStep,
   type JobStepStatusResult,
-  type MetricSort,
   type RecoverJobsOptions,
   type RetryJobOptions,
+  type SpanSort,
   type TimeTravelJobOptions,
 } from '../adapter.js'
 import createSchema from './schema.js'
@@ -1385,54 +1385,60 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   // ============================================================================
 
   /**
-   * Internal method to insert multiple metric records in a single batch.
+   * Internal method to insert multiple span records in a single batch.
    */
-  protected async _insertMetrics(metrics: InsertMetricOptions[]): Promise<number> {
-    if (metrics.length === 0) {
+  protected async _insertSpans(spans: InsertSpanOptions[]): Promise<number> {
+    if (spans.length === 0) {
       return 0
     }
 
-    const values = metrics.map((m) => ({
-      job_id: m.jobId,
-      step_id: m.stepId ?? null,
-      name: m.name,
-      value: m.value,
-      attributes: m.attributes ?? {},
-      type: m.type,
+    const values = spans.map((s) => ({
+      trace_id: s.traceId,
+      span_id: s.spanId,
+      parent_span_id: s.parentSpanId,
+      job_id: s.jobId,
+      step_id: s.stepId,
+      name: s.name,
+      kind: s.kind,
+      start_time_unix_nano: s.startTimeUnixNano,
+      end_time_unix_nano: s.endTimeUnixNano,
+      status_code: s.statusCode,
+      status_message: s.statusMessage,
+      attributes: s.attributes ?? {},
+      events: s.events ?? [],
     }))
 
     const result = await this.db
-      .insert(this.tables.metricsTable)
+      .insert(this.tables.spansTable)
       .values(values)
-      .returning({ id: this.tables.metricsTable.id })
+      .returning({ id: this.tables.spansTable.id })
 
     return result.length
   }
 
   /**
-   * Internal method to get metrics for a job or step.
+   * Internal method to get spans for a job or step.
    */
-  protected async _getMetrics(options: GetMetricsOptions): Promise<GetMetricsResult> {
-    const metricsTable = this.tables.metricsTable
+  protected async _getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
+    const spansTable = this.tables.spansTable
     const filters = options.filters ?? {}
 
     // Build WHERE clause
-    const where = this._buildMetricsWhereClause(options.jobId, options.stepId, filters)
+    const where = this._buildSpansWhereClause(options.jobId, options.stepId, filters)
 
     // Build sort
-    const sortInput = options.sort ?? { field: 'timestamp', order: 'desc' }
-    const sortFieldMap: Record<MetricSort['field'], any> = {
-      name: metricsTable.name,
-      value: metricsTable.value,
-      timestamp: metricsTable.timestamp,
-      createdAt: metricsTable.created_at,
+    const sortInput = options.sort ?? { field: 'startTimeUnixNano', order: 'asc' }
+    const sortFieldMap: Record<SpanSort['field'], any> = {
+      name: spansTable.name,
+      startTimeUnixNano: spansTable.start_time_unix_nano,
+      endTimeUnixNano: spansTable.end_time_unix_nano,
     }
 
     // Get total count
-    const total = await this.db.$count(metricsTable, where)
+    const total = await this.db.$count(spansTable, where)
     if (!total) {
       return {
-        metrics: [],
+        spans: [],
         total: 0,
       }
     }
@@ -1440,62 +1446,76 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     const sortField = sortFieldMap[sortInput.field]
     const orderByClause = sortInput.order === 'asc' ? asc(sortField) : desc(sortField)
 
-    const metrics = await this.db
+    const rows = await this.db
       .select({
-        id: metricsTable.id,
-        jobId: metricsTable.job_id,
-        stepId: metricsTable.step_id,
-        name: metricsTable.name,
-        value: metricsTable.value,
-        attributes: metricsTable.attributes,
-        type: metricsTable.type,
-        timestamp: metricsTable.timestamp,
-        createdAt: metricsTable.created_at,
+        id: spansTable.id,
+        traceId: spansTable.trace_id,
+        spanId: spansTable.span_id,
+        parentSpanId: spansTable.parent_span_id,
+        jobId: spansTable.job_id,
+        stepId: spansTable.step_id,
+        name: spansTable.name,
+        kind: spansTable.kind,
+        startTimeUnixNano: spansTable.start_time_unix_nano,
+        endTimeUnixNano: spansTable.end_time_unix_nano,
+        statusCode: spansTable.status_code,
+        statusMessage: spansTable.status_message,
+        attributes: spansTable.attributes,
+        events: spansTable.events,
       })
-      .from(metricsTable)
+      .from(spansTable)
       .where(where)
       .orderBy(orderByClause)
 
+    // Cast kind and statusCode to proper types, convert BigInt to string for JSON serialization
+    const spans = rows.map((row) => ({
+      ...row,
+      kind: row.kind as 0 | 1 | 2 | 3 | 4,
+      statusCode: row.statusCode as 0 | 1 | 2,
+      // Convert BigInt to string for JSON serialization
+      startTimeUnixNano: row.startTimeUnixNano?.toString() ?? null,
+      endTimeUnixNano: row.endTimeUnixNano?.toString() ?? null,
+    }))
+
     return {
-      metrics,
+      spans,
       total,
     }
   }
 
   /**
-   * Internal method to delete all metrics for a job.
+   * Internal method to delete all spans for a job.
    */
-  protected async _deleteMetrics(options: DeleteMetricsOptions): Promise<number> {
+  protected async _deleteSpans(options: DeleteSpansOptions): Promise<number> {
     const result = await this.db
-      .delete(this.tables.metricsTable)
-      .where(eq(this.tables.metricsTable.job_id, options.jobId))
-      .returning({ id: this.tables.metricsTable.id })
+      .delete(this.tables.spansTable)
+      .where(eq(this.tables.spansTable.job_id, options.jobId))
+      .returning({ id: this.tables.spansTable.id })
 
     return result.length
   }
 
   /**
-   * Build WHERE clause for metrics queries.
+   * Build WHERE clause for spans queries.
    */
-  protected _buildMetricsWhereClause(jobId?: string, stepId?: string, filters?: GetMetricsOptions['filters']) {
-    const metricsTable = this.tables.metricsTable
+  protected _buildSpansWhereClause(jobId?: string, stepId?: string, filters?: GetSpansOptions['filters']) {
+    const spansTable = this.tables.spansTable
 
     return and(
-      jobId ? eq(metricsTable.job_id, jobId) : undefined,
-      stepId ? eq(metricsTable.step_id, stepId) : undefined,
+      jobId ? eq(spansTable.job_id, jobId) : undefined,
+      stepId ? eq(spansTable.step_id, stepId) : undefined,
       filters?.name
         ? Array.isArray(filters.name)
-          ? or(...filters.name.map((n) => ilike(metricsTable.name, `%${n}%`)))
-          : ilike(metricsTable.name, `%${filters.name}%`)
+          ? or(...filters.name.map((n) => ilike(spansTable.name, `%${n}%`)))
+          : ilike(spansTable.name, `%${filters.name}%`)
         : undefined,
-      filters?.type
-        ? inArray(metricsTable.type, Array.isArray(filters.type) ? filters.type : [filters.type])
+      filters?.kind ? inArray(spansTable.kind, Array.isArray(filters.kind) ? filters.kind : [filters.kind]) : undefined,
+      filters?.statusCode
+        ? inArray(spansTable.status_code, Array.isArray(filters.statusCode) ? filters.statusCode : [filters.statusCode])
         : undefined,
-      filters?.timestampRange && filters.timestampRange.length === 2
-        ? between(metricsTable.timestamp, filters.timestampRange[0]!, filters.timestampRange[1]!)
-        : undefined,
+      filters?.traceId ? eq(spansTable.trace_id, filters.traceId) : undefined,
       ...(filters?.attributesFilter && Object.keys(filters.attributesFilter).length > 0
-        ? this.#buildJsonbWhereConditions(filters.attributesFilter, metricsTable.attributes)
+        ? this.#buildJsonbWhereConditions(filters.attributesFilter, spansTable.attributes)
         : []),
     )
   }

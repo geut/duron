@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useSpans } from '@/contexts/spans-context'
 import { useStepStatusPolling } from '@/hooks/use-step-status-polling'
 import { useStep } from '@/lib/api'
-import { formatExpirationWindow, formatMsToSeconds } from '@/lib/duration'
+import { calculateDurationMs, formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { isExpiring } from '../lib/is-expiring'
@@ -29,27 +29,13 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
   // Enable polling for individual step status updates
   useStepStatusPolling(stepId, jobId, true)
 
-  // Calculate step duration in technical format (HH:MM:SS.mmm)
+  // Calculate step duration in hh:mm:ss format (or hh:mm:ss.mmm if < 1 second)
   const getStepDuration = useCallback((stepData: typeof step) => {
     if (!stepData?.startedAt) {
       return 'Not started'
     }
-    const startTime = new Date(stepData.startedAt).getTime()
-    const endTime = stepData.finishedAt ? new Date(stepData.finishedAt).getTime() : Date.now()
-    const durationMs = endTime - startTime
-
-    const hours = Math.floor(durationMs / 3600000)
-    const minutes = Math.floor((durationMs % 3600000) / 60000)
-    const seconds = Math.floor((durationMs % 60000) / 1000)
-    const milliseconds = durationMs % 1000
-
-    if (hours > 0) {
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
-    }
-    if (minutes > 0) {
-      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
-    }
-    return `${seconds}.${milliseconds.toString().padStart(3, '0')}s`
+    const durationMs = calculateDurationMs(stepData.startedAt, stepData.finishedAt)
+    return formatMs(durationMs)
   }, [])
 
   const [stepDuration, setStepDuration] = useState(() => getStepDuration(step))
@@ -136,7 +122,7 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
           </div>
           {step.timeoutMs && (
             <div>
-              <span className="font-medium">Timeout:</span> {formatMsToSeconds(step.timeoutMs)}
+              <span className="font-medium">Timeout:</span> {formatMs(step.timeoutMs)}
             </div>
           )}
           {step.expiresAt && (
@@ -154,7 +140,7 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
                     : ''
                 }
               >
-                {formatDate(step.expiresAt)} {formatExpirationWindow(step.startedAt, step.expiresAt)}
+                {formatDate(step.expiresAt)}
               </span>
             </div>
           )}

@@ -15,7 +15,7 @@ import { useJobParams } from '@/hooks/use-job-params'
 import { useJobsPolling } from '@/hooks/use-jobs-polling'
 import type { ActionStats, Job, JobStatus } from '@/lib/api'
 import { useActions, useJobs } from '@/lib/api'
-import { formatExpirationWindow, formatMsToSeconds } from '@/lib/duration'
+import { formatExpirationWindow, formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { isExpiring } from '../lib/is-expiring'
@@ -116,23 +116,6 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         enableColumnFilter: true,
       },
       {
-        id: 'createdAt',
-        accessorKey: 'createdAt',
-        header: ({ column }: { column: Column<Job, unknown> }) => (
-          <DataTableColumnHeader column={column} label="Created" />
-        ),
-        cell: ({ cell }) => {
-          const dateStr = cell.getValue<string>()
-          return <div>{formatDate(dateStr)}</div>
-        },
-        size: 64,
-        meta: {
-          label: 'Created',
-          variant: 'dateRange',
-        },
-        enableColumnFilter: true,
-      },
-      {
         id: 'startedAt',
         accessorKey: 'startedAt',
         header: ({ column }: { column: Column<Job, unknown> }) => (
@@ -178,15 +161,17 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
           if (!startedAt) {
             return <div>-</div>
           }
+
           // For active jobs (no durationMs yet), show "running" indicator
           if (durationMs === null) {
             return (
-              <div className="font-mono text-xs">
+              <div className="font-mono">
                 {status === 'active' && <span className="text-muted-foreground">(running)</span>}
               </div>
             )
           }
-          return <div className="font-mono text-xs">{formatMsToSeconds(durationMs)}</div>
+
+          return <div className="font-mono">{formatMs(durationMs)}</div>
         },
         size: 80,
         enableColumnFilter: false,
@@ -229,10 +214,27 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         ),
         cell: ({ cell }) => {
           const clientId = cell.getValue<string | null | undefined>()
-          return <div className="font-mono text-xs">{clientId || '-'}</div>
+          return <div>{clientId || '-'}</div>
         },
         size: 64,
         enableColumnFilter: false,
+      },
+      {
+        id: 'createdAt',
+        accessorKey: 'createdAt',
+        header: ({ column }: { column: Column<Job, unknown> }) => (
+          <DataTableColumnHeader column={column} label="Created" />
+        ),
+        cell: ({ cell }) => {
+          const dateStr = cell.getValue<string>()
+          return <div>{formatDate(dateStr)}</div>
+        },
+        size: 64,
+        meta: {
+          label: 'Created',
+          variant: 'dateRange',
+        },
+        enableColumnFilter: true,
       },
     ],
     [actionNameOptions],
@@ -264,7 +266,7 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
       },
       sorting: sort,
       columnVisibility: {
-        clientId: false,
+        'Client ID': false,
       },
     },
     state: {

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { type Span, useJobSpans, useStepSpans } from '@/hooks/use-job-spans'
+import { formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { JsonView } from './json-view'
 
@@ -45,7 +46,7 @@ function SpanItem({ span }: SpanItemProps) {
       ? BigInt(span.endTimeUnixNano) - BigInt(span.startTimeUnixNano)
       : null
   const durationMs = durationNs ? Number(durationNs / BigInt(1_000_000)) : null
-  const durationSec = durationMs !== null ? (durationMs / 1000).toFixed(2) : null
+  const formattedDuration = durationMs !== null ? formatMs(durationMs) : null
   const startTime = nanosToDate(span.startTimeUnixNano)
 
   return (
@@ -69,10 +70,10 @@ function SpanItem({ span }: SpanItemProps) {
       </div>
 
       <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-        {durationSec !== null && (
+        {formattedDuration !== null && (
           <div className="flex items-center gap-1">
             <Hash className="h-3 w-3" />
-            <span className="font-mono">{durationSec}s</span>
+            <span className="font-mono">{formattedDuration}</span>
           </div>
         )}
         {startTime && (

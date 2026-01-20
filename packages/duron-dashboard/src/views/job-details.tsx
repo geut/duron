@@ -9,7 +9,7 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { useSpans } from '@/contexts/spans-context'
 import { useJobStatusPolling } from '@/hooks/use-job-status-polling'
 import { useCancelJob, useDeleteJob, useJob, useRetryJob } from '@/lib/api'
-import { formatExpirationWindow, formatMsToSeconds } from '@/lib/duration'
+import { calculateDurationMs, formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { JsonView } from '../components/json-view'
@@ -33,27 +33,13 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
   const retryMutation = useRetryJob()
   const deleteMutation = useDeleteJob()
 
-  // Calculate job duration in technical format (HH:MM:SS.mmm)
+  // Calculate job duration in hh:mm:ss format (or hh:mm:ss.mmm if < 1 second)
   const getJobDuration = useCallback((jobData: typeof job) => {
     if (!jobData?.startedAt) {
       return 'Not started'
     }
-    const startTime = new Date(jobData.startedAt).getTime()
-    const endTime = jobData.finishedAt ? new Date(jobData.finishedAt).getTime() : Date.now()
-    const durationMs = endTime - startTime
-
-    const hours = Math.floor(durationMs / 3600000)
-    const minutes = Math.floor((durationMs % 3600000) / 60000)
-    const seconds = Math.floor((durationMs % 60000) / 1000)
-    const milliseconds = durationMs % 1000
-
-    if (hours > 0) {
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
-    }
-    if (minutes > 0) {
-      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
-    }
-    return `${seconds}.${milliseconds.toString().padStart(3, '0')}s`
+    const durationMs = calculateDurationMs(jobData.startedAt, jobData.finishedAt)
+    return formatMs(durationMs)
   }, [])
 
   const [jobDuration, setJobDuration] = useState(() => getJobDuration(job))
@@ -215,19 +201,19 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
                 <span className="font-medium">Completed:</span> {formatDate(job.finishedAt)}
               </div>
             )}
-            {job.startedAt && (
-              <div>
-                <span className="font-medium">Duration:</span> {jobDuration}
-              </div>
-            )}
             {job.concurrencyLimit && (
               <div>
                 <span className="font-medium">Concurrency Limit:</span> {job.concurrencyLimit}
               </div>
             )}
+            {job.startedAt && (
+              <div>
+                <span className="font-medium">Duration:</span> {jobDuration}
+              </div>
+            )}
             {job.timeoutMs && (
               <div>
-                <span className="font-medium">Timeout:</span> {formatMsToSeconds(job.timeoutMs)}
+                <span className="font-medium">Timeout:</span> {formatMs(job.timeoutMs)}
               </div>
             )}
             {job.expiresAt && (
@@ -245,7 +231,7 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
                       : ''
                   }
                 >
-                  {formatDate(job.expiresAt)} {formatExpirationWindow(job.startedAt, job.expiresAt)}
+                  {formatDate(job.expiresAt)}
                 </span>
               </div>
             )}

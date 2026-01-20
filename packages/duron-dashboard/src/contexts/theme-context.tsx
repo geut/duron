@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 
-type Theme = 'light' | 'dark'
+export type Theme = 'light' | 'dark'
+export type ThemeOption = Theme | 'system'
 
 interface ThemeContextType {
   theme: Theme
@@ -12,31 +13,55 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+function getSystemTheme(): Theme {
+  if (typeof window !== 'undefined') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return 'light'
+}
+
+function applyTheme(theme: Theme) {
+  if (typeof window !== 'undefined') {
+    const root = document.documentElement
+    if (theme === 'dark') {
+      root.classList.add('dark')
+    } else {
+      root.classList.remove('dark')
+    }
+  }
+}
+
+export interface ThemeProviderProps {
+  children: React.ReactNode
+  /**
+   * The default theme to use.
+   * - 'light': Always use light theme
+   * - 'dark': Always use dark theme
+   * - 'system': Use the system preference (default)
+   */
+  defaultTheme?: ThemeOption
+}
+
+export function ThemeProvider({ children, defaultTheme = 'system' }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(() => {
+    // If a specific theme (not 'system') is set via prop, use it directly
+    if (defaultTheme !== 'system') {
+      applyTheme(defaultTheme)
+      return defaultTheme
+    }
+
     // Check localStorage first, then system preference
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('theme') as Theme | null
       if (stored === 'light' || stored === 'dark') {
         // Apply immediately to prevent flash
-        const root = document.documentElement
-        if (stored === 'dark') {
-          root.classList.add('dark')
-        } else {
-          root.classList.remove('dark')
-        }
+        applyTheme(stored)
         return stored
       }
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      const root = document.documentElement
-      if (prefersDark) {
-        root.classList.add('dark')
-        return 'dark'
-      } else {
-        root.classList.remove('dark')
-        return 'light'
-      }
+      // Fall back to system preference
+      const systemTheme = getSystemTheme()
+      applyTheme(systemTheme)
+      return systemTheme
     }
     return 'light'
   })

@@ -1,6 +1,19 @@
 import type React from 'react'
 
 /**
+ * Theme values that can be applied to the dashboard.
+ */
+export type Theme = 'light' | 'dark'
+
+/**
+ * Theme options for configuring the dashboard theme.
+ * - 'light': Always use light theme
+ * - 'dark': Always use dark theme
+ * - 'system': Use the system preference (default)
+ */
+export type ThemeOption = Theme | 'system'
+
+/**
  * Props for the DuronDashboard component.
  */
 export interface DuronDashboardProps {
@@ -30,6 +43,13 @@ export interface DuronDashboardProps {
    * Defaults to true.
    */
   showThemeToggle?: boolean
+  /**
+   * The theme to use for the dashboard.
+   * - 'light': Always use light theme
+   * - 'dark': Always use dark theme
+   * - 'system': Use the system preference (default)
+   */
+  theme?: ThemeOption
 }
 
 /**

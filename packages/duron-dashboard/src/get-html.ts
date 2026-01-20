@@ -1,16 +1,23 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-let cachedHTML: string | null = null
-export async function getHTML({
-  url,
-  enableLogin,
-  showLogo,
-}: {
+import type { ThemeOption } from './contexts/theme-context'
+
+export interface GetHTMLOptions {
   url: string
   enableLogin: boolean
   showLogo: boolean
-}): Promise<string> {
+  /**
+   * The theme to use for the dashboard.
+   * - 'light': Always use light theme
+   * - 'dark': Always use dark theme
+   * - 'system': Use the system preference (default)
+   */
+  theme?: ThemeOption
+}
+
+let cachedHTML: string | null = null
+export async function getHTML({ url, enableLogin, showLogo, theme }: GetHTMLOptions): Promise<string> {
   if (cachedHTML) return cachedHTML
 
   let css = ''
@@ -43,6 +50,13 @@ export async function getHTML({
     favicon = `<link rel="icon" href="${dataUri}" type="${mimeType}" />`
   }
 
+  const config = {
+    url,
+    enableLogin,
+    showLogo,
+    theme,
+  }
+
   cachedHTML = `
     <!doctype html>
     <html lang="en">
@@ -55,11 +69,7 @@ export async function getHTML({
         ${js}
         <script>
           function autoInit() {
-            globalThis.initDuron('#root', {
-              url: '${url}',
-              enableLogin: ${enableLogin},
-              showLogo: ${showLogo},
-            })
+            globalThis.initDuron('#root', ${JSON.stringify(config, null, 2)})
           }
 
           if (document.readyState === 'loading') {

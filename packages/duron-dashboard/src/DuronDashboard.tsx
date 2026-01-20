@@ -6,7 +6,7 @@ import { AuthProvider, useAuth } from './contexts/auth-context'
 import { LayoutProvider } from './contexts/layout-context'
 import { MetricsProvider } from './contexts/metrics-context'
 import { PollingProvider } from './contexts/polling-context'
-import { ThemeProvider } from './contexts/theme-context'
+import { ThemeProvider, type ThemeOption } from './contexts/theme-context'
 import { Dashboard } from './views/dashboard'
 import Login from './views/login'
 
@@ -64,6 +64,13 @@ export interface DuronDashboardProps {
    */
   showThemeToggle?: boolean
   /**
+   * The theme to use for the dashboard.
+   * - 'light': Always use light theme
+   * - 'dark': Always use dark theme
+   * - 'system': Use the system preference (default)
+   */
+  theme?: ThemeOption
+  /**
    * Custom fetch function to use for API requests.
    * This allows you to intercept, modify, or wrap fetch calls.
    * Defaults to the native fetch.
@@ -86,13 +93,14 @@ export function DuronDashboard({
   enableLogin = false,
   showLogo = true,
   showThemeToggle = true,
+  theme = 'system',
   customFetch,
   className,
   pollingInterval,
 }: DuronDashboardProps) {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
+      <ThemeProvider defaultTheme={theme}>
         <LayoutProvider>
           <PollingProvider pollingInterval={pollingInterval}>
             <ApiProvider baseUrl={url} customFetch={customFetch}>

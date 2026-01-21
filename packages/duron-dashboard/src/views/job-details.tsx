@@ -203,7 +203,12 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
             )}
             {job.concurrencyLimit && (
               <div>
-                <span className="font-medium">Concurrency Limit:</span> {job.concurrencyLimit}
+                <span className="font-medium">Group Concurrency:</span> {job.concurrencyLimit}
+              </div>
+            )}
+            {job.concurrencyStepLimit && (
+              <div>
+                <span className="font-medium">Step Concurrency:</span> {job.concurrencyStepLimit}
               </div>
             )}
             {job.startedAt && (

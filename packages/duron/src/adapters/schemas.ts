@@ -45,6 +45,7 @@ export const JobSchema = z.object({
   createdAt: DateSchema,
   updatedAt: DateSchema,
   concurrencyLimit: z.coerce.number(),
+  concurrencyStepLimit: z.coerce.number(),
   clientId: z.string().nullable().optional(),
   /** Duration in milliseconds (finishedAt - startedAt). Null if job hasn't finished. */
   durationMs: z.coerce.number().nullable().default(null),
@@ -146,6 +147,8 @@ export const CreateJobOptionsSchema = z.object({
   timeoutMs: z.number(),
   /** The concurrency limit for this job's group */
   concurrencyLimit: z.number(),
+  /** The concurrency limit for steps within this job */
+  concurrencyStepLimit: z.number(),
 })
 
 export const RecoverJobsOptionsSchema = z.object({

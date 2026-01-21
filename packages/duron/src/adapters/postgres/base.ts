@@ -141,7 +141,15 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    *
    * @returns Promise resolving to the job ID, or `null` if creation failed
    */
-  protected async _createJob({ queue, groupKey, input, timeoutMs, checksum, concurrencyLimit }: CreateJobOptions) {
+  protected async _createJob({
+    queue,
+    groupKey,
+    input,
+    timeoutMs,
+    checksum,
+    concurrencyLimit,
+    concurrencyStepLimit,
+  }: CreateJobOptions) {
     const [result] = await this.db
       .insert(this.tables.jobsTable)
       .values({
@@ -152,6 +160,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         status: JOB_STATUS_CREATED,
         timeout_ms: timeoutMs,
         concurrency_limit: concurrencyLimit,
+        concurrency_step_limit: concurrencyStepLimit,
       })
       .returning({ id: this.tables.jobsTable.id })
 
@@ -667,7 +676,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         j.finished_at as "finishedAt",
         j.created_at as "createdAt",
         j.updated_at as "updatedAt",
-        j.concurrency_limit as "concurrencyLimit"
+        j.concurrency_limit as "concurrencyLimit",
+        j.concurrency_step_limit as "concurrencyStepLimit"
     `),
     )
 
@@ -1038,6 +1048,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         createdAt: jobsTable.created_at,
         updatedAt: jobsTable.updated_at,
         concurrencyLimit: jobsTable.concurrency_limit,
+        concurrencyStepLimit: jobsTable.concurrency_step_limit,
         clientId: jobsTable.client_id,
         durationMs,
       })
@@ -1241,6 +1252,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         createdAt: jobsTable.created_at,
         updatedAt: jobsTable.updated_at,
         concurrencyLimit: jobsTable.concurrency_limit,
+        concurrencyStepLimit: jobsTable.concurrency_step_limit,
         clientId: jobsTable.client_id,
         durationMs,
       })

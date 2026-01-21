@@ -510,6 +510,7 @@ export class Client<
       timeoutMs: action.expire,
       checksum: action.checksum,
       concurrencyLimit,
+      concurrencyStepLimit: action.steps.concurrency,
     })
 
     if (!jobId) {

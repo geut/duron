@@ -85,6 +85,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 5,
         })
 
         expect(jobId).toBeTruthy()
@@ -99,6 +100,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 5,
         })
 
         expectToBeDefined(jobId)
@@ -112,6 +114,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
         expect(job?.status).toBe(JOB_STATUS_CREATED)
         expect(job?.input).toEqual({ message: 'hello' })
         expect(job?.concurrencyLimit).toBe(10)
+        expect(job?.concurrencyStepLimit).toBe(5)
       })
 
       it('should complete a job', async () => {
@@ -122,6 +125,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 5,
         })
 
         // First fetch the job to make it active
@@ -147,6 +151,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         // First fetch the job to make it active
@@ -172,6 +177,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         const cancelled = await adapter.cancelJob({
@@ -192,6 +198,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         // Fetch and fail the job
@@ -231,6 +238,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 2,
+          concurrencyStepLimit: 10,
         })
 
         await adapter.createJob({
@@ -240,6 +248,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 2,
+          concurrencyStepLimit: 10,
         })
 
         await adapter.createJob({
@@ -249,6 +258,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 2,
+          concurrencyStepLimit: 10,
         })
 
         // Fetch with batch size of 10, but concurrency limit of 2 per group
@@ -267,6 +277,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 1,
+          concurrencyStepLimit: 10,
         })
 
         await adapter.createJob({
@@ -276,6 +287,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 1,
+          concurrencyStepLimit: 10,
         })
 
         // Fetch with batch size of 10
@@ -295,6 +307,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
             timeoutMs: 5000,
             checksum: 'abc123',
             concurrencyLimit: 10,
+            concurrencyStepLimit: 10,
           })
         }
 
@@ -314,6 +327,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 2,
+          concurrencyStepLimit: 10,
         })
 
         // Small delay to ensure different created_at timestamps for deterministic ordering
@@ -326,6 +340,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 1,
+          concurrencyStepLimit: 10,
         })
 
         // Small delay to ensure different created_at timestamps for deterministic ordering
@@ -338,6 +353,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 2,
+          concurrencyStepLimit: 10,
         })
 
         // Fetch with batch size of 2
@@ -360,6 +376,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 2,
+          concurrencyStepLimit: 10,
         })
 
         // Small delay to ensure different created_at timestamps for deterministic ordering
@@ -372,6 +389,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 1,
+          concurrencyStepLimit: 10,
         })
 
         // Small delay to ensure different created_at timestamps for deterministic ordering
@@ -384,6 +402,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 2,
+          concurrencyStepLimit: 10,
         })
 
         // Small delay to ensure different created_at timestamps for deterministic ordering
@@ -396,6 +415,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 1,
+          concurrencyStepLimit: 10,
         })
 
         // Fetch with batch size of 4
@@ -424,6 +444,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         // Fetch the job to make it active
@@ -461,6 +482,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         await adapter.fetch({ batch: 1 })
@@ -610,6 +632,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
             timeoutMs: 5000,
             checksum: 'abc123',
             concurrencyLimit: 10,
+            concurrencyStepLimit: 10,
           })
         }
 
@@ -632,6 +655,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         const jobId2 = await adapter.createJob({
@@ -641,6 +665,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         expectToBeDefined(jobId1)
@@ -680,6 +705,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         await adapter.createJob({
@@ -689,6 +715,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         const result = await adapter.getJobs({
@@ -709,6 +736,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         await adapter.fetch({ batch: 1 })
@@ -742,6 +770,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         await adapter.createJob({
@@ -751,6 +780,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         const result = await adapter.getActions()
@@ -779,6 +809,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         await adapter.fetch({ batch: 1 })
@@ -814,6 +845,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
           timeoutMs: 5000,
           checksum: 'abc123',
           concurrencyLimit: 10,
+          concurrencyStepLimit: 10,
         })
 
         const eventData = await eventPromise

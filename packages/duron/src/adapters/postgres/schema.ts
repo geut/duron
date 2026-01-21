@@ -37,6 +37,7 @@ export default function createSchema(schemaName: string) {
       finished_at: timestamp('finished_at', { withTimezone: true }),
       client_id: text('client_id'),
       concurrency_limit: integer('concurrency_limit').notNull().default(10),
+      concurrency_step_limit: integer('concurrency_step_limit').notNull().default(100),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true })
         .notNull()
@@ -59,6 +60,7 @@ export default function createSchema(schemaName: string) {
       index('idx_jobs_client_id').on(table.client_id),
       index('idx_jobs_checksum').on(table.checksum),
       index('idx_jobs_concurrency_limit').on(table.concurrency_limit),
+      index('idx_jobs_concurrency_step_limit').on(table.concurrency_step_limit),
       // Composite indexes
       index('idx_jobs_action_status').on(table.action_name, table.status),
       index('idx_jobs_action_group').on(table.action_name, table.group_key),

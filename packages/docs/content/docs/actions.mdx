@@ -153,15 +153,19 @@ handler: async (ctx) => {
 }
 ```
 
-### `ctx.observe`
+### `ctx.telemetry`
 
-Observability context for recording custom metrics and span data. See [Telemetry](/docs/telemetry) for more details.
+Telemetry context for recording custom metrics and span data. Provides access to OpenTelemetry APIs. See [Telemetry](/docs/telemetry) for more details.
 
 ```ts
 handler: async (ctx) => {
-  ctx.observe.recordMetric('custom.counter', 1)
-  ctx.observe.addSpanAttribute('customKey', 'value')
-  ctx.observe.addSpanEvent('custom.event')
+  // Record a custom metric
+  ctx.telemetry.recordMetric('custom.counter', 1)
+
+  // Access the active span for attributes and events
+  const span = ctx.telemetry.getActiveSpan()
+  span.setAttribute('customKey', 'value')
+  span.addEvent('custom.event')
 }
 ```
 
@@ -245,6 +249,28 @@ handler: async (ctx) => {
 {
   name: 'sendEmail',
   expire: 30 * 60 * 1000, // 30 minutes
+}
+```
+
+### `description`
+
+**Optional.** A function that generates a dynamic description for the job at creation time. The description is stored in the database and displayed in the dashboard, providing context about what the specific job instance is doing.
+
+```ts
+{
+  name: 'sendEmail',
+  description: async (ctx) => `Send email to ${ctx.input.to}`,
+}
+```
+
+The function receives the same context as `groupKey` with `ctx.input` and `ctx.var`:
+
+```ts
+{
+  name: 'processOrder',
+  description: async (ctx) => {
+    return `Process order #${ctx.input.orderId} for user ${ctx.input.userId}`
+  },
 }
 ```
 
@@ -369,6 +395,7 @@ const processOrder = defineAction<{ db: Database }>()({
     groupKey: async (ctx) => `user-${ctx.input.userId}`,
     concurrency: async (ctx) => 5,
   },
+  description: async (ctx) => `Process order ${ctx.input.orderId} for user ${ctx.input.userId}`,
   steps: {
     concurrency: 10,
     retry: {

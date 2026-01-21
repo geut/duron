@@ -123,6 +123,16 @@ app.listen(3000)
 }
 ```
 
+### `spansEnabled`
+
+**Optional.** Enable spans endpoints (`/jobs/:id/spans`, `/steps/:id/spans`). Only works when client is configured with `telemetry.local` enabled. When `true`, enables the dashboard to show spans buttons. Defaults to auto-detected from `client.spansEnabled`.
+
+```ts
+{
+  spansEnabled: true,
+}
+```
+
 ## API Endpoints
 
 All endpoints use Zod for input and response validation.
@@ -131,7 +141,7 @@ All endpoints use Zod for input and response validation.
 
 #### `POST /login`
 
-Authenticate and receive a JWT token.
+Authenticate and receive JWT tokens.
 
 **Request Body:**
 ```json
@@ -144,7 +154,8 @@ Authenticate and receive a JWT token.
 **Response:**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
 
@@ -166,6 +177,7 @@ Get jobs with pagination, filtering, and sorting.
 - `fActionName` - Filter by action name (comma-separated or multiple params)
 - `fGroupKey` - Filter by group key (comma-separated or multiple params)
 - `fClientId` - Filter by client ID (comma-separated or multiple params)
+- `fDescription` - Filter by job description (fuzzy match)
 - `fCreatedAt` - Filter by created date (ISO string or JSON array `[start, end]`)
 - `fStartedAt` - Filter by started date (ISO string or JSON array `[start, end]`)
 - `fFinishedAt` - Filter by finished date (ISO string or JSON array `[start, end]`)
@@ -173,7 +185,7 @@ Get jobs with pagination, filtering, and sorting.
 - `fSearch` - Fuzzy search in job data
 - `fInputFilter` - JSONB filter on input (JSON string)
 - `fOutputFilter` - JSONB filter on output (JSON string)
-- `sort` - Sort string format: `"field:asc,field:desc"`
+- `sort` - Sort string format: `"field:asc,field:desc"` (fields: `createdAt`, `startedAt`, `finishedAt`, `status`, `actionName`, `expiresAt`, `duration`, `description`)
 
 **Example:**
 ```
@@ -187,6 +199,7 @@ GET /api/jobs?page=1&pageSize=20&fStatus=active,completed&sort=createdAt:desc
     {
       "id": "uuid",
       "actionName": "sendEmail",
+      "description": "Send email to user@example.com",
       "status": "completed",
       "input": { "to": "user@example.com" },
       "output": { "success": true },
@@ -214,6 +227,7 @@ Get a job by its ID.
 {
   "id": "uuid",
   "actionName": "sendEmail",
+  "description": "Send email to user@example.com",
   "status": "completed",
   "input": { "to": "user@example.com" },
   "output": { "success": true },
@@ -258,6 +272,56 @@ Retry a failed job.
   "success": true,
   "message": "Job uuid has been retried",
   "newJobId": "new-uuid"
+}
+```
+
+#### `POST /jobs/:id/time-travel`
+
+Time travel a job to restart from a specific step. The job must be in completed, failed, or cancelled status.
+
+**Request Body:**
+```json
+{
+  "stepId": "step-uuid"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Job uuid has been time traveled to step step-uuid"
+}
+```
+
+#### `DELETE /jobs/:id`
+
+Delete a job by its ID. Active jobs cannot be deleted.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Job uuid has been deleted"
+}
+```
+
+**Status Codes:**
+- `200` - Success
+- `404` - Job not found or cannot be deleted (active jobs)
+
+#### `DELETE /jobs`
+
+Delete multiple jobs using the same query parameters as `GET /jobs`. Active jobs are excluded from deletion.
+
+**Query Parameters:** Same as `GET /jobs`
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Deleted 5 job(s)",
+  "deletedCount": 5
 }
 ```
 
@@ -326,6 +390,67 @@ Get step status and updatedAt timestamp.
 {
   "status": "completed",
   "updatedAt": "2024-01-01T00:00:02Z"
+}
+```
+
+### Spans
+
+Spans endpoints are only available when `spansEnabled` is true (auto-detected when `telemetry.local` is enabled on the client).
+
+#### `GET /jobs/:id/spans`
+
+Get spans for a job.
+
+**Query Parameters:**
+- `fName` - Filter by span name (string or comma-separated)
+- `fKind` - Filter by span kind (0=INTERNAL, 1=SERVER, 2=CLIENT, 3=PRODUCER, 4=CONSUMER)
+- `fTraceId` - Filter by trace ID
+- `fAttributesFilter` - JSONB filter on attributes (JSON string)
+- `sort` - Sort string format: `"field:asc"` or `"field:desc"`
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "traceId": "abc123...",
+      "spanId": "def456...",
+      "parentSpanId": null,
+      "jobId": "job-uuid",
+      "stepId": "step-uuid",
+      "name": "step:fetchUser",
+      "kind": 0,
+      "startTimeUnixNano": "1704067200000000000",
+      "endTimeUnixNano": "1704067201000000000",
+      "statusCode": 1,
+      "statusMessage": null,
+      "attributes": { "duron.job.id": "job-uuid" },
+      "events": []
+    }
+  ],
+  "total": 1
+}
+```
+
+#### `GET /steps/:id/spans`
+
+Get spans for a step.
+
+**Query Parameters:** Same as `GET /jobs/:id/spans`
+
+**Response:** Same format as `GET /jobs/:id/spans`
+
+### Config
+
+#### `GET /config`
+
+Get server configuration. This endpoint does not require authentication.
+
+**Response:**
+```json
+{
+  "spansEnabled": true,
+  "authEnabled": true
 }
 ```
 

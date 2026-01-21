@@ -149,12 +149,14 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     checksum,
     concurrencyLimit,
     concurrencyStepLimit,
+    description,
   }: CreateJobOptions) {
     const [result] = await this.db
       .insert(this.tables.jobsTable)
       .values({
         action_name: queue,
         group_key: groupKey,
+        description: description ?? null,
         checksum,
         input,
         status: JOB_STATUS_CREATED,
@@ -263,11 +265,13 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         SELECT
           j.action_name,
           j.group_key,
+          j.description,
           j.checksum,
           j.input,
           j.timeout_ms,
           j.created_at,
-          j.concurrency_limit
+          j.concurrency_limit,
+          j.concurrency_step_limit
         FROM ${this.tables.jobsTable} j
         WHERE j.id = ${jobId}
           AND j.status IN (${JOB_STATUS_COMPLETED}, ${JOB_STATUS_CANCELLED}, ${JOB_STATUS_FAILED})
@@ -292,15 +296,18 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         INSERT INTO ${this.tables.jobsTable} (
           action_name,
           group_key,
+          description,
           checksum,
           input,
           status,
           timeout_ms,
-          concurrency_limit
+          concurrency_limit,
+          concurrency_step_limit
         )
         SELECT
           ls.action_name,
           ls.group_key,
+          ls.description,
           ls.checksum,
           ls.input,
           ${JOB_STATUS_CREATED},
@@ -316,7 +323,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
               LIMIT 1
             ),
             ls.concurrency_limit
-          )
+          ),
+          ls.concurrency_step_limit
         FROM locked_source ls
         WHERE NOT EXISTS (SELECT 1 FROM existing_retry)
         RETURNING id
@@ -666,6 +674,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         j.id,
         j.action_name as "actionName",
         j.group_key as "groupKey",
+        j.description,
         j.input,
         j.output,
         j.error,
@@ -1037,6 +1046,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         id: jobsTable.id,
         actionName: jobsTable.action_name,
         groupKey: jobsTable.group_key,
+        description: jobsTable.description,
         input: jobsTable.input,
         output: jobsTable.output,
         error: jobsTable.error,
@@ -1140,6 +1150,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       filters.clientId
         ? inArray(jobsTable.client_id, Array.isArray(filters.clientId) ? filters.clientId : [filters.clientId])
         : undefined,
+      filters.description ? ilike(jobsTable.description, `%${filters.description}%`) : undefined,
       filters.createdAt && Array.isArray(filters.createdAt)
         ? between(
             sql`date_trunc('second', ${jobsTable.created_at})`,
@@ -1177,6 +1188,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         ? or(
             ilike(jobsTable.action_name, `%${fuzzySearch}%`),
             ilike(jobsTable.group_key, `%${fuzzySearch}%`),
+            ilike(jobsTable.description, `%${fuzzySearch}%`),
             ilike(jobsTable.client_id, `%${fuzzySearch}%`),
             sql`${jobsTable.id}::text ilike ${`%${fuzzySearch}%`}`,
             sql`to_tsvector('english', ${jobsTable.input}::text) @@ plainto_tsquery('english', ${fuzzySearch})`,
@@ -1234,6 +1246,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       actionName: jobsTable.action_name,
       expiresAt: jobsTable.expires_at,
       duration: durationMs,
+      description: jobsTable.description,
     }
 
     const jobs = await this.db
@@ -1241,6 +1254,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         id: jobsTable.id,
         actionName: jobsTable.action_name,
         groupKey: jobsTable.group_key,
+        description: jobsTable.description,
         input: jobsTable.input,
         output: jobsTable.output,
         error: jobsTable.error,

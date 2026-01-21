@@ -973,6 +973,139 @@ function runClientTests(adapterFactory: AdapterFactory) {
         await varsClient.stop()
       })
     })
+
+    describe('Job Description', () => {
+      it('should store dynamic description in job', async () => {
+        const actionWithDescription = defineAction()({
+          name: 'described-action',
+          input: z.object({
+            a: z.number(),
+            b: z.number(),
+          }),
+          output: z.object({ sum: z.number() }),
+          description: async (ctx) => `Calculate ${ctx.input.a} + ${ctx.input.b}`,
+          handler: async (ctx) => {
+            return { sum: ctx.input.a + ctx.input.b }
+          },
+        })
+
+        const descClient = new Client({
+          database,
+          actions: {
+            describedAction: actionWithDescription,
+          },
+          syncPattern: false,
+          logger: 'error',
+        })
+
+        await descClient.start()
+
+        const jobId = await descClient.runAction('describedAction', { a: 5, b: 3 })
+
+        const job = await descClient.getJobById(jobId)
+        expect(job?.description).toBe('Calculate 5 + 3')
+
+        await descClient.stop()
+      })
+
+      it('should have null description when not defined', async () => {
+        const actionWithoutDescription = defineAction()({
+          name: 'no-description-action',
+          input: z.object({ value: z.number() }),
+          output: z.object({ result: z.number() }),
+          handler: async (ctx) => {
+            return { result: ctx.input.value * 2 }
+          },
+        })
+
+        const noDescClient = new Client({
+          database,
+          actions: {
+            noDescAction: actionWithoutDescription,
+          },
+          syncPattern: false,
+          logger: 'error',
+        })
+
+        await noDescClient.start()
+
+        const jobId = await noDescClient.runAction('noDescAction', { value: 10 })
+
+        const job = await noDescClient.getJobById(jobId)
+        expect(job?.description).toBeNull()
+
+        await noDescClient.stop()
+      })
+
+      it('should include description in waitForJob result', async () => {
+        const actionWithDesc = defineAction()({
+          name: 'wait-desc-action',
+          input: z.object({ name: z.string() }),
+          output: z.object({ greeting: z.string() }),
+          description: async (ctx) => `Greeting ${ctx.input.name}`,
+          handler: async (ctx) => {
+            return { greeting: `Hello, ${ctx.input.name}!` }
+          },
+        })
+
+        const waitClient = new Client({
+          database,
+          actions: {
+            waitDescAction: actionWithDesc,
+          },
+          syncPattern: 'hybrid',
+          pullInterval: 100,
+          logger: 'error',
+        })
+
+        await waitClient.start()
+
+        const jobId = await waitClient.runAction('waitDescAction', { name: 'World' })
+        const result = await waitClient.waitForJob(jobId, { timeout: 5000 })
+
+        expect(result?.description).toBe('Greeting World')
+        expect(result?.status).toBe(JOB_STATUS_COMPLETED)
+
+        await waitClient.stop()
+      })
+
+      it('should filter jobs by description', async () => {
+        const actionWithDesc = defineAction()({
+          name: 'filter-desc-action',
+          input: z.object({ email: z.string() }),
+          output: z.object({ sent: z.boolean() }),
+          description: async (ctx) => `Send email to ${ctx.input.email}`,
+          handler: async () => {
+            return { sent: true }
+          },
+        })
+
+        const filterClient = new Client({
+          database,
+          actions: {
+            filterDescAction: actionWithDesc,
+          },
+          syncPattern: false,
+          logger: 'error',
+        })
+
+        await filterClient.start()
+
+        await filterClient.runAction('filterDescAction', { email: 'user1@test.com' })
+        await filterClient.runAction('filterDescAction', { email: 'user2@test.com' })
+        await filterClient.runAction('filterDescAction', { email: 'admin@test.com' })
+
+        // Filter by description containing 'user'
+        const result = await filterClient.getJobs({
+          filters: { description: 'user' },
+        })
+
+        expect(result.jobs.length).toBe(2)
+        expect(result.jobs.every((job) => job.description?.includes('user'))).toBe(true)
+
+        await filterClient.stop()
+      })
+    })
   })
 }
 

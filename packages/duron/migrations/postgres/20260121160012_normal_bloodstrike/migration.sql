@@ -27,6 +27,7 @@ CREATE TABLE "duron"."jobs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	"action_name" text NOT NULL,
 	"group_key" text NOT NULL,
+	"description" text,
 	"status" text DEFAULT 'created' NOT NULL,
 	"checksum" text NOT NULL,
 	"input" jsonb DEFAULT '{}' NOT NULL,
@@ -37,7 +38,8 @@ CREATE TABLE "duron"."jobs" (
 	"started_at" timestamp with time zone,
 	"finished_at" timestamp with time zone,
 	"client_id" text,
-	"concurrency_limit" integer DEFAULT 10 NOT NULL,
+	"concurrency_limit" integer NOT NULL,
+	"concurrency_step_limit" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "jobs_status_check" CHECK ("status" IN ('created','active','completed','failed','cancelled'))
@@ -73,12 +75,14 @@ CREATE INDEX "idx_job_steps_output_fts" ON "duron"."job_steps" USING gin (to_tsv
 CREATE INDEX "idx_jobs_action_name" ON "duron"."jobs" ("action_name");--> statement-breakpoint
 CREATE INDEX "idx_jobs_status" ON "duron"."jobs" ("status");--> statement-breakpoint
 CREATE INDEX "idx_jobs_group_key" ON "duron"."jobs" ("group_key");--> statement-breakpoint
+CREATE INDEX "idx_jobs_description" ON "duron"."jobs" ("description");--> statement-breakpoint
 CREATE INDEX "idx_jobs_started_at" ON "duron"."jobs" ("started_at");--> statement-breakpoint
 CREATE INDEX "idx_jobs_finished_at" ON "duron"."jobs" ("finished_at");--> statement-breakpoint
 CREATE INDEX "idx_jobs_expires_at" ON "duron"."jobs" ("expires_at");--> statement-breakpoint
 CREATE INDEX "idx_jobs_client_id" ON "duron"."jobs" ("client_id");--> statement-breakpoint
 CREATE INDEX "idx_jobs_checksum" ON "duron"."jobs" ("checksum");--> statement-breakpoint
 CREATE INDEX "idx_jobs_concurrency_limit" ON "duron"."jobs" ("concurrency_limit");--> statement-breakpoint
+CREATE INDEX "idx_jobs_concurrency_step_limit" ON "duron"."jobs" ("concurrency_step_limit");--> statement-breakpoint
 CREATE INDEX "idx_jobs_action_status" ON "duron"."jobs" ("action_name","status");--> statement-breakpoint
 CREATE INDEX "idx_jobs_action_group" ON "duron"."jobs" ("action_name","group_key");--> statement-breakpoint
 CREATE INDEX "idx_jobs_input_fts" ON "duron"."jobs" USING gin (to_tsvector('english', "input"::text));--> statement-breakpoint

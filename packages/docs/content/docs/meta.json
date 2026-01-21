@@ -6,6 +6,7 @@
     "jobs-and-steps",
     "client-api",
     "server-api",
+    "dashboard",
     "adapters",
     "telemetry",
     "retries",

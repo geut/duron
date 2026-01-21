@@ -34,6 +34,7 @@ export const JobSchema = z.object({
   id: z.string(),
   actionName: z.string(),
   groupKey: z.string(),
+  description: z.string().nullable().default(null),
   input: z.any(),
   output: z.any().nullable(),
   error: z.any().nullable(),
@@ -96,6 +97,7 @@ export const JobSortFieldSchema = z.enum([
   'actionName',
   'expiresAt',
   'duration',
+  'description',
 ])
 
 export const JobSortSchema = z.object({
@@ -108,6 +110,7 @@ export const JobFiltersSchema = z.object({
   actionName: z.union([z.string(), z.array(z.string())]).optional(),
   groupKey: z.union([z.string(), z.array(z.string())]).optional(),
   clientId: z.union([z.string(), z.array(z.string())]).optional(),
+  description: z.string().optional(),
   createdAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
   startedAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
   finishedAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
@@ -149,6 +152,8 @@ export const CreateJobOptionsSchema = z.object({
   concurrencyLimit: z.number(),
   /** The concurrency limit for steps within this job */
   concurrencyStepLimit: z.number(),
+  /** Optional description for the job */
+  description: z.string().nullable().optional(),
 })
 
 export const RecoverJobsOptionsSchema = z.object({

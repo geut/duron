@@ -1,0 +1,325 @@
+---
+title: Dashboard
+description: Monitor and manage Duron jobs with a beautiful React dashboard
+icon: LayoutDashboard
+---
+
+Duron Dashboard is a beautiful React dashboard for monitoring and managing Duron jobs in real-time. It can be used as a React component library or as a standalone HTML application served by your backend.
+
+## Installation
+
+```bash
+# Using bun
+bun add duron-dashboard
+
+# Using npm
+npm install duron-dashboard
+
+# Using pnpm
+pnpm add duron-dashboard
+
+# Using yarn
+yarn add duron-dashboard
+```
+
+## Usage
+
+### As an Inline HTML Application
+
+The most common way to use the dashboard is with the `getHTML` function, which generates a fully inlined HTML application with all assets bundled.
+
+```ts
+import { serve } from 'bun'
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+import { createServer } from 'duron/server'
+import { getHTML } from 'duron-dashboard/get-html'
+
+// Create Duron client
+const client = duron({
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL!,
+  }),
+  actions: { sendEmail },
+})
+
+await client.start()
+
+// Create API server
+const api = createServer({
+  client,
+  prefix: '/api',
+})
+
+// Serve dashboard and API
+serve({
+  port: 3000,
+  routes: {
+    '/': async () => {
+      const html = await getHTML({
+        url: 'http://localhost:3000/api',
+        enableLogin: false,
+        showLogo: true,
+        theme: 'system',
+      })
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html' },
+      })
+    },
+    '/api/*': api.fetch,
+  },
+})
+
+console.log('Dashboard running at http://localhost:3000')
+```
+
+### As a React Component
+
+Import and use the `DuronDashboard` component in your React application:
+
+```tsx
+import { DuronDashboard } from 'duron-dashboard'
+import 'duron-dashboard/index.css'
+
+function App() {
+  return <DuronDashboard url="https://api.example.com/api" />
+}
+```
+
+## getHTML Options
+
+The `getHTML` function accepts the following options:
+
+### `url`
+
+**Required.** The base URL for the Duron API.
+
+```ts
+{
+  url: 'http://localhost:3000/api',
+}
+```
+
+### `enableLogin`
+
+**Required.** Enable authentication flow (login/logout) in the dashboard. Set to `true` if your server has login configured.
+
+```ts
+{
+  enableLogin: true,
+}
+```
+
+### `showLogo`
+
+**Required.** Controls whether the Duron logo is shown in the navbar.
+
+```ts
+{
+  showLogo: true,
+}
+```
+
+### `theme`
+
+**Optional.** The theme to use for the dashboard. Defaults to `'system'`.
+
+- `'light'` - Always use light theme
+- `'dark'` - Always use dark theme
+- `'system'` - Use the system preference
+
+```ts
+{
+  theme: 'dark',
+}
+```
+
+## Features
+
+### Job List
+
+The main dashboard view shows a paginated list of all jobs with:
+
+- **Status badges** - Visual indicators for job status (active, completed, failed, cancelled)
+- **Description** - Dynamic job description with tooltip for long text (when defined on the action)
+- **Action filtering** - Filter jobs by action name
+- **Status filtering** - Filter by job status
+- **Date filtering** - Filter by creation, start, or finish dates
+- **Search** - Fuzzy search across job data (including description)
+- **Sorting** - Sort by various fields in ascending or descending order
+
+### Job Details
+
+Click on any job to view detailed information:
+
+- **Input/Output** - View the job's input and output data as formatted JSON
+- **Error details** - Inspect error information for failed jobs
+- **Step list** - View all steps executed within the job
+- **Timeline** - Visual timeline of job and step execution
+- **Metadata** - Job ID, action name, group key, description, timestamps, etc.
+
+### Step Details
+
+Click on any step to view:
+
+- **Status** - Current step status
+- **Output** - Step output data
+- **Error** - Error information for failed steps
+- **Retry history** - Previous failed attempts with error details
+- **Timing** - Start time, finish time, duration
+
+### Job Actions
+
+From the job details view, you can:
+
+- **Cancel** - Cancel an active job
+- **Retry** - Retry a failed job (creates a new job with the same input)
+- **Time Travel** - Restart a completed/failed job from a specific step
+- **Delete** - Delete a job (only for non-active jobs)
+
+### Action Runner
+
+Create and run new jobs directly from the dashboard:
+
+1. Click the "Create Job" button
+2. Select an action from the dropdown
+3. Edit the auto-generated mock input (based on the action's Zod schema)
+4. Click "Run" to create the job
+
+### Spans Visualization
+
+When telemetry is enabled (`telemetry.local: true`), the dashboard shows a "Spans" button on job and step details. This displays:
+
+- OpenTelemetry spans associated with the job/step
+- Custom metrics recorded via `ctx.telemetry.recordMetric()`
+- Span events and attributes
+- Hierarchical span relationships
+
+## Framework Examples
+
+### Elysia
+
+```ts
+import { Elysia } from 'elysia'
+import { createServer } from 'duron/server'
+import { getHTML } from 'duron-dashboard/get-html'
+
+const api = createServer({ client })
+
+const app = new Elysia()
+  .use(api)
+  .get('/', async () => {
+    const html = await getHTML({
+      url: 'http://localhost:3000/api',
+      enableLogin: false,
+      showLogo: true,
+    })
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html' },
+    })
+  })
+  .listen(3000)
+```
+
+### Hono
+
+```ts
+import { Hono } from 'hono'
+import { getHTML } from 'duron-dashboard/get-html'
+
+const app = new Hono()
+
+app.get('/dashboard', async (c) => {
+  const html = await getHTML({
+    url: 'https://api.example.com/api',
+    enableLogin: true,
+    showLogo: true,
+  })
+  return c.html(html)
+})
+```
+
+### Express
+
+```ts
+import express from 'express'
+import { getHTML } from 'duron-dashboard/get-html'
+
+const app = express()
+
+app.get('/dashboard', async (req, res) => {
+  const html = await getHTML({
+    url: 'https://api.example.com/api',
+    enableLogin: true,
+    showLogo: true,
+  })
+  res.send(html)
+})
+```
+
+### Fastify
+
+```ts
+import Fastify from 'fastify'
+import { getHTML } from 'duron-dashboard/get-html'
+
+const app = Fastify()
+
+app.get('/dashboard', async (request, reply) => {
+  const html = await getHTML({
+    url: 'https://api.example.com/api',
+    enableLogin: true,
+    showLogo: true,
+  })
+  reply.type('text/html').send(html)
+})
+```
+
+## Authentication
+
+When your Duron server has login configured, set `enableLogin: true` in the dashboard options. Users will be prompted to log in when accessing the dashboard.
+
+```ts
+// Server with authentication
+const api = createServer({
+  client,
+  login: {
+    onLogin: async ({ email, password }) => {
+      return email === 'admin@example.com' && password === 'secret'
+    },
+    jwtSecret: process.env.JWT_SECRET!,
+  },
+})
+
+// Dashboard with login enabled
+const html = await getHTML({
+  url: 'http://localhost:3000/api',
+  enableLogin: true,
+  showLogo: true,
+})
+```
+
+The dashboard handles:
+
+- Login form with email/password
+- Token storage in localStorage
+- Automatic token refresh
+- Logout functionality
+
+## Responsive Design
+
+The dashboard is fully responsive and works on:
+
+- **Desktop** - Full-featured experience with side panels
+- **Tablet** - Adapted layout with collapsible panels
+- **Mobile** - Stack layout optimized for touch
+
+## Dark Mode
+
+The dashboard includes built-in dark mode support:
+
+- **System** (default) - Follows the operating system preference
+- **Light** - Always use light theme
+- **Dark** - Always use dark theme
+
+Users can toggle the theme using the theme button in the navbar.

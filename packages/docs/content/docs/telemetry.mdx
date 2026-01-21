@@ -80,13 +80,10 @@ Both action and step handlers have access to `ctx.telemetry` which provides Open
 ```ts
 interface TelemetryContext {
   // Get the active span for the current job/step
-  getActiveSpan(): Span | undefined
+  getActiveSpan(): Span
 
   // Get a tracer for creating custom spans
   getTracer(name: string): Tracer
-
-  // Convenience method to create a child span
-  startSpan(name: string, options?: { attributes?: Record<string, any> }): Span
 
   // Record a metric as a span event
   recordMetric(name: string, value: number, attributes?: Record<string, any>): void
@@ -122,21 +119,41 @@ const processOrder = defineAction()({
 
 ### Creating Custom Spans
 
-Use `startSpan()` for simple custom spans:
+Use `getTracer()` to create custom spans. The tracer automatically links new spans to the current job/step trace:
 
 ```ts
 const result = await ctx.step('with-custom-span', async ({ telemetry }) => {
-  const span = telemetry.startSpan('custom-operation', {
-    attributes: { 'custom.input': 'value' },
+  const tracer = telemetry.getTracer('my-service')
+  
+  return tracer.startActiveSpan('custom-operation', (span) => {
+    try {
+      span.setAttribute('custom.input', 'value')
+      // Do work...
+      span.setAttribute('custom.output', 'result')
+      return { success: true }
+    } finally {
+      span.end()
+    }
   })
+})
+```
 
-  try {
-    // Do work...
-    span.setAttribute('custom.output', 'result')
-    return { success: true }
-  } finally {
-    span.end()
-  }
+### Working with the Active Span
+
+Use `getActiveSpan()` to add attributes or events to the current span:
+
+```ts
+const result = await ctx.step('annotated', async ({ telemetry }) => {
+  const span = telemetry.getActiveSpan()
+  
+  span.setAttribute('user.id', 'user-123')
+  span.addEvent('processing.started')
+  
+  // Do work...
+  
+  span.addEvent('processing.completed', { items: 5 })
+
+  return { success: true }
 })
 ```
 
@@ -294,7 +311,8 @@ telemetry.recordMetric('ai.cost.usd', cost, { model: 'gpt-4o' })
 ### Always End Custom Spans
 
 ```ts
-const span = telemetry.startSpan('operation')
+const tracer = telemetry.getTracer('my-service')
+const span = tracer.startSpan('operation')
 try {
   // Do work...
 } finally {

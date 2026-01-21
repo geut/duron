@@ -1,8 +1,10 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "9ff8be1d-ba8f-4014-bed4-e7428b9368c2",
-  "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "id": "47ec47b1-f323-4e7e-a4bc-605f703aa384",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
   "ddl": [
     {
       "name": "duron",
@@ -302,6 +304,19 @@
     {
       "type": "text",
       "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": "'created'",
@@ -434,10 +449,23 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "10",
+      "default": null,
       "generated": null,
       "identity": null,
       "name": "concurrency_limit",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "concurrency_step_limit",
       "entityType": "columns",
       "schema": "duron",
       "table": "jobs"
@@ -899,6 +927,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "description",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_jobs_description",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "jobs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "started_at",
           "isExpression": false,
           "asc": true,
@@ -1017,6 +1066,27 @@
       "method": "btree",
       "concurrently": false,
       "name": "idx_jobs_concurrency_limit",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "jobs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "concurrency_step_limit",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_jobs_concurrency_step_limit",
       "entityType": "indexes",
       "schema": "duron",
       "table": "jobs"
@@ -1366,10 +1436,14 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["job_id"],
+      "columns": [
+        "job_id"
+      ],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": ["id"],
+      "columnsTo": [
+        "id"
+      ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "job_steps_job_id_jobs_id_fkey",
@@ -1379,10 +1453,14 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["job_id"],
+      "columns": [
+        "job_id"
+      ],
       "schemaTo": "duron",
       "tableTo": "jobs",
-      "columnsTo": ["id"],
+      "columnsTo": [
+        "id"
+      ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "spans_job_id_jobs_id_fkey",
@@ -1392,10 +1470,14 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["step_id"],
+      "columns": [
+        "step_id"
+      ],
       "schemaTo": "duron",
       "tableTo": "job_steps",
-      "columnsTo": ["id"],
+      "columnsTo": [
+        "id"
+      ],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "spans_step_id_job_steps_id_fkey",
@@ -1404,7 +1486,9 @@
       "table": "spans"
     },
     {
-      "columns": ["id"],
+      "columns": [
+        "id"
+      ],
       "nameExplicit": false,
       "name": "job_steps_pkey",
       "schema": "duron",
@@ -1412,7 +1496,9 @@
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
+      "columns": [
+        "id"
+      ],
       "nameExplicit": false,
       "name": "jobs_pkey",
       "schema": "duron",
@@ -1420,7 +1506,9 @@
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
+      "columns": [
+        "id"
+      ],
       "nameExplicit": false,
       "name": "spans_pkey",
       "schema": "duron",
@@ -1429,7 +1517,11 @@
     },
     {
       "nameExplicit": true,
-      "columns": ["job_id", "name", "parent_step_id"],
+      "columns": [
+        "job_id",
+        "name",
+        "parent_step_id"
+      ],
       "nullsNotDistinct": true,
       "name": "unique_job_step_name_parent",
       "entityType": "uniques",

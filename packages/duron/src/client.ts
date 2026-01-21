@@ -39,6 +39,7 @@ export interface JobResult {
   actionName: string
   status: JobStatus
   groupKey: string
+  description: string | null
   input: unknown
   output: unknown
   error: Job['error']
@@ -52,6 +53,7 @@ export interface TypedJobResult<TAction extends Action<any, any, any>> {
   actionName: string
   status: JobStatus
   groupKey: string
+  description: string | null
   input: InferActionSchema<NonNullable<TAction['input']>>
   output: InferActionSchema<NonNullable<TAction['output']>>
   error: Job['error']
@@ -554,6 +556,12 @@ export class Client<
       concurrencyLimit = await action.groups.concurrency(concurrencyCtx)
     }
 
+    // Calculate description if provided
+    let description: string | null = null
+    if (action.description) {
+      description = await action.description(concurrencyCtx)
+    }
+
     // Create job in database
     const jobId = await this.#database.createJob({
       queue: action.name,
@@ -563,6 +571,7 @@ export class Client<
       checksum: action.checksum,
       concurrencyLimit,
       concurrencyStepLimit: action.steps.concurrency,
+      description,
     })
 
     if (!jobId) {
@@ -916,6 +925,7 @@ export class Client<
           actionName: job.actionName,
           status: job.status,
           groupKey: job.groupKey,
+          description: job.description,
           input: job.input,
           output: job.output,
           error: job.error,
@@ -1175,6 +1185,7 @@ export class Client<
               actionName: job.actionName,
               status: job.status,
               groupKey: job.groupKey,
+              description: job.description,
               input: job.input,
               output: job.output,
               error: job.error,

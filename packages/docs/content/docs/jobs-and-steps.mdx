@@ -39,6 +39,7 @@ Each job has the following properties:
 - **`id`** - Unique identifier (UUID)
 - **`actionName`** - Name of the action
 - **`groupKey`** - Group key for concurrency control
+- **`description`** - Dynamic description of the job (if defined on the action)
 - **`status`** - Current status
 - **`input`** - Input data passed to the action
 - **`output`** - Output data returned by the action (if completed)
@@ -129,7 +130,7 @@ The step handler receives a context object with:
 - **`parentStepId`** - ID of the parent step (null for root steps)
 - **`step`** - Function to create nested inline child steps
 - **`run`** - Function to execute reusable step definitions
-- **`observe`** - Observability context for metrics and tracing (see [Telemetry](/docs/telemetry))
+- **`telemetry`** - Telemetry context for metrics and tracing (see [Telemetry](/docs/telemetry))
 
 ```ts
 await ctx.step('fetchData', async ({ signal, stepId, parentStepId, run }) => {

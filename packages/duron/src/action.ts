@@ -388,6 +388,21 @@ export interface ActionDefinitionInput<
   expire?: number
 
   /**
+   * Function to generate a dynamic description for the job.
+   * The description is calculated at job creation time and stored in the database.
+   * Use this to provide context about what the specific job instance is doing.
+   *
+   * @param ctx - Context containing the validated input and variables
+   * @returns Promise resolving to the description string
+   *
+   * @example
+   * ```typescript
+   * description: async (ctx) => `Send email to ${ctx.input.email}`
+   * ```
+   */
+  description?: (ctx: ConcurrencyHandlerContext<TInput, TVariables>) => Promise<string>
+
+  /**
    * The handler function that executes the action logic.
    * Receives a context object with validated input, variables, logger, and step functions.
    * Must return a Promise that resolves to the action output (matching the output schema if provided).
@@ -497,6 +512,11 @@ export function createActionDefinitionSchema<
         }),
       concurrency: z.number().default(100),
       expire: z.number().default(15 * 60 * 1000),
+      description: z
+        .custom<(ctx: ConcurrencyHandlerContext<TInput, TVariables>) => Promise<string>>((val) => {
+          return !val || val instanceof Function
+        })
+        .optional(),
       handler: z.custom<(ctx: ActionHandlerContext<TInput, TVariables>) => Promise<z.infer<TOutput>>>((val) => {
         return val instanceof Function
       }),

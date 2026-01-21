@@ -26,6 +26,7 @@ export default function createSchema(schemaName: string) {
       id: uuid('id').primaryKey().defaultRandom(),
       action_name: text('action_name').notNull(),
       group_key: text('group_key').notNull(),
+      description: text('description'),
       status: text('status').$type<JobStatus>().notNull().default('created'),
       checksum: text('checksum').notNull(),
       input: jsonb('input').notNull().default({}),
@@ -36,8 +37,8 @@ export default function createSchema(schemaName: string) {
       started_at: timestamp('started_at', { withTimezone: true }),
       finished_at: timestamp('finished_at', { withTimezone: true }),
       client_id: text('client_id'),
-      concurrency_limit: integer('concurrency_limit').notNull().default(10),
-      concurrency_step_limit: integer('concurrency_step_limit').notNull().default(100),
+      concurrency_limit: integer('concurrency_limit').notNull(),
+      concurrency_step_limit: integer('concurrency_step_limit').notNull(),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
       updated_at: timestamp('updated_at', { withTimezone: true })
         .notNull()
@@ -54,6 +55,7 @@ export default function createSchema(schemaName: string) {
       index('idx_jobs_action_name').on(table.action_name),
       index('idx_jobs_status').on(table.status),
       index('idx_jobs_group_key').on(table.group_key),
+      index('idx_jobs_description').on(table.description),
       index('idx_jobs_started_at').on(table.started_at),
       index('idx_jobs_finished_at').on(table.finished_at),
       index('idx_jobs_expires_at').on(table.expires_at),

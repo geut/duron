@@ -1,2 +1,0 @@
-ALTER TABLE "duron"."jobs" ADD COLUMN "concurrency_step_limit" integer DEFAULT 10 NOT NULL;--> statement-breakpoint
-CREATE INDEX "idx_jobs_concurrency_step_limit" ON "duron"."jobs" ("concurrency_step_limit");

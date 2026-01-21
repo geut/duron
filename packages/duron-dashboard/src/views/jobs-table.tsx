@@ -92,6 +92,31 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         enableColumnFilter: true,
       },
       {
+        id: 'description',
+        accessorKey: 'description',
+        header: ({ column }: { column: Column<Job, unknown> }) => (
+          <DataTableColumnHeader column={column} label="Description" />
+        ),
+        cell: ({ cell }) => {
+          const desc = cell.getValue<string | null>()
+          if (!desc) return <div className="text-muted-foreground">-</div>
+          const truncated = desc.length > 40 ? `${desc.slice(0, 40)}...` : desc
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild={true}>
+                <div className="truncate max-w-[200px] cursor-help">{truncated}</div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[400px]">
+                <p className="whitespace-pre-wrap">{desc}</p>
+              </TooltipContent>
+            </Tooltip>
+          )
+        },
+        size: 200,
+        enableColumnFilter: false,
+        enableSorting: true,
+      },
+      {
         id: 'status',
         accessorKey: 'status',
         header: ({ column }: { column: Column<Job, unknown> }) => (

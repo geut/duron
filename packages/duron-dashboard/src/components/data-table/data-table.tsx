@@ -4,7 +4,6 @@ import type * as React from 'react'
 import { DataTablePagination } from '@/components/data-table/data-table-pagination'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { getCommonPinningStyles } from '@/lib/data-table.ts'
 import { cn } from '@/lib/utils'
 
 function ColumnResizer<TData>({ header }: { header: Header<TData, unknown> }) {
@@ -58,57 +57,81 @@ export function DataTable<TData>({
 
         {/* Scrollable table container */}
         <div className="flex-1 overflow-hidden border-y">
-          <ScrollArea className="h-full">
-            <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead
-                        key={header.id}
-                        colSpan={header.colSpan}
-                        className="relative"
-                        style={{
-                          width: header.getSize(),
-                          ...getCommonPinningStyles({ column: header.column }),
-                        }}
-                      >
-                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                        <ColumnResizer header={header} />
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => {
-                    const isSelected = row.getIsSelected()
-                    return (
-                      <TableRow key={row.id} data-state={isSelected ? 'selected' : undefined}>
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell
-                            key={cell.id}
-                            style={{
-                              width: cell.column.getSize(),
-                              ...getCommonPinningStyles({ column: cell.column }),
-                            }}
+          <ScrollArea className="h-full whitespace-nowrap">
+            <div className="min-w-max">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => {
+                        const isPinned = header.column.getIsPinned()
+                        return (
+                          <TableHead
+                            key={header.id}
+                            colSpan={header.colSpan}
+                            className={cn(
+                              'relative',
+                              isPinned === 'right' &&
+                                'sticky right-0 z-20 bg-background shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]',
+                              isPinned === 'left' && 'sticky left-0 z-20 bg-background',
+                            )}
+                            style={{ width: header.getSize() }}
                           >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    )
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={table.getAllColumns().length} className="h-24 text-center">
-                      No results.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(header.column.columnDef.header, header.getContext())}
+                            <ColumnResizer header={header} />
+                          </TableHead>
+                        )
+                      })}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows?.length ? (
+                    table.getRowModel().rows.map((row) => {
+                      const isSelected = row.getIsSelected()
+                      return (
+                        <TableRow
+                          key={row.id}
+                          data-state={isSelected ? 'selected' : undefined}
+                          className="cursor-pointer"
+                          onClick={() => row.toggleSelected()}
+                        >
+                          {row.getVisibleCells().map((cell) => {
+                            const isPinned = cell.column.getIsPinned()
+                            return (
+                              <TableCell
+                                key={cell.id}
+                                className={cn(
+                                  isPinned === 'right' && [
+                                    'sticky right-0 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]',
+                                    isSelected ? 'bg-primary/10' : 'bg-background',
+                                  ],
+                                  isPinned === 'left' && [
+                                    'sticky left-0',
+                                    isSelected ? 'bg-primary/10' : 'bg-background',
+                                  ],
+                                )}
+                                style={{ width: cell.column.getSize() }}
+                              >
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </TableCell>
+                            )
+                          })}
+                        </TableRow>
+                      )
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={table.getAllColumns().length} className="h-24 text-center">
+                        No results.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
             <ScrollBar orientation="horizontal" className="w-full" />
           </ScrollArea>
         </div>
@@ -126,57 +149,81 @@ export function DataTable<TData>({
   return (
     <div className={cn('flex w-full flex-col gap-2.5', className)} {...props}>
       {children}
-      <ScrollArea className="rounded-md border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    colSpan={header.colSpan}
-                    className="relative"
-                    style={{
-                      width: header.getSize(),
-                      ...getCommonPinningStyles({ column: header.column }),
-                    }}
-                  >
-                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                    <ColumnResizer header={header} />
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => {
-                const isSelected = row.getIsSelected()
-                return (
-                  <TableRow key={row.id} data-state={isSelected ? 'selected' : undefined}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell
-                        key={cell.id}
-                        style={{
-                          width: cell.column.getSize(),
-                          ...getCommonPinningStyles({ column: cell.column }),
-                        }}
+      <ScrollArea className="rounded-md border whitespace-nowrap">
+        <div className="min-w-max">
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => {
+                    const isPinned = header.column.getIsPinned()
+                    return (
+                      <TableHead
+                        key={header.id}
+                        colSpan={header.colSpan}
+                        className={cn(
+                          'relative',
+                          isPinned === 'right' &&
+                            'sticky right-0 z-20 bg-background shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]',
+                          isPinned === 'left' && 'sticky left-0 z-20 bg-background',
+                        )}
+                        style={{ width: header.getSize() }}
                       >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                )
-              })
-            ) : (
-              <TableRow>
-                <TableCell colSpan={table.getAllColumns().length} className="h-24 text-center">
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                        <ColumnResizer header={header} />
+                      </TableHead>
+                    )
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => {
+                  const isSelected = row.getIsSelected()
+                  return (
+                    <TableRow
+                      key={row.id}
+                      data-state={isSelected ? 'selected' : undefined}
+                      className="cursor-pointer"
+                      onClick={() => row.toggleSelected()}
+                    >
+                      {row.getVisibleCells().map((cell) => {
+                        const isPinned = cell.column.getIsPinned()
+                        return (
+                          <TableCell
+                            key={cell.id}
+                            className={cn(
+                              isPinned === 'right' && [
+                                'sticky right-0 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]',
+                                isSelected ? 'bg-primary/10' : 'bg-background',
+                              ],
+                              isPinned === 'left' && [
+                                'sticky left-0',
+                                isSelected ? 'bg-primary/10' : 'bg-background',
+                              ],
+                            )}
+                            style={{ width: cell.column.getSize() }}
+                          >
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        )
+                      })}
+                    </TableRow>
+                  )
+                })
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={table.getAllColumns().length} className="h-24 text-center">
+                    No results.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
         <ScrollBar orientation="horizontal" className="w-full" />
       </ScrollArea>
 

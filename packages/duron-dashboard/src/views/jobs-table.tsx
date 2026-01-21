@@ -1,7 +1,7 @@
 'use client'
 
 import type { Column, ColumnDef, OnChangeFn, RowSelectionState } from '@tanstack/react-table'
-import { Ban, CheckCircle2, ChevronDownIcon, ChevronRightIcon, Clock, XCircle } from 'lucide-react'
+import { Ban, CheckCircle2, ChevronDownIcon, ChevronUpIcon, Clock, XCircle } from 'lucide-react'
 import { useCallback, useMemo } from 'react'
 
 import { DataTable } from '@/components/data-table/data-table'
@@ -47,18 +47,6 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
 
   const columns = useMemo<ColumnDef<Job>[]>(
     () => [
-      {
-        id: 'select',
-        cell: ({ row }) => (
-          // show a chevron right icon if the row is selected and a chevron down icon if the row is not selected
-          <Button variant="ghost" size="icon" onClick={() => row.toggleSelected(!row.getIsSelected())}>
-            {row.getIsSelected() ? <ChevronRightIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
-          </Button>
-        ),
-        size: 32,
-        enableSorting: false,
-        enableHiding: false,
-      },
       {
         id: 'ID',
         accessorKey: 'id',
@@ -296,6 +284,9 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
       sorting: sort,
       columnVisibility: config.jobsTable.columnVisibility,
       columnSizing: config.jobsTable.columnSizing,
+      columnPinning: {
+        right: ['select'],
+      },
     },
     state: {
       rowSelection: selectedJobId ? { [selectedJobId]: true } : {},

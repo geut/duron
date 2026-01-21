@@ -1418,21 +1418,29 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
 
   /**
    * Internal method to get spans for a job or step.
+   * For step queries, uses a recursive CTE to find all descendant spans.
    */
   protected async _getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
     const spansTable = this.tables.spansTable
     const filters = options.filters ?? {}
 
-    // Build WHERE clause
-    const where = this._buildSpansWhereClause(options.jobId, options.stepId, filters)
-
     // Build sort
     const sortInput = options.sort ?? { field: 'startTimeUnixNano', order: 'asc' }
-    const sortFieldMap: Record<SpanSort['field'], any> = {
-      name: spansTable.name,
-      startTimeUnixNano: spansTable.start_time_unix_nano,
-      endTimeUnixNano: spansTable.end_time_unix_nano,
+    const sortFieldMap: Record<SpanSort['field'], string> = {
+      name: 'name',
+      startTimeUnixNano: 'start_time_unix_nano',
+      endTimeUnixNano: 'end_time_unix_nano',
     }
+    const sortField = sortFieldMap[sortInput.field]
+    const sortOrder = sortInput.order === 'asc' ? 'ASC' : 'DESC'
+
+    // For step queries, use a recursive CTE to get descendant spans
+    if (options.stepId) {
+      return this._getStepSpansRecursive(options.stepId, sortField, sortOrder, filters)
+    }
+
+    // Build WHERE clause for job queries
+    const where = this._buildSpansWhereClause(options.jobId, undefined, filters)
 
     // Get total count
     const total = await this.db.$count(spansTable, where)
@@ -1443,8 +1451,11 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       }
     }
 
-    const sortField = sortFieldMap[sortInput.field]
-    const orderByClause = sortInput.order === 'asc' ? asc(sortField) : desc(sortField)
+    const sortFieldColumn = sortFieldMap[sortInput.field]
+    const orderByClause =
+      sortInput.order === 'asc'
+        ? asc(spansTable[sortFieldColumn as keyof typeof spansTable] as any)
+        : desc(spansTable[sortFieldColumn as keyof typeof spansTable] as any)
 
     const rows = await this.db
       .select({
@@ -1484,6 +1495,89 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   }
 
   /**
+   * Get spans for a step using a recursive CTE to traverse the span hierarchy.
+   * This returns the step's span and all its descendant spans (children, grandchildren, etc.)
+   */
+  protected async _getStepSpansRecursive(
+    stepId: string,
+    sortField: string,
+    sortOrder: string,
+    _filters?: GetSpansOptions['filters'],
+  ): Promise<GetSpansResult> {
+    const schemaName = this.schema
+
+    // Use a recursive CTE to find all descendant spans
+    // 1. Base case: find the span with step_id = stepId
+    // 2. Recursive case: find all spans where parent_span_id = span_id of a span we've already found
+    const query = sql`
+      WITH RECURSIVE span_tree AS (
+        -- Base case: the span(s) for the step
+        SELECT * FROM ${sql.identifier(schemaName)}.spans WHERE step_id = ${stepId}::uuid
+        UNION ALL
+        -- Recursive case: children of spans we've found
+        SELECT s.* FROM ${sql.identifier(schemaName)}.spans s
+        INNER JOIN span_tree st ON s.parent_span_id = st.span_id
+      )
+      SELECT
+        id,
+        trace_id as "traceId",
+        span_id as "spanId",
+        parent_span_id as "parentSpanId",
+        job_id as "jobId",
+        step_id as "stepId",
+        name,
+        kind,
+        start_time_unix_nano as "startTimeUnixNano",
+        end_time_unix_nano as "endTimeUnixNano",
+        status_code as "statusCode",
+        status_message as "statusMessage",
+        attributes,
+        events
+      FROM span_tree
+      ORDER BY ${sql.identifier(sortField)} ${sql.raw(sortOrder)}
+    `
+
+    // Raw SQL returns numeric types as strings, so we type them as such
+    const rows = (await this.db.execute(query)) as unknown as Array<{
+      id: string | number
+      traceId: string
+      spanId: string
+      parentSpanId: string | null
+      jobId: string | null
+      stepId: string | null
+      name: string
+      kind: string | number
+      startTimeUnixNano: string | bigint | null
+      endTimeUnixNano: string | bigint | null
+      statusCode: string | number
+      statusMessage: string | null
+      attributes: Record<string, any>
+      events: Array<{ name: string; timeUnixNano: string; attributes?: Record<string, any> }>
+    }>
+
+    // Convert types: raw SQL returns numeric types as strings
+    const spans = rows.map((row) => ({
+      ...row,
+      // Convert id to number (bigserial comes as string from raw SQL)
+      id: typeof row.id === 'string' ? Number.parseInt(row.id, 10) : row.id,
+      // Convert kind and statusCode to proper types
+      kind: (typeof row.kind === 'string' ? Number.parseInt(row.kind, 10) : row.kind) as 0 | 1 | 2 | 3 | 4,
+      statusCode: (typeof row.statusCode === 'string' ? Number.parseInt(row.statusCode, 10) : row.statusCode) as
+        | 0
+        | 1
+        | 2,
+      // Convert BigInt to string for JSON serialization
+      startTimeUnixNano: row.startTimeUnixNano?.toString() ?? null,
+      endTimeUnixNano: row.endTimeUnixNano?.toString() ?? null,
+    }))
+
+    return {
+      spans,
+      total: spans.length,
+    }
+  }
+
+  /**
    * Internal method to delete all spans for a job.
    */
   protected async _deleteSpans(options: DeleteSpansOptions): Promise<number> {
@@ -1496,12 +1590,15 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   }
 
   /**
-   * Build WHERE clause for spans queries.
-   * When querying by jobId or stepId, we find all spans that share the same trace_id
-   * as spans with that job/step. This includes spans from external libraries that
+   * Build WHERE clause for spans queries (used for job queries only).
+   * When querying by jobId, we find all spans that share the same trace_id
+   * as spans with that job. This includes spans from external libraries that
    * don't have the duron.job.id attribute but are part of the same trace.
+   *
+   * Note: Step queries are handled separately by _getStepSpansRecursive using
+   * a recursive CTE to traverse the span hierarchy.
    */
-  protected _buildSpansWhereClause(jobId?: string, stepId?: string, filters?: GetSpansOptions['filters']) {
+  protected _buildSpansWhereClause(jobId?: string, _stepId?: string, filters?: GetSpansOptions['filters']) {
     const spansTable = this.tables.spansTable
 
     // Build condition for finding spans by trace_id (includes external spans)
@@ -1513,12 +1610,6 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       traceCondition = inArray(
         spansTable.trace_id,
         this.db.select({ traceId: spansTable.trace_id }).from(spansTable).where(eq(spansTable.job_id, jobId)),
-      )
-    } else if (stepId) {
-      // Find all spans that share a trace_id with any span that has this step_id
-      traceCondition = inArray(
-        spansTable.trace_id,
-        this.db.select({ traceId: spansTable.trace_id }).from(spansTable).where(eq(spansTable.step_id, stepId)),
       )
     }
 

@@ -29,6 +29,9 @@ export function calculateDurationSeconds(
  * If the time is less than 1 second, adds milliseconds: hh:mm:ss.mmm
  */
 export function formatMs(ms: number): string {
+  // Round to integer to handle floating-point values from database
+  ms = Math.round(ms)
+
   if (ms === 0) {
     return '00:00:00'
   }

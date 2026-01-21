@@ -10,6 +10,7 @@ import { DataTableSortList } from '@/components/data-table/data-table-sort-list'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useLayout } from '@/contexts/layout-context'
 import { useDataTable } from '@/hooks/use-data-table'
 import { useJobParams } from '@/hooks/use-job-params'
 import { useJobsPolling } from '@/hooks/use-jobs-polling'
@@ -27,6 +28,9 @@ interface JobsTableProps {
 
 export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
   const pageSize = 10
+
+  // Get column visibility and sizing from layout context
+  const { config, setJobsTableColumnVisibility, setJobsTableColumnSizing } = useLayout()
 
   // Enable polling for job updates
   useJobsPolling(true)
@@ -290,15 +294,16 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         pageSize: params.pageSize,
       },
       sorting: sort,
-      columnVisibility: {
-        'Client ID': false,
-      },
+      columnVisibility: config.jobsTable.columnVisibility,
+      columnSizing: config.jobsTable.columnSizing,
     },
     state: {
       rowSelection: selectedJobId ? { [selectedJobId]: true } : {},
     },
     getRowId: (row) => row.id,
     onRowSelectionChange: handleRowSelectionChange,
+    onColumnVisibilityChange: setJobsTableColumnVisibility,
+    onColumnSizingChange: setJobsTableColumnSizing,
   })
 
   return (

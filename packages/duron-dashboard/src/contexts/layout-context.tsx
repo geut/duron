@@ -1,6 +1,7 @@
 'use client'
 
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
+import type { ColumnSizingState, VisibilityState } from '@tanstack/react-table'
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react'
 
 type StepViewType = 'list' | 'timeline'
 
@@ -16,6 +17,13 @@ interface MobileLayout {
   verticalSizes: number[]
 }
 
+interface JobsTableConfig {
+  /** Column visibility state */
+  columnVisibility: VisibilityState
+  /** Column sizing state */
+  columnSizing: ColumnSizingState
+}
+
 interface LayoutConfig {
   /** Step view type: 'list' or 'timeline' */
   stepViewType: StepViewType
@@ -23,6 +31,8 @@ interface LayoutConfig {
   desktop: DesktopLayout
   /** Mobile layout configuration */
   mobile: MobileLayout
+  /** Jobs table configuration */
+  jobsTable: JobsTableConfig
 }
 
 interface LayoutContextValue {
@@ -31,9 +41,19 @@ interface LayoutContextValue {
   setDesktopHorizontalSizes: (sizes: number[]) => void
   setDesktopVerticalSizes: (sizes: number[]) => void
   setMobileVerticalSizes: (sizes: number[]) => void
+  setJobsTableColumnVisibility: (visibility: VisibilityState) => void
+  setJobsTableColumnSizing: (sizing: ColumnSizingState) => void
 }
 
 const STORAGE_KEY = 'duron-layout-config'
+
+/** Default column visibility for the jobs table */
+const DEFAULT_JOBS_TABLE_COLUMN_VISIBILITY: VisibilityState = {
+  'Client ID': false,
+}
+
+/** Default column sizing for the jobs table (empty = use column defaults) */
+const DEFAULT_JOBS_TABLE_COLUMN_SIZING: ColumnSizingState = {}
 
 const DEFAULT_CONFIG: LayoutConfig = {
   stepViewType: 'list',
@@ -43,6 +63,10 @@ const DEFAULT_CONFIG: LayoutConfig = {
   },
   mobile: {
     verticalSizes: [33, 33, 34],
+  },
+  jobsTable: {
+    columnVisibility: DEFAULT_JOBS_TABLE_COLUMN_VISIBILITY,
+    columnSizing: DEFAULT_JOBS_TABLE_COLUMN_SIZING,
   },
 }
 
@@ -68,6 +92,9 @@ function loadConfig(): LayoutConfig {
         verticalSizes: DEFAULT_CONFIG.mobile.verticalSizes,
       }
 
+      // Handle backward compatibility for jobsTable (new field)
+      const jobsTable: Partial<JobsTableConfig> = parsed.jobsTable ?? {}
+
       return {
         stepViewType: parsed.stepViewType === 'timeline' ? 'timeline' : 'list',
         desktop: {
@@ -82,6 +109,16 @@ function loadConfig(): LayoutConfig {
           verticalSizes: Array.isArray(mobile.verticalSizes)
             ? mobile.verticalSizes
             : DEFAULT_CONFIG.mobile.verticalSizes,
+        },
+        jobsTable: {
+          columnVisibility:
+            jobsTable.columnVisibility && typeof jobsTable.columnVisibility === 'object'
+              ? jobsTable.columnVisibility
+              : DEFAULT_JOBS_TABLE_COLUMN_VISIBILITY,
+          columnSizing:
+            jobsTable.columnSizing && typeof jobsTable.columnSizing === 'object'
+              ? jobsTable.columnSizing
+              : DEFAULT_JOBS_TABLE_COLUMN_SIZING,
         },
       }
     }
@@ -104,9 +141,15 @@ function saveConfig(config: LayoutConfig): void {
   }
 }
 
+/** Debounce delay for column sizing saves (ms) */
+const COLUMN_SIZING_SAVE_DELAY = 300
+
 export function LayoutProvider({ children }: { children: ReactNode }) {
   // Load config synchronously on first render to avoid flash of default layout
   const [config, setConfig] = useState<LayoutConfig>(() => loadConfig())
+
+  // Ref for debouncing column sizing saves
+  const columnSizingSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const setStepViewType = useCallback((type: StepViewType) => {
     setConfig((prev) => {
@@ -140,6 +183,32 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const setJobsTableColumnVisibility = useCallback((visibility: VisibilityState) => {
+    setConfig((prev) => {
+      const next = { ...prev, jobsTable: { ...prev.jobsTable, columnVisibility: visibility } }
+      saveConfig(next)
+      return next
+    })
+  }, [])
+
+  const setJobsTableColumnSizing = useCallback((sizing: ColumnSizingState) => {
+    // Debounce the save to localStorage to avoid flickering during drag
+    if (columnSizingSaveTimeoutRef.current) {
+      clearTimeout(columnSizingSaveTimeoutRef.current)
+    }
+
+    setConfig((prev) => {
+      const next = { ...prev, jobsTable: { ...prev.jobsTable, columnSizing: sizing } }
+
+      // Schedule debounced save with the new config
+      columnSizingSaveTimeoutRef.current = setTimeout(() => {
+        saveConfig(next)
+      }, COLUMN_SIZING_SAVE_DELAY)
+
+      return next
+    })
+  }, [])
+
   const value = useMemo(
     () => ({
       config,
@@ -147,8 +216,18 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       setDesktopHorizontalSizes,
       setDesktopVerticalSizes,
       setMobileVerticalSizes,
+      setJobsTableColumnVisibility,
+      setJobsTableColumnSizing,
     }),
-    [config, setStepViewType, setDesktopHorizontalSizes, setDesktopVerticalSizes, setMobileVerticalSizes],
+    [
+      config,
+      setStepViewType,
+      setDesktopHorizontalSizes,
+      setDesktopVerticalSizes,
+      setMobileVerticalSizes,
+      setJobsTableColumnVisibility,
+      setJobsTableColumnSizing,
+    ],
   )
 
   return <LayoutContext.Provider value={value}>{children}</LayoutContext.Provider>

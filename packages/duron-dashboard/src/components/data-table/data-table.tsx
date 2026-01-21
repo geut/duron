@@ -1,4 +1,4 @@
-import { flexRender, type Table as TanstackTable } from '@tanstack/react-table'
+import { flexRender, type Header, type Table as TanstackTable } from '@tanstack/react-table'
 import type * as React from 'react'
 
 import { DataTablePagination } from '@/components/data-table/data-table-pagination'
@@ -6,6 +6,29 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { getCommonPinningStyles } from '@/lib/data-table.ts'
 import { cn } from '@/lib/utils'
+
+function ColumnResizer<TData>({ header }: { header: Header<TData, unknown> }) {
+  if (!header.column.getCanResize()) {
+    return null
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={`Resize column ${header.column.id}`}
+      onMouseDown={header.getResizeHandler()}
+      onTouchStart={header.getResizeHandler()}
+      onDoubleClick={() => header.column.resetSize()}
+      className={cn(
+        'absolute top-0 -right-0.5 h-full w-1 cursor-col-resize select-none touch-none p-0 border-0',
+        'bg-transparent hover:bg-primary/50 transition-colors focus:bg-primary/50 focus:outline-none',
+        // Show a thin visible line in the center
+        'after:absolute after:top-0 after:left-1/2 after:-translate-x-1/2 after:h-full after:w-px after:bg-border',
+        header.column.getIsResizing() && 'bg-primary/50 after:bg-primary',
+      )}
+    />
+  )
+}
 
 interface DataTableProps<TData> extends React.ComponentProps<'div'> {
   table: TanstackTable<TData>
@@ -44,11 +67,14 @@ export function DataTable<TData>({
                       <TableHead
                         key={header.id}
                         colSpan={header.colSpan}
+                        className="relative"
                         style={{
+                          width: header.getSize(),
                           ...getCommonPinningStyles({ column: header.column }),
                         }}
                       >
                         {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                        <ColumnResizer header={header} />
                       </TableHead>
                     ))}
                   </TableRow>
@@ -64,6 +90,7 @@ export function DataTable<TData>({
                           <TableCell
                             key={cell.id}
                             style={{
+                              width: cell.column.getSize(),
                               ...getCommonPinningStyles({ column: cell.column }),
                             }}
                           >
@@ -108,11 +135,14 @@ export function DataTable<TData>({
                   <TableHead
                     key={header.id}
                     colSpan={header.colSpan}
+                    className="relative"
                     style={{
+                      width: header.getSize(),
                       ...getCommonPinningStyles({ column: header.column }),
                     }}
                   >
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                    <ColumnResizer header={header} />
                   </TableHead>
                 ))}
               </TableRow>
@@ -128,6 +158,7 @@ export function DataTable<TData>({
                       <TableCell
                         key={cell.id}
                         style={{
+                          width: cell.column.getSize(),
                           ...getCommonPinningStyles({ column: cell.column }),
                         }}
                       >

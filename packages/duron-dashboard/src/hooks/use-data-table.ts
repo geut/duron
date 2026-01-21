@@ -2,6 +2,7 @@
 
 import {
   type ColumnFiltersState,
+  type ColumnSizingState,
   getCoreRowModel,
   getFacetedMinMaxValues,
   getFacetedRowModel,
@@ -59,6 +60,10 @@ interface UseDataTableProps<TData>
   scroll?: boolean
   shallow?: boolean
   startTransition?: React.TransitionStartFunction
+  /** Callback when column visibility changes */
+  onColumnVisibilityChange?: (visibility: VisibilityState) => void
+  /** Callback when column sizing changes */
+  onColumnSizingChange?: (sizing: ColumnSizingState) => void
 }
 
 export function useDataTable<TData>(props: UseDataTableProps<TData>) {
@@ -75,6 +80,8 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     scroll = false,
     shallow = true,
     startTransition,
+    onColumnVisibilityChange: onColumnVisibilityChangeProp,
+    onColumnSizingChange: onColumnSizingChangeProp,
     ...tableProps
   } = props
   const pageKey = queryKeys?.page ?? PAGE_KEY
@@ -96,7 +103,35 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [history, scroll, shallow, throttleMs, debounceMs, clearOnDefault, startTransition],
   )
 
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialState?.columnVisibility ?? {})
+  const [columnVisibility, setColumnVisibilityState] = React.useState<VisibilityState>(
+    initialState?.columnVisibility ?? {},
+  )
+
+  const setColumnVisibility = React.useCallback(
+    (updaterOrValue: React.SetStateAction<VisibilityState>) => {
+      setColumnVisibilityState((prev) => {
+        const next = typeof updaterOrValue === 'function' ? updaterOrValue(prev) : updaterOrValue
+        // Defer callback to avoid updating parent during render
+        queueMicrotask(() => onColumnVisibilityChangeProp?.(next))
+        return next
+      })
+    },
+    [onColumnVisibilityChangeProp],
+  )
+
+  const [columnSizing, setColumnSizingState] = React.useState<ColumnSizingState>(initialState?.columnSizing ?? {})
+
+  const setColumnSizing = React.useCallback(
+    (updaterOrValue: React.SetStateAction<ColumnSizingState>) => {
+      setColumnSizingState((prev) => {
+        const next = typeof updaterOrValue === 'function' ? updaterOrValue(prev) : updaterOrValue
+        // Defer callback to avoid updating parent during render
+        queueMicrotask(() => onColumnSizingChangeProp?.(next))
+        return next
+      })
+    },
+    [onColumnSizingChangeProp],
+  )
 
   const [page, setPage] = useQueryState(pageKey, parseAsInteger.withOptions(queryStateOptions).withDefault(1))
   const [perPage, setPerPage] = useQueryState(
@@ -233,6 +268,7 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       sorting,
       columnVisibility,
       columnFilters,
+      columnSizing,
       rowSelection: tableProps?.state?.rowSelection ?? {},
     },
     defaultColumn: {
@@ -240,11 +276,14 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       enableColumnFilter: false,
     },
     enableRowSelection: true,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
     onRowSelectionChange: tableProps?.onRowSelectionChange,
     onPaginationChange,
     onSortingChange,
     onColumnFiltersChange,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),

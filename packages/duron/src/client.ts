@@ -130,93 +130,145 @@ export interface TelemetryOptions {
   serviceName?: string
 }
 
-const BaseOptionsSchema = z.object({
+/**
+ * Base configuration options for a Duron client instance.
+ * These options control job fetching, concurrency, and recovery behavior.
+ */
+export interface BaseOptionsInput {
   /**
    * Unique identifier for this Duron instance.
    * Used for multi-process coordination and job ownership.
-   * Defaults to a random UUID if not provided.
+   * If not provided, a random UUID will be generated.
+   *
+   * @example 'worker-1', 'api-server', 'background-processor'
    */
-  id: z.string().optional(),
+  id?: string
 
   /**
-   * Synchronization pattern for fetching jobs.
-   * - `'pull'`: Periodically poll the database for new jobs
-   * - `'push'`: Listen for database notifications when jobs are available
-   * - `'hybrid'`: Use both pull and push patterns (recommended)
-   * - `false`: Disable automatic job fetching (manual fetching only)
+   * Synchronization pattern for fetching jobs from the database.
+   *
+   * - `'pull'`: Periodically poll the database for new jobs at `pullInterval`
+   * - `'push'`: Listen for database notifications when jobs are available (real-time)
+   * - `'hybrid'`: Use both pull and push patterns (recommended for reliability)
+   * - `false`: Disable automatic job fetching (use `fetch()` manually)
    *
    * @default 'hybrid'
+   *
+   * @example
+   * ```typescript
+   * // Real-time job processing with fallback polling
+   * syncPattern: 'hybrid'
+   *
+   * // Disable auto-fetching for API-only servers
+   * syncPattern: false
+   * ```
    */
-  syncPattern: z.union([z.literal('pull'), z.literal('push'), z.literal('hybrid'), z.literal(false)]).default('hybrid'),
+  syncPattern?: 'pull' | 'push' | 'hybrid' | false
 
   /**
-   * Interval in milliseconds between pull operations when using pull or hybrid sync pattern.
+   * Interval in milliseconds between pull operations when using `'pull'` or `'hybrid'` sync pattern.
+   * Lower values mean faster job pickup but more database queries.
    *
    * @default 5000
    */
-  pullInterval: z.number().default(5_000),
+  pullInterval?: number
 
   /**
-   * Maximum number of jobs to fetch in a single batch.
+   * Maximum number of jobs to fetch in a single batch from the database.
+   * Higher values reduce database round-trips but may increase memory usage.
    *
    * @default 10
    */
-  batchSize: z.number().default(10),
+  batchSize?: number
 
   /**
    * Maximum number of jobs that can run concurrently per action.
-   * This controls the concurrency limit for the action's fastq queue.
+   * This controls the concurrency limit for each action's internal queue.
+   * Use this to prevent any single action from consuming all resources.
    *
    * @default 100
    */
-  actionConcurrencyLimit: z.number().default(100),
+  actionConcurrencyLimit?: number
 
   /**
    * Maximum number of jobs that can run concurrently per group key.
    * Jobs with the same group key will respect this limit.
-   * This can be overridden using action -> groups -> concurrency.
+   * This is the default value; it can be overridden per-job using `action.groups.concurrency`.
    *
    * @default 10
+   *
+   * @example
+   * ```typescript
+   * // Limit concurrent jobs per user to 2
+   * groupConcurrencyLimit: 2
+   * ```
    */
-  groupConcurrencyLimit: z.number().default(10),
+  groupConcurrencyLimit?: number
 
   /**
    * Whether to run database migrations on startup.
    * When enabled, Duron will automatically apply pending migrations when the adapter starts.
+   * Disable this if you manage migrations separately or use a read-only database connection.
    *
    * @default true
    */
-  migrateOnStart: z.boolean().default(true),
+  migrateOnStart?: boolean
 
   /**
    * Whether to recover stuck jobs on startup.
    * Stuck jobs are jobs that were marked as active but the process that owned them
-   * is no longer running.
+   * is no longer running (e.g., after a crash or restart).
+   * These jobs will be reset to 'created' status so they can be picked up again.
    *
    * @default true
    */
-  recoverJobsOnStart: z.boolean().default(true),
+  recoverJobsOnStart?: boolean
 
   /**
    * Enable multi-process mode for job recovery.
    * When enabled, Duron will ping other processes to check if they're alive
-   * before recovering their jobs.
+   * before recovering their jobs. This prevents recovering jobs from processes
+   * that are still running but slow to respond.
+   *
+   * Only enable this if you're running multiple Duron instances sharing the same database.
    *
    * @default false
    */
-  multiProcessMode: z.boolean().default(false),
+  multiProcessMode?: boolean
 
   /**
    * Timeout in milliseconds to wait for process ping responses in multi-process mode.
    * Processes that don't respond within this timeout will have their jobs recovered.
+   * Increase this value if your processes may be temporarily unresponsive under load.
    *
-   * @default 5000 (5 seconds)
+   * @default 5000
    */
-  processTimeout: z.number().default(5 * 1000), // 5 seconds
+  processTimeout?: number
+}
+
+const BaseOptionsSchema = z.object({
+  id: z.string().optional(),
+  syncPattern: z.union([z.literal('pull'), z.literal('push'), z.literal('hybrid'), z.literal(false)]).default('hybrid'),
+  pullInterval: z.number().default(5_000),
+  batchSize: z.number().default(10),
+  actionConcurrencyLimit: z.number().default(100),
+  groupConcurrencyLimit: z.number().default(10),
+  migrateOnStart: z.boolean().default(true),
+  recoverJobsOnStart: z.boolean().default(true),
+  multiProcessMode: z.boolean().default(false),
+  processTimeout: z.number().default(5 * 1000),
 })
 
+// Compile-time check: ensure BaseOptionsInput is assignable to the Zod schema's input type
+type _EnsureBaseOptionsCompatible = BaseOptionsInput extends z.input<typeof BaseOptionsSchema>
+  ? true
+  : 'ERROR: BaseOptionsInput does not match Zod schema input type'
+
+declare const _baseOptionsCheck: _EnsureBaseOptionsCompatible
+const _checkOptions: _EnsureBaseOptionsCompatible = true
+
 /**
- * Options for configuring a Duron instance.
+ * Options for configuring a Duron client instance.
  *
  * @template TActions - Record of action definitions keyed by action name
  * @template TVariables - Type of variables available to actions
@@ -224,7 +276,7 @@ const BaseOptionsSchema = z.object({
 export interface ClientOptions<
   TActions extends Record<string, Action<any, any, TVariables>>,
   TVariables = Record<string, unknown>,
-> extends z.input<typeof BaseOptionsSchema> {
+> extends BaseOptionsInput {
   /**
    * The database adapter to use for storing jobs and steps.
    * Required.

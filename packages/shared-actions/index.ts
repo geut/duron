@@ -122,6 +122,7 @@ export const variables = {
 
 export const sendEmail = defineAction<typeof variables>()({
   name: 'sendEmail',
+  description: async (ctx) => `Send email to ${ctx.input.email}`,
   groups: {
     groupKey: async (ctx) => `email=${ctx.input.email}`,
     concurrency: async () => 2,

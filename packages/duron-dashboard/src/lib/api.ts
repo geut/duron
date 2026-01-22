@@ -198,6 +198,7 @@ export function useJobs(params: GetJobsParams = {}) {
         : new Date(params.fUpdatedAfter as Date | string | number)
     queryParams.set('fUpdatedAfter', dateObj.toISOString())
   }
+  if (params.fDescription) queryParams.set('fDescription', params.fDescription)
   if (params.fSearch) queryParams.set('fSearch', params.fSearch)
   if (params.sort) queryParams.set('sort', params.sort)
 
@@ -327,6 +328,7 @@ export function useDeleteJobs() {
             : new Date(params.fUpdatedAfter as Date | string | number)
         queryParams.set('fUpdatedAfter', dateObj.toISOString())
       }
+      if (params.fDescription) queryParams.set('fDescription', params.fDescription)
       if (params.fSearch) queryParams.set('fSearch', params.fSearch)
       if (params.sort) queryParams.set('sort', params.sort)
 

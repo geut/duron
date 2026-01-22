@@ -1,14 +1,13 @@
 'use client'
 
 import type { Column, ColumnDef, OnChangeFn, RowSelectionState } from '@tanstack/react-table'
-import { Ban, CheckCircle2, ChevronDownIcon, ChevronUpIcon, Clock, XCircle } from 'lucide-react'
+import { Ban, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { useCallback, useMemo } from 'react'
 
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
-import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useLayout } from '@/contexts/layout-context'
 import { useDataTable } from '@/hooks/use-data-table'
@@ -92,11 +91,10 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         cell: ({ cell }) => {
           const desc = cell.getValue<string | null>()
           if (!desc) return <div className="text-muted-foreground">-</div>
-          const truncated = desc.length > 40 ? `${desc.slice(0, 40)}...` : desc
           return (
             <Tooltip>
               <TooltipTrigger asChild={true}>
-                <div className="truncate max-w-[200px] cursor-help">{truncated}</div>
+                <div className="truncate w-full cursor-help">{desc}</div>
               </TooltipTrigger>
               <TooltipContent className="max-w-[400px]">
                 <p className="whitespace-pre-wrap">{desc}</p>
@@ -105,7 +103,12 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
           )
         },
         size: 200,
-        enableColumnFilter: false,
+        meta: {
+          label: 'Description',
+          placeholder: 'Search description...',
+          variant: 'text',
+        },
+        enableColumnFilter: true,
         enableSorting: true,
       },
       {

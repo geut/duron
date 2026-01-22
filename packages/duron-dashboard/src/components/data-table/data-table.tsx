@@ -104,6 +104,7 @@ export function DataTable<TData>({
                               <TableCell
                                 key={cell.id}
                                 className={cn(
+                                  'overflow-hidden',
                                   isPinned === 'right' && [
                                     'sticky right-0 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]',
                                     isSelected ? 'bg-primary/10' : 'bg-background',
@@ -113,7 +114,10 @@ export function DataTable<TData>({
                                     isSelected ? 'bg-primary/10' : 'bg-background',
                                   ],
                                 )}
-                                style={{ width: cell.column.getSize() }}
+                                style={{
+                                  width: cell.column.getSize(),
+                                  maxWidth: cell.column.getSize(),
+                                }}
                               >
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
                               </TableCell>
@@ -196,6 +200,7 @@ export function DataTable<TData>({
                           <TableCell
                             key={cell.id}
                             className={cn(
+                              'overflow-hidden',
                               isPinned === 'right' && [
                                 'sticky right-0 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]',
                                 isSelected ? 'bg-primary/10' : 'bg-background',
@@ -205,7 +210,10 @@ export function DataTable<TData>({
                                 isSelected ? 'bg-primary/10' : 'bg-background',
                               ],
                             )}
-                            style={{ width: cell.column.getSize() }}
+                            style={{
+                              width: cell.column.getSize(),
+                              maxWidth: cell.column.getSize(),
+                            }}
                           >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </TableCell>

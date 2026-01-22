@@ -45,7 +45,13 @@ const THROTTLE_MS = 50
 interface UseDataTableProps<TData>
   extends Omit<
       TableOptions<TData>,
-      'pageCount' | 'getCoreRowModel' | 'manualFiltering' | 'manualPagination' | 'manualSorting'
+      | 'pageCount'
+      | 'getCoreRowModel'
+      | 'manualFiltering'
+      | 'manualPagination'
+      | 'manualSorting'
+      | 'onColumnVisibilityChange'
+      | 'onColumnSizingChange'
     >,
     Required<Pick<TableOptions<TData>, 'pageCount'>> {
   initialState?: Omit<Partial<TableState>, 'sorting'> & {

@@ -173,9 +173,7 @@ export function DataTable<TData>({
                         )}
                         style={{ width: header.getSize() }}
                       >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                         <ColumnResizer header={header} />
                       </TableHead>
                     )
@@ -205,10 +203,7 @@ export function DataTable<TData>({
                                 'sticky right-0 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]',
                                 isSelected ? 'bg-primary/10' : 'bg-background',
                               ],
-                              isPinned === 'left' && [
-                                'sticky left-0',
-                                isSelected ? 'bg-primary/10' : 'bg-background',
-                              ],
+                              isPinned === 'left' && ['sticky left-0', isSelected ? 'bg-primary/10' : 'bg-background'],
                             )}
                             style={{
                               width: cell.column.getSize(),

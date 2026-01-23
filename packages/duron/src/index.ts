@@ -7,6 +7,7 @@ export {
   type StepDefinition,
   type StepDefinitionHandlerContext,
   type StepDefinitionInput,
+  type StepNameContext,
 } from './action.js'
 export * from './client.js'
 export * from './constants.js'

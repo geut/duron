@@ -259,6 +259,19 @@ const basicRunAction = defineAction<typeof variables>()({
   },
 })
 
+/**
+ * Step with dynamic name using full context (input, var, jobId, parentStepId)
+ */
+const fullContextStep = createStep<typeof variables>()({
+  name: (ctx) => `step-${ctx.input.userId}-${ctx.var.counter}-${ctx.jobId.slice(0, 8)}`,
+  input: z.object({
+    userId: z.string(),
+  }),
+  handler: async (ctx) => {
+    return { userId: ctx.input.userId, processed: true }
+  },
+})
+
 const dynamicNameAction = defineAction<typeof variables>()({
   name: 'dynamic-name-action',
   version: '1.0.0',
@@ -274,6 +287,26 @@ const dynamicNameAction = defineAction<typeof variables>()({
     return ctx.run(processUserStep, {
       userId: ctx.input.userId,
       action: 'activate',
+    })
+  },
+})
+
+/**
+ * Action that uses step with full context for name generation
+ */
+const fullContextNameAction = defineAction<typeof variables>()({
+  name: 'full-context-name-action',
+  version: '1.0.0',
+  input: z.object({
+    userId: z.string(),
+  }),
+  output: z.object({
+    userId: z.string(),
+    processed: z.boolean(),
+  }),
+  handler: async (ctx) => {
+    return ctx.run(fullContextStep, {
+      userId: ctx.input.userId,
     })
   },
 })
@@ -544,6 +577,7 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         deeplyNestedStepDefAction: typeof deeplyNestedStepDefAction
         inlineStepCallsRunAction: typeof inlineStepCallsRunAction
         sameNameDifferentParentsAction: typeof sameNameDifferentParentsAction
+        fullContextNameAction: typeof fullContextNameAction
       },
       typeof variables
     >
@@ -572,6 +606,7 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
             deeplyNestedStepDefAction,
             inlineStepCallsRunAction,
             sameNameDifferentParentsAction,
+            fullContextNameAction,
           },
           variables,
           syncPattern: false,
@@ -637,6 +672,26 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         const stepsResult = await client.getJobSteps({ jobId })
         expect(stepsResult.steps.length).toBe(1)
         expect(stepsResult.steps[0]!.name).toBe('process-user-user-123')
+      })
+
+      it('should resolve dynamic step name using full context (input, var, jobId, parentStepId)', async () => {
+        const jobId = await client.runAction('fullContextNameAction', {
+          userId: 'user-456',
+        })
+        await client.fetch({ batchSize: 10 })
+
+        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        expectToBeDefined(job)
+        expect(job.status).toBe(JOB_STATUS_COMPLETED)
+
+        const stepsResult = await client.getJobSteps({ jobId })
+        expect(stepsResult.steps.length).toBe(1)
+        const stepName = stepsResult.steps[0]!.name
+        // Should match pattern: step-{userId}-{counter}-{jobIdPrefix}
+        expect(stepName).toMatch(/^step-user-456-0-[a-f0-9]{8}$/)
+        expect(stepName).toContain('user-456')
+        expect(stepName).toContain('0') // counter value
+        expect(stepName).toContain(jobId.slice(0, 8)) // jobId prefix
       })
     })
 

@@ -142,9 +142,20 @@ export interface StepDefinitionHandlerContext<TInput extends z.ZodObject, TVaria
 export interface StepDefinition<TInput extends z.ZodObject, TResult, TVariables = Record<string, unknown>> {
   /**
    * The name of the step.
-   * Can be a static string or a function that generates the name from the input.
+   * Can be a static string or a function that generates the name from the context.
+   * The function receives a context object with input, variables, jobId, and parentStepId.
+   *
+   * @example
+   * ```typescript
+   * name: (ctx) => `process-user-${ctx.input.userId}`
+   * ```
+   *
+   * @example
+   * ```typescript
+   * name: (ctx) => `step-${ctx.var.environment}-${ctx.jobId.slice(0, 8)}`
+   * ```
    */
-  name: string | ((ctx: { input: z.infer<TInput> }) => string)
+  name: string | ((ctx: StepNameContext<TInput, TVariables>) => string)
 
   /**
    * Zod schema for validating the step input.
@@ -181,6 +192,32 @@ export interface StepDefinition<TInput extends z.ZodObject, TResult, TVariables 
 export interface ConcurrencyHandlerContext<TInput extends z.ZodObject, TVariables = Record<string, unknown>> {
   input: z.infer<TInput>
   var: TVariables
+}
+
+/**
+ * Context available when generating dynamic step names.
+ * Provides access to input, variables, job ID, and parent step ID.
+ */
+export interface StepNameContext<TInput extends z.ZodObject, TVariables = Record<string, unknown>> {
+  /**
+   * The validated input for this step.
+   */
+  input: z.infer<TInput>
+
+  /**
+   * Variables shared across the action.
+   */
+  var: TVariables
+
+  /**
+   * The job ID this step belongs to.
+   */
+  jobId: string
+
+  /**
+   * The ID of the parent step, or null if this is a root step.
+   */
+  parentStepId: string | null
 }
 
 /**

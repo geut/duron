@@ -960,7 +960,16 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
       : (input as z.infer<TStepInput>)
 
     // Resolve step name (static or dynamic)
-    const stepName = typeof stepDef.name === 'function' ? stepDef.name({ input: validatedInput }) : stepDef.name
+    // If it's a function, pass the full context including input, variables, jobId, and parentStepId
+    const stepName =
+      typeof stepDef.name === 'function'
+        ? stepDef.name({
+            input: validatedInput,
+            var: this.#variables,
+            jobId: this.#jobId,
+            parentStepId,
+          })
+        : stepDef.name
 
     // Merge options: action defaults -> step definition -> call-time overrides
     const mergedOptions: z.input<typeof StepOptionsSchema> = {

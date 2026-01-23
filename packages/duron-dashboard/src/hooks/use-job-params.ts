@@ -74,6 +74,18 @@ export function useJobParams(pageSize: number = 10) {
       },
       sort: sortingParam,
     }),
-    [page, perPage, statusFilters, fActionName, fCreatedAt, fStartedAt, fFinishedAt, description, search, sortString, sortingParam],
+    [
+      page,
+      perPage,
+      statusFilters,
+      fActionName,
+      fCreatedAt,
+      fStartedAt,
+      fFinishedAt,
+      description,
+      search,
+      sortString,
+      sortingParam,
+    ],
   )
 }

@@ -1023,6 +1023,43 @@ export class Client<
             action.name,
             zocker(action.input as z.ZodObject)
               .override(z.ZodString, 'string')
+              .override(z.ZodBigInt, '4000' as any) // Convert BigInt to string for JSON serialization
+              .override(z.ZodNumber, (schema, _ctx) => {
+                const greaterThan = schema.def.checks?.find((check) => check._zod.def.check === 'greater_than')?._zod
+                  .def as unknown as { value: number; inclusive: boolean }
+                const lessThan = schema.def.checks?.find((check) => check._zod.def.check === 'less_than')?._zod
+                  .def as unknown as { value: number; inclusive: boolean }
+      
+                if (greaterThan && lessThan) {
+                  const min = greaterThan.inclusive ? greaterThan.value : greaterThan.value + 1
+                  // For inclusive lessThan, we want to include the value, so max should be value + 1
+                  // For exclusive lessThan, we want to exclude the value, so max is the value itself
+                  const max = lessThan.inclusive ? lessThan.value + 1 : lessThan.value
+                  // Ensure min < max
+                  if (min >= max) {
+                    return Math.floor(min)
+                  }
+                  return Math.floor(Math.random() * (max - min) + min)
+                }
+
+                if (greaterThan) {
+                  const min = greaterThan.inclusive ? greaterThan.value : greaterThan.value + 1
+                  const max = min + 1000 // Use 1000 as default range
+                  return Math.floor(Math.random() * (max - min) + min)
+                }
+
+                if (lessThan) {
+                  // For inclusive lessThan, we want to include the value, so max should be value + 1
+                  // For exclusive lessThan, we want to exclude the value, so max is the value itself
+                  const max = lessThan.inclusive ? lessThan.value + 1 : lessThan.value
+                  return Math.floor(Math.random() * max)
+                }
+
+                return Math.floor(Math.random() * 1000) 
+              })
+              .number({
+                extreme_value_chance: 0.01,
+              })
               .generate(),
           )
         }

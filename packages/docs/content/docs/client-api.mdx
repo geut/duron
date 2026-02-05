@@ -178,6 +178,25 @@ const client = duron({
 }
 ```
 
+### `telemetry`
+
+**Optional.** Telemetry configuration for OpenTelemetry tracing. See [Telemetry](/docs/telemetry) for details.
+
+```ts
+{
+  telemetry: {
+    local: true,               // Store spans in the database
+    serviceName: 'my-service', // OpenTelemetry service name (default: 'duron')
+  },
+}
+```
+
+**Options:**
+- `local` - Enable local span storage (`boolean | { flushDelayMs?: number }`)
+- `traceExporter` - Export spans to external systems (OTLP, Jaeger, etc.)
+- `spanProcessors` - Add custom span processors
+- `serviceName` - Service name for OpenTelemetry resource (default: `'duron'`)
+
 ## Lifecycle Methods
 
 ### `start()`
@@ -589,8 +608,35 @@ const config = client.getConfig()
 
 ### `logger`
 
-Access the logger instance.
+Access the Pino logger instance.
 
 ```ts
 client.logger.info('Client started')
+```
+
+### `tracer`
+
+Access the OpenTelemetry tracer for creating custom spans. Always returns a tracer — it's a no-op tracer when no telemetry SDK is configured.
+
+```ts
+const span = client.tracer.startSpan('custom-operation')
+```
+
+### `database`
+
+Access the database adapter instance.
+
+```ts
+const adapter = client.database
+```
+
+### `flushTelemetry()`
+
+Force flush any pending telemetry data. Useful in tests or when you need to ensure spans are exported before querying.
+
+```ts
+await client.flushTelemetry()
+
+// Now you can safely query spans
+const { spans } = await client.getSpans({ jobId })
 ```

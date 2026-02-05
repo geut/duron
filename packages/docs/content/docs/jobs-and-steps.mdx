@@ -277,7 +277,7 @@ The handler receives an extended context that includes:
 - **`parentStepId`** - ID of the parent step (null for root steps)
 - **`step`** - Function to create nested inline child steps
 - **`run`** - Function to execute other reusable step definitions
-- **`observe`** - Observability context for metrics and tracing
+- **`telemetry`** - Telemetry context for metrics and tracing
 - **`var`** - Variables from the action context
 - **`logger`** - Pino logger instance
 - **`jobId`** - The job ID this step belongs to
@@ -317,11 +317,18 @@ const result = await ctx.run(
 
 ### Dynamic Step Names
 
-Use a function for the `name` property to generate unique step names based on input. This is essential when calling the same step definition multiple times within a single job:
+Use a function for the `name` property to generate unique step names based on input. This is essential when calling the same step definition multiple times within a single job.
+
+The name function receives a context object with:
+
+- **`input`** - The validated step input
+- **`var`** - Variables from the action context
+- **`jobId`** - The job ID this step belongs to
+- **`parentStepId`** - The ID of the parent step (null for root steps)
 
 ```ts
 const sendEmailStep = createStep<typeof variables>()({
-  // Dynamic name based on input
+  // Dynamic name based on input and context
   name: (ctx) => `send-email-${ctx.input.to}`,
   input: z.object({
     to: z.string().email(),
@@ -458,6 +465,34 @@ Retry configuration for the step. See [Retries](/docs/retries) for details.
 }
 ```
 
+#### `parallel`
+
+Whether this step runs independently from its siblings. Defaults to `false`.
+
+When a step is marked as `parallel: true`, it is treated as independent during time travel operations. If you time travel to a specific step, completed parallel siblings are preserved rather than deleted. This is useful for steps that don't depend on each other and can safely coexist.
+
+```ts
+await ctx.step(
+  'sendNotification',
+  async ({ signal }) => {
+    return await sendNotification({ signal })
+  },
+  { parallel: true }
+)
+```
+
+You can also set `parallel` on reusable step definitions:
+
+```ts
+const notifyStep = createStep()({
+  name: 'notify',
+  parallel: true,
+  handler: async (ctx) => {
+    // This step is independent from siblings
+  },
+})
+```
+
 ### Step Lifecycle
 
 Steps go through the following states:
@@ -508,7 +543,7 @@ const step = await client.getJobStepById(stepId)
 
 ### Step Concurrency
 
-Steps within an action respect the `steps.concurrency` limit. By default, up to 10 steps can run concurrently per action.
+Steps within an action respect the `steps.concurrency` limit. By default, up to 100 steps can run concurrently per action.
 
 ```ts
 {

@@ -79,11 +79,14 @@ Both action and step handlers have access to `ctx.telemetry` which provides Open
 
 ```ts
 interface TelemetryContext {
-  // Get the active span for the current job/step
-  getActiveSpan(): Span
+  // Get the active span for the current job/step (undefined if no span is active)
+  getActiveSpan(): Span | undefined
 
   // Get a tracer for creating custom spans
   getTracer(name: string): Tracer
+
+  // Start a new span as a child of the current job/step span
+  startSpan(name: string, options?: { attributes?: Record<string, any> }): Span
 
   // Record a metric as a span event
   recordMetric(name: string, value: number, attributes?: Record<string, any>): void
@@ -140,18 +143,20 @@ const result = await ctx.step('with-custom-span', async ({ telemetry }) => {
 
 ### Working with the Active Span
 
-Use `getActiveSpan()` to add attributes or events to the current span:
+Use `getActiveSpan()` to add attributes or events to the current span. It returns `undefined` if no span is active (e.g., when telemetry is not configured):
 
 ```ts
 const result = await ctx.step('annotated', async ({ telemetry }) => {
   const span = telemetry.getActiveSpan()
-  
-  span.setAttribute('user.id', 'user-123')
-  span.addEvent('processing.started')
-  
-  // Do work...
-  
-  span.addEvent('processing.completed', { items: 5 })
+
+  if (span) {
+    span.setAttribute('user.id', 'user-123')
+    span.addEvent('processing.started')
+
+    // Do work...
+
+    span.addEvent('processing.completed', { items: 5 })
+  }
 
   return { success: true }
 })
@@ -190,24 +195,26 @@ const aiAction = defineAction()({
 
 The tracer returned by `getTracer()` is context-aware and automatically injects the parent span, so external libraries don't need to manually handle context propagation.
 
-### Working with the Active Span
+### Using startSpan
 
-Access the current span directly for advanced use cases:
+Use `startSpan()` as a shorthand to create a child span linked to the current job/step trace:
 
 ```ts
-const result = await ctx.step('advanced', async ({ telemetry }) => {
-  const span = telemetry.getActiveSpan()
-  
-  if (span) {
-    span.setAttribute('user.id', 'user-123')
-    span.addEvent('processing.started')
-    
-    // Do work...
-    
-    span.addEvent('processing.completed', { items: 5 })
-  }
+const result = await ctx.step('with-child-span', async ({ telemetry }) => {
+  const span = telemetry.startSpan('custom-operation', {
+    attributes: { 'custom.input': 'value' },
+  })
 
-  return { success: true }
+  try {
+    // Do work...
+    span.addEvent('operation.complete')
+    return { success: true }
+  } catch (error) {
+    span.recordException(error)
+    throw error
+  } finally {
+    span.end()
+  }
 })
 ```
 
@@ -334,6 +341,18 @@ bun add @opentelemetry/exporter-trace-otlp-http
 # For Jaeger
 bun add @opentelemetry/exporter-jaeger
 ```
+
+## Advanced: LocalSpanExporter
+
+If you need lower-level control over local span storage, you can use the `LocalSpanExporter` directly with a custom `SpanProcessor`:
+
+```ts
+import { LocalSpanExporter } from 'duron/telemetry'
+
+const exporter = new LocalSpanExporter({ adapter: myAdapter })
+```
+
+In most cases, use the `telemetry.local` option instead, which configures the `LocalSpanExporter` automatically.
 
 ## Architecture Notes
 

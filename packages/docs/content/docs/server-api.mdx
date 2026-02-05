@@ -37,7 +37,7 @@ const app = createServer({
       return email === 'admin@example.com' && password === 'password'
     },
     jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
-    expirationTime: '24h', // Optional, defaults to '24h'
+    expirationTime: '1h', // Optional, defaults to '1h'
   },
 })
 
@@ -112,13 +112,27 @@ app.listen(3000)
 
 #### `login.expirationTime`
 
-**Optional.** Expiration time for the JWT token. Defaults to `'24h'`. Accepts any valid time string format (e.g., `'1h'`, `'7d'`, `'30m'`).
+**Optional.** Expiration time for the access JWT token. Defaults to `'1h'`. Accepts any valid time string format (e.g., `'1h'`, `'7d'`, `'30m'`).
 
 ```ts
 {
   login: {
     jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
-    expirationTime: '7d', // Token expires in 7 days
+    expirationTime: '30m', // Access token expires in 30 minutes
+  },
+}
+```
+
+#### `login.refreshTokenExpirationTime`
+
+**Optional.** Expiration time for the refresh token. Defaults to `'7d'`. Accepts any valid time string format.
+
+```ts
+{
+  login: {
+    jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+    expirationTime: '1h',
+    refreshTokenExpirationTime: '30d', // Refresh token expires in 30 days
   },
 }
 ```

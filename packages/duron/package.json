@@ -50,6 +50,16 @@
       "dev-source": "./src/adapters/postgres/pglite.ts",
       "types": "./dist/adapters/postgres/pglite.d.ts",
       "default": "./dist/adapters/postgres/pglite.js"
+    },
+    "./errors": {
+      "dev-source": "./src/errors.ts",
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    },
+    "./telemetry": {
+      "dev-source": "./src/telemetry/index.ts",
+      "types": "./dist/telemetry/index.d.ts",
+      "default": "./dist/telemetry/index.js"
     }
   },
   "files": [

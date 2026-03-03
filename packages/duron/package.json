@@ -1,72 +1,73 @@
 {
   "name": "duron",
-  "version": "0.3.0-beta.18",
+  "version": "0.3.0",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src",
+    "migrations"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "dev-source": "./src/index.ts",
       "types": "./dist/index.d.ts",
+      "dev-source": "./src/index.ts",
       "default": "./dist/index.js"
     },
     "./client": {
-      "dev-source": "./src/client.ts",
       "types": "./dist/client.d.ts",
+      "dev-source": "./src/client.ts",
       "default": "./dist/client.js"
     },
     "./action": {
-      "dev-source": "./src/action.ts",
       "types": "./dist/action.d.ts",
+      "dev-source": "./src/action.ts",
       "default": "./dist/action.js"
     },
     "./constants": {
-      "dev-source": "./src/constants.ts",
       "types": "./dist/constants.d.ts",
+      "dev-source": "./src/constants.ts",
       "default": "./dist/constants.js"
     },
     "./server": {
-      "dev-source": "./src/server.ts",
       "types": "./dist/server.d.ts",
+      "dev-source": "./src/server.ts",
       "default": "./dist/server.js"
     },
     "./adapter": {
-      "dev-source": "./src/adapters/adapter.ts",
       "types": "./dist/adapters/adapter.d.ts",
+      "dev-source": "./src/adapters/adapter.ts",
       "default": "./dist/adapters/adapter.js"
     },
     "./adapters/postgres": {
-      "dev-source": "./src/adapters/postgres/postgres.ts",
       "types": "./dist/adapters/postgres/postgres.d.ts",
+      "dev-source": "./src/adapters/postgres/postgres.ts",
       "default": "./dist/adapters/postgres/postgres.js"
     },
     "./adapters/postgres/schema": {
-      "dev-source": "./src/adapters/postgres/schema.ts",
       "types": "./dist/adapters/postgres/schema.d.ts",
+      "dev-source": "./src/adapters/postgres/schema.ts",
       "default": "./dist/adapters/postgres/schema.js"
     },
     "./adapters/pglite": {
-      "dev-source": "./src/adapters/postgres/pglite.ts",
       "types": "./dist/adapters/postgres/pglite.d.ts",
+      "dev-source": "./src/adapters/postgres/pglite.ts",
       "default": "./dist/adapters/postgres/pglite.js"
     },
     "./errors": {
-      "dev-source": "./src/errors.ts",
       "types": "./dist/errors.d.ts",
+      "dev-source": "./src/errors.ts",
       "default": "./dist/errors.js"
     },
     "./telemetry": {
-      "dev-source": "./src/telemetry/index.ts",
       "types": "./dist/telemetry/index.d.ts",
+      "dev-source": "./src/telemetry/index.ts",
       "default": "./dist/telemetry/index.js"
     }
   },
-  "files": [
-    "dist",
-    "src",
-    "migrations"
-  ],
   "scripts": {
     "build": "tsc --project tsconfig.node.json",
     "dev": "tsc --watch --project tsconfig.node.json",
@@ -74,15 +75,6 @@
     "test": "bun test --concurrent",
     "generate:postgres": "bunx --bun drizzle-kit generate --config ./src/adapters/postgres/drizzle.config.ts",
     "typecheck": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "@electric-sql/pglite": "^0.3.14",
-    "@types/bun": "latest",
-    "@types/node": "^24.0.15",
-    "drizzle-kit": "^1.0.0-beta.11-05230d9",
-    "drizzle-orm": "^1.0.0-beta.11-05230d9",
-    "postgres": "^3.4.7",
-    "typescript": "^5.6.3"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
@@ -102,5 +94,13 @@
     "zocker": "^3.0.0",
     "zod": "^4.1.12"
   },
-  "license": "MIT"
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "@types/bun": "latest",
+    "@types/node": "^24.0.15",
+    "drizzle-kit": "^1.0.0-beta.15-859cf75",
+    "drizzle-orm": "^1.0.0-beta.15-859cf75",
+    "postgres": "^3.4.7",
+    "typescript": "^5.6.3"
+  }
 }

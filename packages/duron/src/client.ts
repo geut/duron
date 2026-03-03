@@ -1029,7 +1029,7 @@ export class Client<
                   .def as unknown as { value: number; inclusive: boolean }
                 const lessThan = schema.def.checks?.find((check) => check._zod.def.check === 'less_than')?._zod
                   .def as unknown as { value: number; inclusive: boolean }
-      
+
                 if (greaterThan && lessThan) {
                   const min = greaterThan.inclusive ? greaterThan.value : greaterThan.value + 1
                   // For inclusive lessThan, we want to include the value, so max should be value + 1
@@ -1055,7 +1055,7 @@ export class Client<
                   return Math.floor(Math.random() * max)
                 }
 
-                return Math.floor(Math.random() * 1000) 
+                return Math.floor(Math.random() * 1000)
               })
               .number({
                 extreme_value_chance: 0.01,

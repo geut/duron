@@ -12,6 +12,7 @@ Duron is a modern, type-safe background job processing system built with TypeScr
 
 - **Type-Safe Actions** - Define actions with Zod schemas for input/output validation
 - **Step-Based Execution** - Break down complex workflows into manageable, retryable steps
+- **Nested Steps** - Steps can create child steps with proper parent-child tracking and abort signal propagation
 - **Intelligent Retry Logic** - Configurable exponential backoff with per-action and per-step options
 - **Flexible Sync Patterns** - Pull, push, hybrid, or manual job fetching
 - **Advanced Concurrency Control** - Per-action, per-group, and dynamic concurrency limits
@@ -19,6 +20,7 @@ Duron is a modern, type-safe background job processing system built with TypeScr
 - **Database Adapters** - PostgreSQL (production) and PGLite (development/testing)
 - **REST API Server** - Built-in Elysia-based API with advanced filtering and pagination
 - **Dashboard UI** - Beautiful React dashboard for real-time job monitoring
+- **Telemetry & Observability** - Built-in support for metrics, tracing, and custom observability with pluggable adapters
 
 ## Runtime Environment
 
@@ -85,6 +87,10 @@ The main library providing:
 - **Adapters**:
   - `duron/adapters/postgres` - PostgreSQL adapter for production
   - `duron/adapters/pglite` - PGLite adapter for development/testing
+- **Telemetry** - Configured via `telemetry` option on client:
+  - `telemetry: { local: true }` - Store spans in the database
+  - `telemetry: { traceExporter }` - Export to OpenTelemetry backends
+  - No config = telemetry disabled (default)
 
 **Key Dependencies:**
 - `zod` - Schema validation
@@ -93,6 +99,7 @@ The main library providing:
 - `pino` - Logging
 - `fastq` - Queue implementation
 - `jose` - JWT handling
+- `@opentelemetry/api` - OpenTelemetry integration (optional)
 
 ### `duron-dashboard` (React Dashboard)
 
@@ -198,6 +205,49 @@ const sendEmail = defineAction<typeof variables>()({
 })
 ```
 
+### Nested Steps
+
+Steps can create child steps using the `step()` method available in the step handler context. Child steps share abort signals with their parent and are tracked with `parentStepId` in the database.
+
+```typescript
+const processOrder = defineAction<typeof variables>()({
+  name: 'process-order',
+  input: z.object({ orderId: z.string() }),
+  output: z.object({ success: z.boolean() }),
+  handler: async (ctx) => {
+    const result = await ctx.step('process', async ({ step, signal, stepId }) => {
+      // stepId is available for the current step
+      console.log('Processing step:', stepId)
+
+      // Create child steps - they inherit the parent's abort signal
+      const validation = await step('validate', async ({ parentStepId }) => {
+        // parentStepId links back to the 'process' step
+        return { valid: true }
+      })
+
+      // Child steps can also be nested further
+      const payment = await step('charge', async ({ step: nestedStep }) => {
+        const auth = await nestedStep('authorize', async () => {
+          return { authCode: '123' }
+        })
+        return { charged: true, authCode: auth.authCode }
+      })
+
+      return { success: validation.valid && payment.charged }
+    })
+
+    return result
+  },
+})
+```
+
+**Important:** All child steps MUST be awaited before the parent step returns. If a parent step completes with unawaited children, Duron will:
+1. Abort all pending child steps
+2. Wait for them to settle
+3. Throw an `UnhandledChildStepsError`
+
+This prevents orphaned processes and ensures proper async patterns.
+
 ### Creating a Client
 
 ```typescript
@@ -227,6 +277,75 @@ const jobId = await client.runAction('send-email', {
 // Wait for completion
 const job = await client.waitForJob(jobId)
 ```
+
+### Telemetry & Observability
+
+Duron provides built-in OpenTelemetry support for tracing:
+
+```typescript
+import { duron } from 'duron'
+import { postgresAdapter } from 'duron/adapters/postgres'
+
+const client = duron({
+  database: postgresAdapter({
+    connection: process.env.DATABASE_URL,
+  }),
+  // Enable local telemetry - stores spans in the database
+  telemetry: { local: true },
+  actions: { sendEmail },
+})
+```
+
+**Telemetry Configuration Options:**
+
+- `local: true | { flushDelayMs?: number }` - Store spans in the Duron database
+- `traceExporter: SpanExporter` - Export to OpenTelemetry-compatible backends (Jaeger, OTLP, etc.)
+- `spanProcessors: SpanProcessor[]` - Add custom span processors
+- `serviceName: string` - Service name for OpenTelemetry resource (default: `'duron'`)
+
+**Recording Custom Metrics:**
+
+The `telemetry` context is available in action and step handlers for recording custom metrics:
+
+```typescript
+const processAI = defineAction()({
+  name: 'process-ai',
+  handler: async (ctx) => {
+    const startTime = Date.now()
+
+    // Record job-level metrics
+    ctx.telemetry.recordMetric('ai.request.start', 1)
+    const span = ctx.telemetry.getActiveSpan()
+    span?.setAttribute('model', 'gpt-4')
+    span?.addEvent('processing.started')
+
+    const result = await ctx.step('call-api', async ({ telemetry }) => {
+      const response = await callAI(ctx.input)
+
+      // Record step-level metrics
+      telemetry.recordMetric('ai.tokens.input', response.inputTokens)
+      telemetry.recordMetric('ai.tokens.output', response.outputTokens)
+      telemetry.recordMetric('ai.latency.ms', Date.now() - startTime)
+      telemetry.getActiveSpan()?.addEvent('api.call.complete', { status: 'success' })
+
+      return response
+    })
+
+    return result
+  },
+})
+```
+
+**Accessing Metrics via API:**
+
+When using `telemetry: { local: true }`, spans are stored in the database and accessible via the REST API:
+
+```
+GET /api/jobs/:id/spans
+GET /api/steps/:id/spans
+```
+
+The dashboard also shows metrics when local telemetry is enabled.
 
 ### Creating a Server with Dashboard
 
@@ -340,6 +459,8 @@ Uses Bun's bundler mode with:
 | `packages/duron/src/server.ts` | REST API server |
 | `packages/duron/src/adapters/adapter.ts` | Base adapter class |
 | `packages/duron/src/adapters/postgres/` | PostgreSQL adapter |
+| `packages/duron/src/step-manager.ts` | Step execution and nested step handling |
+| `packages/duron/src/telemetry/` | Telemetry adapters (local, opentelemetry, noop) |
 | `packages/duron-dashboard/src/DuronDashboard.tsx` | Dashboard root |
 | `packages/duron-dashboard/src/views/` | Dashboard pages |
 | `packages/examples/basic/start.ts` | Basic example |
@@ -368,15 +489,22 @@ Uses Bun's bundler mode with:
 ## Error Handling
 
 - Use `NonRetriableError` for errors that should not be retried
+- Use `UnhandledChildStepsError` is thrown when parent steps complete with unawaited children
 - Steps have built-in retry logic with exponential backoff
 - Jobs have timeout/expiration settings
 
 ```typescript
-import { NonRetriableError } from 'duron'
+import { NonRetriableError, UnhandledChildStepsError } from 'duron'
 
+// For errors that should not be retried
 if (!apiKey) {
   throw new NonRetriableError('API key is required')
 }
+
+// UnhandledChildStepsError is thrown automatically when:
+// - A parent step returns before all child steps are awaited
+// - The parent step's callback completes but children are still pending
+// This error is non-retriable and will fail the entire job
 ```
 
 ## Environment Variables
@@ -395,3 +523,5 @@ if (!apiKey) {
 4. Follow existing code patterns
 5. Use TypeScript strict mode
 6. Document public APIs with JSDoc
+
+Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.

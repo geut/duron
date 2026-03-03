@@ -276,7 +276,142 @@ Errors are automatically serialized and stored in the database. The serializatio
 
 - `name` - Error class name
 - `message` - Error message
+- `code` - Error code (for Duron errors)
+- `nonRetriable` - Whether the error prevents retries
+- `metadata` - Context metadata (jobId, stepId, actionName, etc.)
 - `cause` - Underlying cause (if any)
 - `stack` - Stack trace (if available)
 
 This allows you to inspect errors later through the API or dashboard.
+
+## Built-in Error Types
+
+Duron provides several built-in error types for different scenarios. All Duron errors extend the base `DuronError` class.
+
+### UnhandledChildStepsError
+
+Thrown when a parent step completes with unhandled (non-awaited) child steps. This extends `NonRetriableError`.
+
+```ts
+import { UnhandledChildStepsError } from 'duron'
+
+// This error is thrown automatically by Duron when:
+await ctx.step('parent', async ({ step }) => {
+  step('child1', async () => { /* ... */ }) // Not awaited!
+  step('child2', async () => { /* ... */ }) // Not awaited!
+  return { done: true } // Throws UnhandledChildStepsError
+})
+
+// Always await all child steps:
+await ctx.step('parent', async ({ step }) => {
+  await step('child1', async () => { /* ... */ })
+  await step('child2', async () => { /* ... */ })
+  return { done: true }
+})
+```
+
+### StepAlreadyExecutedError
+
+Thrown when attempting to execute a step that has already been executed (same step name within the same job).
+
+```ts
+// This error is thrown automatically when you try to run the same step twice
+await ctx.step('fetchUser', async () => { /* ... */ })
+await ctx.step('fetchUser', async () => { /* ... */ }) // Throws StepAlreadyExecutedError
+```
+
+### ActionTimeoutError
+
+Thrown when an action exceeds its configured timeout. This is a non-retriable error.
+
+```ts
+const myAction = defineAction()({
+  name: 'myAction',
+  expire: 5000, // 5 second timeout
+  handler: async (ctx) => {
+    // If this takes longer than 5 seconds, ActionTimeoutError is thrown
+    await ctx.step('slowOperation', async () => {
+      await sleep(10000) // Will timeout
+    })
+  },
+})
+```
+
+### StepTimeoutError
+
+Thrown when a step exceeds its configured timeout. Unlike `ActionTimeoutError`, this error is retriable by default.
+
+```ts
+await ctx.step('fetchData', async () => {
+  // If this takes too long, StepTimeoutError is thrown
+  await fetch(url)
+}, {
+  expire: 5000, // 5 second timeout for this step
+})
+```
+
+### ActionCancelError
+
+Thrown when an action is cancelled (e.g., via `client.cancelJob()`). This is a non-retriable error.
+
+```ts
+// When you cancel a job, the action receives this error
+await client.cancelJob(jobId)
+```
+
+## Error Utility Functions
+
+Duron exports utility functions for checking error types without using `instanceof`:
+
+```ts
+import {
+  isDuronError,
+  isNonRetriableError,
+  isUnhandledChildStepsError,
+  isTimeoutError,
+  isCancelError,
+  serializeError,
+} from 'duron/errors'
+
+try {
+  await ctx.step('operation', async () => { /* ... */ })
+} catch (error) {
+  if (isDuronError(error)) {
+    console.log('Duron error code:', error.code)
+    console.log('Metadata:', error.metadata)
+  }
+
+  if (isNonRetriableError(error)) {
+    // Error will not be retried
+  }
+
+  if (isTimeoutError(error)) {
+    // ActionTimeoutError or StepTimeoutError
+  }
+
+  if (isCancelError(error)) {
+    // ActionCancelError
+  }
+
+  if (isUnhandledChildStepsError(error)) {
+    console.log('Pending child steps:', error.pendingCount)
+  }
+
+  // Serialize error for storage or logging
+  const serialized = serializeError(error)
+}
+```
+
+### Error Codes
+
+Each Duron error has a `code` property for identification:
+
+| Error Type | Code |
+|------------|------|
+| `DuronError` (base) | `DURON_ERROR` |
+| `StepAlreadyExecutedError` | `STEP_ALREADY_EXECUTED` |
+| `NonRetriableError` | `NON_RETRIABLE` |
+| `ActionTimeoutError` | `ACTION_TIMEOUT` |
+| `StepTimeoutError` | `STEP_TIMEOUT` |
+| `ActionCancelError` | `ACTION_CANCEL` |
+| `UnhandledChildStepsError` | `UNHANDLED_CHILD_STEPS` |

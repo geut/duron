@@ -1,8 +1,9 @@
+import { context, type Span, SpanKind, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api'
 import type { Logger } from 'pino'
 
 import type { Action } from './action.js'
 import type { Adapter } from './adapters/adapter.js'
-import { ActionCancelError, ActionTimeoutError, isCancelError, StepTimeoutError, serializeError } from './errors.js'
+import { ActionCancelError, ActionTimeoutError, isCancelError, isTimeoutError, serializeError } from './errors.js'
 import { StepManager } from './step-manager.js'
 import waitForAbort from './utils/wait-for-abort.js'
 
@@ -10,6 +11,7 @@ export interface ActionJobOptions<TAction extends Action<any, any, any>> {
   job: { id: string; input: any; groupKey: string; timeoutMs: number; actionName: string }
   action: TAction
   database: Adapter
+  tracer: Tracer
   variables: Record<string, unknown>
   logger: Logger
 }
@@ -24,6 +26,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
   #job: { id: string; input: any; groupKey: string; timeoutMs: number; actionName: string }
   #action: TAction
   #database: Adapter
+  #tracer: Tracer
   #variables: Record<string, unknown>
   #logger: Logger
   #stepManager: StepManager
@@ -31,6 +34,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
   #timeoutId: NodeJS.Timeout | null = null
   #done: Promise<void>
   #resolve: (() => void) | null = null
+  #jobSpan!: Span
 
   // ============================================================================
   // Constructor
@@ -45,6 +49,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
     this.#job = options.job
     this.#action = options.action
     this.#database = options.database
+    this.#tracer = options.tracer
     this.#variables = options.variables
     this.#logger = options.logger
     this.#abortController = new AbortController()
@@ -54,8 +59,9 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       jobId: options.job.id,
       actionName: options.job.actionName,
       adapter: options.database,
+      tracer: options.tracer,
       logger: options.logger,
-      concurrencyLimit: options.action.concurrency,
+      concurrencyLimit: options.action.steps.concurrency,
     })
 
     this.#done = new Promise((resolve) => {
@@ -78,6 +84,19 @@ export class ActionJob<TAction extends Action<any, any, any>> {
    * @throws Error if the job fails or output validation fails
    */
   async execute() {
+    // Start job span - uses no-op tracer if no SDK is configured
+    this.#jobSpan = this.#tracer.startSpan(`job:${this.#action.name}`, {
+      kind: SpanKind.INTERNAL,
+      attributes: {
+        'duron.job.id': this.#job.id,
+        'duron.action.name': this.#action.name,
+        'duron.group.key': this.#job.groupKey,
+      },
+    })
+
+    // Set the job span on the step manager
+    this.#stepManager.setJobSpan(this.#jobSpan)
+
     try {
       // Create a child logger for this job
       const jobLogger = this.#logger.child({
@@ -95,7 +114,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       )
 
       this.#timeoutId = setTimeout(() => {
-        const timeoutError = new ActionTimeoutError(this.#action.name, this.#job.timeoutMs)
+        const timeoutError = new ActionTimeoutError(this.#action.name, this.#job.id, this.#job.timeoutMs)
         this.#abortController.abort(timeoutError)
       }, this.#job.timeoutMs)
 
@@ -104,9 +123,13 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       // Execute handler with timeout - race between handler and abort signal
       const abortWaiter = waitForAbort(this.#abortController.signal)
       let result: any = null
+
+      // Execute handler within the job span context so that child spans inherit the trace
+      const spanContext = trace.setSpan(context.active(), this.#jobSpan)
+
       await Promise.race([
-        this.#action
-          .handler(ctx)
+        context
+          .with(spanContext, () => this.#action.handler(ctx))
           .then((res) => {
             if (res !== undefined) {
               result = res
@@ -138,26 +161,49 @@ export class ActionJob<TAction extends Action<any, any, any>> {
         '[ActionJob] Action finished executing',
       )
 
+      // End job span successfully
+      this.#jobSpan.setStatus({ code: SpanStatusCode.OK })
+      this.#jobSpan.end()
+
       return result
     } catch (error) {
+      // Abort all running steps when an error occurs
+      // This ensures cascading failure and stops any steps still running
+      if (!this.#abortController.signal.aborted) {
+        this.#abortController.abort(error)
+      }
+
+      // Wait for step manager to drain (all steps to settle)
+      await this.#stepManager.drain()
+
       if (
         isCancelError(error) ||
         (error instanceof Error && error.name === 'AbortError' && isCancelError(error.cause))
       ) {
         this.#logger.warn({ jobId: this.#job.id, actionName: this.#action.name }, '[ActionJob] Job cancelled')
         await this.#database.cancelJob({ jobId: this.#job.id })
+
+        // End job span as cancelled
+        this.#jobSpan.setStatus({ code: SpanStatusCode.ERROR, message: 'Job cancelled' })
+        this.#jobSpan.end()
         return
       }
 
-      const message =
-        error instanceof ActionTimeoutError
-          ? '[ActionJob] Job timed out'
-          : error instanceof StepTimeoutError
-            ? '[ActionJob] Step timed out'
-            : '[ActionJob] Job failed'
+      const message = isTimeoutError(error) ? '[ActionJob] Job timed out' : '[ActionJob] Job failed'
 
       this.#logger.error({ jobId: this.#job.id, actionName: this.#action.name }, message)
       await this.#database.failJob({ jobId: this.#job.id, error: serializeError(error) })
+
+      // End job span with error
+      this.#jobSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      if (error instanceof Error) {
+        this.#jobSpan.recordException(error)
+      }
+      this.#jobSpan.end()
+
       throw error
     } finally {
       this.#clear()

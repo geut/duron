@@ -1,21 +1,21 @@
 'use client'
 
 import type { Column, ColumnDef, OnChangeFn, RowSelectionState } from '@tanstack/react-table'
-import { Ban, CheckCircle2, ChevronDownIcon, ChevronRightIcon, Clock, XCircle } from 'lucide-react'
+import { Ban, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { useCallback, useMemo } from 'react'
 
 import { DataTable } from '@/components/data-table/data-table'
 import { DataTableColumnHeader } from '@/components/data-table/data-table-column-header'
 import { DataTableSortList } from '@/components/data-table/data-table-sort-list'
 import { DataTableToolbar } from '@/components/data-table/data-table-toolbar'
-import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useLayout } from '@/contexts/layout-context'
 import { useDataTable } from '@/hooks/use-data-table'
 import { useJobParams } from '@/hooks/use-job-params'
 import { useJobsPolling } from '@/hooks/use-jobs-polling'
 import type { ActionStats, Job, JobStatus } from '@/lib/api'
 import { useActions, useJobs } from '@/lib/api'
+import { formatExpirationWindow, formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { isExpiring } from '../lib/is-expiring'
@@ -27,6 +27,9 @@ interface JobsTableProps {
 
 export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
   const pageSize = 10
+
+  // Get column visibility and sizing from layout context
+  const { config, setJobsTableColumnVisibility, setJobsTableColumnSizing } = useLayout()
 
   // Enable polling for job updates
   useJobsPolling(true)
@@ -43,18 +46,6 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
 
   const columns = useMemo<ColumnDef<Job>[]>(
     () => [
-      {
-        id: 'select',
-        cell: ({ row }) => (
-          // show a chevron right icon if the row is selected and a chevron down icon if the row is not selected
-          <Button variant="ghost" size="icon" onClick={() => row.toggleSelected(!row.getIsSelected())}>
-            {row.getIsSelected() ? <ChevronRightIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
-          </Button>
-        ),
-        size: 32,
-        enableSorting: false,
-        enableHiding: false,
-      },
       {
         id: 'ID',
         accessorKey: 'id',
@@ -92,6 +83,35 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         enableColumnFilter: true,
       },
       {
+        id: 'description',
+        accessorKey: 'description',
+        header: ({ column }: { column: Column<Job, unknown> }) => (
+          <DataTableColumnHeader column={column} label="Description" />
+        ),
+        cell: ({ cell }) => {
+          const desc = cell.getValue<string | null>()
+          if (!desc) return <div className="text-muted-foreground">-</div>
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild={true}>
+                <div className="truncate w-full cursor-help">{desc}</div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[400px]">
+                <p className="whitespace-pre-wrap">{desc}</p>
+              </TooltipContent>
+            </Tooltip>
+          )
+        },
+        size: 200,
+        meta: {
+          label: 'Description',
+          placeholder: 'Search description...',
+          variant: 'text',
+        },
+        enableColumnFilter: true,
+        enableSorting: true,
+      },
+      {
         id: 'status',
         accessorKey: 'status',
         header: ({ column }: { column: Column<Job, unknown> }) => (
@@ -113,23 +133,6 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
           ],
         },
         size: 64,
-        enableColumnFilter: true,
-      },
-      {
-        id: 'createdAt',
-        accessorKey: 'createdAt',
-        header: ({ column }: { column: Column<Job, unknown> }) => (
-          <DataTableColumnHeader column={column} label="Created" />
-        ),
-        cell: ({ cell }) => {
-          const dateStr = cell.getValue<string>()
-          return <div>{formatDate(dateStr)}</div>
-        },
-        size: 64,
-        meta: {
-          label: 'Created',
-          variant: 'dateRange',
-        },
         enableColumnFilter: true,
       },
       {
@@ -167,6 +170,34 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         enableColumnFilter: true,
       },
       {
+        id: 'duration',
+        accessorKey: 'durationMs',
+        header: ({ column }: { column: Column<Job, unknown> }) => (
+          <DataTableColumnHeader column={column} label="Duration" />
+        ),
+        cell: ({ row }) => {
+          const { durationMs, startedAt, status } = row.original
+          // Only show duration if the job has started
+          if (!startedAt) {
+            return <div>-</div>
+          }
+
+          // For active jobs (no durationMs yet), show "running" indicator
+          if (durationMs === null) {
+            return (
+              <div className="font-mono">
+                {status === 'active' && <span className="text-muted-foreground">(running)</span>}
+              </div>
+            )
+          }
+
+          return <div className="font-mono">{formatMs(durationMs)}</div>
+        },
+        size: 80,
+        enableColumnFilter: false,
+        enableSorting: true,
+      },
+      {
         id: 'Expires At',
         accessorKey: 'expiresAt',
         header: ({ column }: { column: Column<Job, unknown> }) => (
@@ -188,11 +219,11 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
                   : ''
               }
             >
-              {formatDate(dateStr)}
+              {formatDate(dateStr)} {formatExpirationWindow(row.original.startedAt, dateStr)}
             </div>
           )
         },
-        size: 64,
+        size: 120,
         enableColumnFilter: false,
       },
       {
@@ -203,10 +234,27 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         ),
         cell: ({ cell }) => {
           const clientId = cell.getValue<string | null | undefined>()
-          return <div className="font-mono text-xs">{clientId || '-'}</div>
+          return <div>{clientId || '-'}</div>
         },
         size: 64,
         enableColumnFilter: false,
+      },
+      {
+        id: 'createdAt',
+        accessorKey: 'createdAt',
+        header: ({ column }: { column: Column<Job, unknown> }) => (
+          <DataTableColumnHeader column={column} label="Created" />
+        ),
+        cell: ({ cell }) => {
+          const dateStr = cell.getValue<string>()
+          return <div>{formatDate(dateStr)}</div>
+        },
+        size: 64,
+        meta: {
+          label: 'Created',
+          variant: 'dateRange',
+        },
+        enableColumnFilter: true,
       },
     ],
     [actionNameOptions],
@@ -237,8 +285,10 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
         pageSize: params.pageSize,
       },
       sorting: sort,
-      columnVisibility: {
-        clientId: false,
+      columnVisibility: config.jobsTable.columnVisibility,
+      columnSizing: config.jobsTable.columnSizing,
+      columnPinning: {
+        right: ['select'],
       },
     },
     state: {
@@ -246,19 +296,24 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
     },
     getRowId: (row) => row.id,
     onRowSelectionChange: handleRowSelectionChange,
+    onColumnVisibilityChange: setJobsTableColumnVisibility,
+    onColumnSizingChange: setJobsTableColumnSizing,
   })
 
   return (
     <div className="h-full flex flex-col">
-      <ScrollArea className="h-full w-full [&_[data-radix-scroll-area-viewport]>:first-child]:block!">
-        <div className="flex-1 p-4">
-          <DataTable table={table}>
-            <DataTableToolbar table={table}>
-              <DataTableSortList table={table} />
-            </DataTableToolbar>
-          </DataTable>
-        </div>
-      </ScrollArea>
+      {/* Header with title and toolbar */}
+      <div className="px-4 min-h-12 border-b shrink-0 flex items-center justify-between gap-2">
+        <h2 className="font-medium shrink-0">Jobs</h2>
+        <DataTableToolbar table={table} className="flex-1 justify-end">
+          <DataTableSortList table={table} />
+        </DataTableToolbar>
+      </div>
+
+      {/* Table content */}
+      <div className="flex-1 overflow-hidden">
+        <DataTable table={table} fillHeight={true} />
+      </div>
     </div>
   )
 }

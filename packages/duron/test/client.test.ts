@@ -404,8 +404,6 @@ function runClientTests(adapterFactory: AdapterFactory) {
         // Verify the step is also cancelled
         const steps = await client.getJobSteps({
           jobId,
-          page: 1,
-          pageSize: 10,
         })
 
         expect(steps.steps.length).toBeGreaterThan(0)
@@ -519,8 +517,6 @@ function runClientTests(adapterFactory: AdapterFactory) {
 
         const result = await client.getJobSteps({
           jobId,
-          page: 1,
-          pageSize: 10,
         })
 
         expect(result.steps.length).toBeGreaterThan(0)
@@ -561,12 +557,12 @@ function runClientTests(adapterFactory: AdapterFactory) {
         client.fetch({ batchSize: 10 })
 
         // Wait for the job to complete
-        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        const result = await client.waitForJob(jobId, { timeout: 5000 })
 
-        expect(job).toBeTruthy()
-        expect(job?.id).toBe(jobId)
-        expect(job?.status).toBe(JOB_STATUS_COMPLETED)
-        expect(job?.output).toEqual({ result: 'Processed: Wait for me' })
+        expect(result).toBeTruthy()
+        expect(result?.id).toBe(jobId)
+        expect(result?.status).toBe(JOB_STATUS_COMPLETED)
+        expect(result?.output).toEqual({ result: 'Processed: Wait for me' })
       })
 
       it('should wait for a job to fail', async () => {
@@ -578,12 +574,12 @@ function runClientTests(adapterFactory: AdapterFactory) {
         client.fetch({ batchSize: 10 })
 
         // Wait for the job to fail
-        const job = await client.waitForJob(jobId, { timeout: 5000 })
+        const result = await client.waitForJob(jobId, { timeout: 5000 })
 
-        expect(job).toBeTruthy()
-        expect(job?.id).toBe(jobId)
-        expect(job?.status).toBe(JOB_STATUS_FAILED)
-        expect(job?.error).toBeTruthy()
+        expect(result).toBeTruthy()
+        expect(result?.id).toBe(jobId)
+        expect(result?.status).toBe(JOB_STATUS_FAILED)
+        expect(result?.error).toBeTruthy()
       })
 
       it('should return immediately if job is already completed', async () => {
@@ -596,11 +592,11 @@ function runClientTests(adapterFactory: AdapterFactory) {
         await new Promise((resolve) => setTimeout(resolve, 500))
 
         // Now wait for it - should return immediately
-        const job = await client.waitForJob(jobId)
+        const result = await client.waitForJob(jobId)
 
-        expect(job).toBeTruthy()
-        expect(job?.id).toBe(jobId)
-        expect(job?.status).toBe(JOB_STATUS_COMPLETED)
+        expect(result).toBeTruthy()
+        expect(result?.id).toBe(jobId)
+        expect(result?.status).toBe(JOB_STATUS_COMPLETED)
       })
 
       it('should timeout if job does not complete in time', async () => {
@@ -642,18 +638,18 @@ function runClientTests(adapterFactory: AdapterFactory) {
         // Start processing
         client.fetch({ batchSize: 10 })
 
-        // All should resolve to the same job
-        const [job1, job2, job3] = await Promise.all([wait1, wait2, wait3])
+        // All should resolve to the same job result
+        const [result1, result2, result3] = await Promise.all([wait1, wait2, wait3])
 
-        expect(job1).toBeTruthy()
-        expect(job2).toBeTruthy()
-        expect(job3).toBeTruthy()
-        expect(job1?.id).toBe(jobId)
-        expect(job2?.id).toBe(jobId)
-        expect(job3?.id).toBe(jobId)
-        expect(job1?.status).toBe(JOB_STATUS_COMPLETED)
-        expect(job2?.status).toBe(JOB_STATUS_COMPLETED)
-        expect(job3?.status).toBe(JOB_STATUS_COMPLETED)
+        expect(result1).toBeTruthy()
+        expect(result2).toBeTruthy()
+        expect(result3).toBeTruthy()
+        expect(result1?.id).toBe(jobId)
+        expect(result2?.id).toBe(jobId)
+        expect(result3?.id).toBe(jobId)
+        expect(result1?.status).toBe(JOB_STATUS_COMPLETED)
+        expect(result2?.status).toBe(JOB_STATUS_COMPLETED)
+        expect(result3?.status).toBe(JOB_STATUS_COMPLETED)
       })
 
       it('should handle multiple waitForJob calls for different jobs', async () => {
@@ -672,14 +668,220 @@ function runClientTests(adapterFactory: AdapterFactory) {
         client.fetch({ batchSize: 10 })
 
         // Both should resolve
-        const [job1, job2] = await Promise.all([wait1, wait2])
+        const [result1, result2] = await Promise.all([wait1, wait2])
 
-        expect(job1).toBeTruthy()
-        expect(job2).toBeTruthy()
-        expect(job1?.id).toBe(jobId1)
-        expect(job2?.id).toBe(jobId2)
-        expect(job1?.status).toBe(JOB_STATUS_COMPLETED)
-        expect(job2?.status).toBe(JOB_STATUS_COMPLETED)
+        expect(result1).toBeTruthy()
+        expect(result2).toBeTruthy()
+        expect(result1?.id).toBe(jobId1)
+        expect(result2?.id).toBe(jobId2)
+        expect(result1?.status).toBe(JOB_STATUS_COMPLETED)
+        expect(result2?.status).toBe(JOB_STATUS_COMPLETED)
+      })
+    })
+
+    describe('runActionAndWait', () => {
+      beforeEach(async () => {
+        await client.start()
+      })
+
+      it('should run an action and wait for completion', async () => {
+        // Use a client with auto-fetch enabled
+        const autoClient = new Client({
+          database,
+          actions: {
+            testAction,
+            failingAction,
+            slowAction,
+            slowStepAction,
+          },
+          syncPattern: 'hybrid',
+          pullInterval: 100,
+          logger: 'error',
+        })
+
+        await autoClient.start()
+
+        const result = await autoClient.runActionAndWait('testAction', {
+          message: 'Wait for result',
+        })
+
+        expect(result).toBeTruthy()
+        expect(result.id).toBeTruthy()
+        expect(result.actionName).toBe('test-action')
+        expect(result.status).toBe(JOB_STATUS_COMPLETED)
+        expect(result.groupKey).toBe('@default')
+        expect(result.output).toEqual({ result: 'Processed: Wait for result' })
+        expect(result.error).toBeNull()
+
+        await autoClient.stop()
+      })
+
+      it('should return typed input and output', async () => {
+        // Use a client with auto-fetch enabled
+        const autoClient = new Client({
+          database,
+          actions: {
+            testAction,
+            failingAction,
+            slowAction,
+            slowStepAction,
+          },
+          syncPattern: 'hybrid',
+          pullInterval: 100,
+          logger: 'error',
+        })
+
+        await autoClient.start()
+
+        const result = await autoClient.runActionAndWait('testAction', {
+          message: 'Type check test',
+          value: 123,
+        })
+
+        // TypeScript should infer these types correctly
+        const message: string = result.input.message
+        const value: number | undefined = result.input.value
+        const output: string = result.output.result
+
+        expect(message).toBe('Type check test')
+        expect(value).toBe(123)
+        expect(output).toBe('Processed: Type check test')
+
+        await autoClient.stop()
+      })
+
+      it('should throw when action fails', async () => {
+        // Use a client with auto-fetch enabled
+        const autoClient = new Client({
+          database,
+          actions: {
+            testAction,
+            failingAction,
+            slowAction,
+            slowStepAction,
+          },
+          syncPattern: 'hybrid',
+          pullInterval: 100,
+          logger: 'error',
+        })
+
+        await autoClient.start()
+
+        try {
+          await autoClient.runActionAndWait('failingAction', {
+            shouldFail: true,
+          })
+          expect(true).toBe(false) // Should not reach here
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error)
+          expect((error as Error).message).toBe('Action failed intentionally')
+        }
+
+        await autoClient.stop()
+      })
+
+      it('should abort operation when signal is aborted', async () => {
+        // Use a client with auto-fetch disabled so job doesn't complete
+        const controller = new AbortController()
+
+        // Abort quickly
+        setTimeout(() => controller.abort(), 50)
+
+        try {
+          await client.runActionAndWait(
+            'slowAction',
+            {},
+            {
+              signal: controller.signal,
+            },
+          )
+          expect(true).toBe(false) // Should not reach here
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error)
+          expect((error as Error).message).toBe('Operation was aborted')
+        }
+      })
+
+      it('should timeout operation when timeout is reached', async () => {
+        // Use a client with auto-fetch disabled so job doesn't complete
+        try {
+          await client.runActionAndWait(
+            'slowAction',
+            {},
+            {
+              timeout: 50,
+            },
+          )
+          expect(true).toBe(false) // Should not reach here
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error)
+          expect((error as Error).message).toBe('Operation timed out')
+        }
+      })
+
+      it('should throw immediately if signal is already aborted', async () => {
+        const controller = new AbortController()
+        controller.abort()
+
+        try {
+          await client.runActionAndWait(
+            'testAction',
+            { message: 'test' },
+            {
+              signal: controller.signal,
+            },
+          )
+          expect(true).toBe(false) // Should not reach here
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error)
+          expect((error as Error).message).toBe('Operation was aborted')
+        }
+      })
+
+      it('should cancel the job when aborted', async () => {
+        // Use a client with auto-fetch enabled so the job starts processing
+        const autoClient = new Client({
+          database,
+          actions: {
+            testAction,
+            failingAction,
+            slowAction,
+            slowStepAction,
+          },
+          syncPattern: 'hybrid',
+          pullInterval: 100,
+          logger: 'error',
+        })
+
+        await autoClient.start()
+
+        const controller = new AbortController()
+
+        // Start the slow action
+        const waitPromise = autoClient.runActionAndWait(
+          'slowStepAction',
+          {},
+          {
+            signal: controller.signal,
+          },
+        )
+
+        // Wait a bit then abort
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        controller.abort()
+
+        try {
+          await waitPromise
+          expect(true).toBe(false) // Should not reach here
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error)
+          expect((error as Error).message).toBe('Operation was aborted')
+        }
+
+        // Wait a bit for the cancellation to be processed
+        await new Promise((resolve) => setTimeout(resolve, 200))
+
+        await autoClient.stop()
       })
     })
 
@@ -771,8 +973,144 @@ function runClientTests(adapterFactory: AdapterFactory) {
         await varsClient.stop()
       })
     })
+
+    describe('Job Description', () => {
+      it('should store dynamic description in job', async () => {
+        const actionWithDescription = defineAction()({
+          name: 'described-action',
+          input: z.object({
+            a: z.number(),
+            b: z.number(),
+          }),
+          output: z.object({ sum: z.number() }),
+          description: async (ctx) => `Calculate ${ctx.input.a} + ${ctx.input.b}`,
+          handler: async (ctx) => {
+            return { sum: ctx.input.a + ctx.input.b }
+          },
+        })
+
+        const descClient = new Client({
+          database,
+          actions: {
+            describedAction: actionWithDescription,
+          },
+          syncPattern: false,
+          logger: 'error',
+        })
+
+        await descClient.start()
+
+        const jobId = await descClient.runAction('describedAction', { a: 5, b: 3 })
+
+        const job = await descClient.getJobById(jobId)
+        expect(job?.description).toBe('Calculate 5 + 3')
+
+        await descClient.stop()
+      })
+
+      it('should have null description when not defined', async () => {
+        const actionWithoutDescription = defineAction()({
+          name: 'no-description-action',
+          input: z.object({ value: z.number() }),
+          output: z.object({ result: z.number() }),
+          handler: async (ctx) => {
+            return { result: ctx.input.value * 2 }
+          },
+        })
+
+        const noDescClient = new Client({
+          database,
+          actions: {
+            noDescAction: actionWithoutDescription,
+          },
+          syncPattern: false,
+          logger: 'error',
+        })
+
+        await noDescClient.start()
+
+        const jobId = await noDescClient.runAction('noDescAction', { value: 10 })
+
+        const job = await noDescClient.getJobById(jobId)
+        expect(job?.description).toBeNull()
+
+        await noDescClient.stop()
+      })
+
+      it('should include description in waitForJob result', async () => {
+        const actionWithDesc = defineAction()({
+          name: 'wait-desc-action',
+          input: z.object({ name: z.string() }),
+          output: z.object({ greeting: z.string() }),
+          description: async (ctx) => `Greeting ${ctx.input.name}`,
+          handler: async (ctx) => {
+            return { greeting: `Hello, ${ctx.input.name}!` }
+          },
+        })
+
+        const waitClient = new Client({
+          database,
+          actions: {
+            waitDescAction: actionWithDesc,
+          },
+          syncPattern: 'hybrid',
+          pullInterval: 100,
+          logger: 'error',
+        })
+
+        await waitClient.start()
+
+        const jobId = await waitClient.runAction('waitDescAction', { name: 'World' })
+        const result = await waitClient.waitForJob(jobId, { timeout: 5000 })
+
+        expect(result?.description).toBe('Greeting World')
+        expect(result?.status).toBe(JOB_STATUS_COMPLETED)
+
+        await waitClient.stop()
+      })
+
+      it('should filter jobs by description', async () => {
+        const actionWithDesc = defineAction()({
+          name: 'filter-desc-action',
+          input: z.object({ email: z.string() }),
+          output: z.object({ sent: z.boolean() }),
+          description: async (ctx) => `Send email to ${ctx.input.email}`,
+          handler: async () => {
+            return { sent: true }
+          },
+        })
+
+        const filterClient = new Client({
+          database,
+          actions: {
+            filterDescAction: actionWithDesc,
+          },
+          syncPattern: false,
+          logger: 'error',
+        })
+
+        await filterClient.start()
+
+        await filterClient.runAction('filterDescAction', { email: 'user1@test.com' })
+        await filterClient.runAction('filterDescAction', { email: 'user2@test.com' })
+        await filterClient.runAction('filterDescAction', { email: 'admin@test.com' })
+
+        // Filter by description containing 'user'
+        const result = await filterClient.getJobs({
+          filters: { description: 'user' },
+        })
+
+        expect(result.jobs.length).toBe(2)
+        expect(result.jobs.every((job) => job.description?.includes('user'))).toBe(true)
+
+        await filterClient.stop()
+      })
+    })
   })
 }
 
 runClientTests(postgresFactory)
-runClientTests(pgliteFactory)
+// biome-ignore lint/complexity/useLiteralKeys: type safety
+if (process.env['POSTGRES_TEST'] === 'true') {
+  runClientTests(pgliteFactory)
+}

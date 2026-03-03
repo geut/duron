@@ -24,6 +24,7 @@ import type {
   DelayJobStepOptions,
   DeleteJobOptions,
   DeleteJobsOptions,
+  DeleteSpansOptions,
   FailJobOptions,
   FailJobStepOptions,
   FetchOptions,
@@ -32,12 +33,16 @@ import type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
+  GetSpansOptions,
+  GetSpansResult,
+  InsertSpanOptions,
   Job,
   JobStatusResult,
   JobStep,
   JobStepStatusResult,
   RecoverJobsOptions,
   RetryJobOptions,
+  TimeTravelJobOptions,
 } from './schemas.js'
 import {
   BooleanResultSchema,
@@ -51,6 +56,7 @@ import {
   DelayJobStepOptionsSchema,
   DeleteJobOptionsSchema,
   DeleteJobsOptionsSchema,
+  DeleteSpansOptionsSchema,
   FailJobOptionsSchema,
   FailJobStepOptionsSchema,
   FetchOptionsSchema,
@@ -59,6 +65,9 @@ import {
   GetJobStepsResultSchema,
   GetJobsOptionsSchema,
   GetJobsResultSchema,
+  GetSpansOptionsSchema,
+  GetSpansResultSchema,
+  InsertSpanOptionsSchema,
   JobIdResultSchema,
   JobSchema,
   JobStatusResultSchema,
@@ -68,6 +77,7 @@ import {
   NumberResultSchema,
   RecoverJobsOptionsSchema,
   RetryJobOptionsSchema,
+  TimeTravelJobOptionsSchema,
 } from './schemas.js'
 
 // Re-export types from schemas for backward compatibility
@@ -83,6 +93,7 @@ export type {
   DelayJobStepOptions,
   DeleteJobOptions,
   DeleteJobsOptions,
+  DeleteSpansOptions,
   FailJobOptions,
   FailJobStepOptions,
   FetchOptions,
@@ -91,6 +102,9 @@ export type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
+  GetSpansOptions,
+  GetSpansResult,
+  InsertSpanOptions,
   Job,
   JobFilters,
   JobSort,
@@ -101,6 +115,14 @@ export type {
   RecoverJobsOptions,
   RetryJobOptions,
   SortOrder,
+  Span,
+  SpanEvent,
+  SpanFilters,
+  SpanKind,
+  SpanSort,
+  SpanSortField,
+  SpanStatusCode,
+  TimeTravelJobOptions,
 } from './schemas.js'
 
 // ============================================================================
@@ -401,6 +423,30 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
   }
 
   /**
+   * Time travel a job to restart from a specific step.
+   * The job must be in completed, failed, or cancelled status.
+   * Resets the job and ancestor steps to active status, deletes subsequent steps,
+   * and preserves completed parallel siblings.
+   *
+   * @returns Promise resolving to `true` if time travel succeeded, `false` otherwise
+   */
+  async timeTravelJob(options: TimeTravelJobOptions): Promise<boolean> {
+    try {
+      await this.start()
+      const parsedOptions = TimeTravelJobOptionsSchema.parse(options)
+      const result = await this._timeTravelJob(parsedOptions)
+      const success = BooleanResultSchema.parse(result)
+      if (success) {
+        await this._notify('job-available', { jobId: parsedOptions.jobId })
+      }
+      return success
+    } catch (error) {
+      this.#logger?.error(error, 'Error in Adapter.timeTravelJob()')
+      throw error
+    }
+  }
+
+  /**
    * Delete a job by its ID.
    * Active jobs cannot be deleted.
    *
@@ -658,6 +704,17 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    * @returns Promise resolving to the job ID, or `null` if creation failed
    */
   protected abstract _retryJob(options: RetryJobOptions): Promise<string | null>
+
+  /**
+   * Internal method to time travel a job to restart from a specific step.
+   * The job must be in completed, failed, or cancelled status.
+   * Resets the job and ancestor steps to active status, deletes subsequent steps,
+   * and preserves completed parallel siblings.
+   *
+   * @param options - Validated time travel options
+   * @returns Promise resolving to `true` if time travel succeeded, `false` otherwise
+   */
+  protected abstract _timeTravelJob(options: TimeTravelJobOptions): Promise<boolean>
 
   /**
    * Internal method to delete a job by its ID.
@@ -936,6 +993,100 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    * @returns Promise resolving to action statistics
    */
   protected abstract _getActions(): Promise<GetActionsResult>
+
+  // ============================================================================
+  // Span Methods (OpenTelemetry)
+  // ============================================================================
+
+  /**
+   * Insert multiple span records in a single batch operation.
+   * Used by LocalSpanExporter to store spans from the OpenTelemetry SDK.
+   *
+   * @param spans - Array of span data to insert
+   * @returns Promise resolving to the number of spans inserted
+   */
+  async insertSpans(spans: InsertSpanOptions[]): Promise<number> {
+    try {
+      if (spans.length === 0) {
+        return 0
+      }
+      await this.start()
+      const parsedSpans = spans.map((s) => InsertSpanOptionsSchema.parse(s))
+      const result = await this._insertSpans(parsedSpans)
+      return NumberResultSchema.parse(result)
+    } catch (error) {
+      this.#logger?.error(error, 'Error in Adapter.insertSpans()')
+      throw error
+    }
+  }
+
+  /**
+   * Get spans for a job or step.
+   *
+   * @param options - Query options including jobId/stepId, filters, and sort
+   * @returns Promise resolving to spans result
+   */
+  async getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
+    try {
+      await this.start()
+      const parsedOptions = GetSpansOptionsSchema.parse(options)
+      // Validate that at least one of jobId or stepId is provided
+      if (!parsedOptions.jobId && !parsedOptions.stepId) {
+        throw new Error('At least one of jobId or stepId must be provided')
+      }
+      const result = await this._getSpans(parsedOptions)
+      return GetSpansResultSchema.parse(result)
+    } catch (error) {
+      this.#logger?.error(error, 'Error in Adapter.getSpans()')
+      throw error
+    }
+  }
+
+  /**
+   * Delete all spans for a job.
+   *
+   * @param options - Options containing the jobId
+   * @returns Promise resolving to the number of spans deleted
+   */
+  async deleteSpans(options: DeleteSpansOptions): Promise<number> {
+    try {
+      await this.start()
+      const parsedOptions = DeleteSpansOptionsSchema.parse(options)
+      const result = await this._deleteSpans(parsedOptions)
+      return NumberResultSchema.parse(result)
+    } catch (error) {
+      this.#logger?.error(error, 'Error in Adapter.deleteSpans()')
+      throw error
+    }
+  }
+
+  // ============================================================================
+  // Private Span Methods (to be implemented by adapters)
+  // ============================================================================
+
+  /**
+   * Internal method to insert multiple span records in a single batch.
+   *
+   * @param spans - Array of validated span data
+   * @returns Promise resolving to the number of spans inserted
+   */
+  protected abstract _insertSpans(spans: InsertSpanOptions[]): Promise<number>
+
+  /**
+   * Internal method to get spans for a job or step.
+   *
+   * @param options - Validated query options
+   * @returns Promise resolving to spans result
+   */
+  protected abstract _getSpans(options: GetSpansOptions): Promise<GetSpansResult>
+
+  /**
+   * Internal method to delete all spans for a job.
+   *
+   * @param options - Validated options containing the jobId
+   * @returns Promise resolving to the number of spans deleted
+   */
+  protected abstract _deleteSpans(options: DeleteSpansOptions): Promise<number>
 
   // ============================================================================
   // Protected Abstract Methods (to be implemented by adapters)

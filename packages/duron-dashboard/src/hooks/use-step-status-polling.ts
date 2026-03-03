@@ -1,9 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 
+import { usePollingInterval } from '@/contexts/polling-context'
 import { useApiRequest } from '@/lib/api'
-
-const POLL_INTERVAL = 2000 // 2 seconds
 
 interface StepStatusResult {
   status: string
@@ -17,6 +16,7 @@ interface StepStatusResult {
 export function useStepStatusPolling(stepId: string | null, jobId: string | null, enabled: boolean = true) {
   const queryClient = useQueryClient()
   const apiRequest = useApiRequest()
+  const pollingInterval = usePollingInterval()
   const previousUpdatedAtRef = useRef<string | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -51,7 +51,7 @@ export function useStepStatusPolling(stepId: string | null, jobId: string | null
     }
 
     // Set up polling interval
-    intervalRef.current = setInterval(pollForStatus, POLL_INTERVAL)
+    intervalRef.current = setInterval(pollForStatus, pollingInterval)
 
     return () => {
       if (intervalRef.current) {
@@ -59,7 +59,7 @@ export function useStepStatusPolling(stepId: string | null, jobId: string | null
         intervalRef.current = null
       }
     }
-  }, [enabled, stepId, jobId, queryClient, apiRequest])
+  }, [enabled, stepId, jobId, queryClient, apiRequest, pollingInterval])
 
   // Reset previous updatedAt when stepId or jobId changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: This is intentional

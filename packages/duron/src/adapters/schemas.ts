@@ -34,6 +34,7 @@ export const JobSchema = z.object({
   id: z.string(),
   actionName: z.string(),
   groupKey: z.string(),
+  description: z.string().nullable().default(null),
   input: z.any(),
   output: z.any().nullable(),
   error: z.any().nullable(),
@@ -45,7 +46,10 @@ export const JobSchema = z.object({
   createdAt: DateSchema,
   updatedAt: DateSchema,
   concurrencyLimit: z.coerce.number(),
+  concurrencyStepLimit: z.coerce.number(),
   clientId: z.string().nullable().optional(),
+  /** Duration in milliseconds (finishedAt - startedAt). Null if job hasn't finished. */
+  durationMs: z.coerce.number().nullable().default(null),
 })
 
 // ============================================================================
@@ -55,6 +59,8 @@ export const JobSchema = z.object({
 export const JobStepSchema = z.object({
   id: z.string(),
   jobId: z.string(),
+  parentStepId: z.string().nullable().default(null),
+  parallel: z.boolean().default(false),
   name: z.string(),
   output: z.any().nullable().default(null),
   status: StepStatusSchema,
@@ -83,7 +89,16 @@ export const JobStepWithoutOutputSchema = JobStepSchema.omit({ output: true })
 
 export const SortOrderSchema = z.enum(['asc', 'desc'])
 
-export const JobSortFieldSchema = z.enum(['createdAt', 'startedAt', 'finishedAt', 'status', 'actionName', 'expiresAt'])
+export const JobSortFieldSchema = z.enum([
+  'createdAt',
+  'startedAt',
+  'finishedAt',
+  'status',
+  'actionName',
+  'expiresAt',
+  'duration',
+  'description',
+])
 
 export const JobSortSchema = z.object({
   field: JobSortFieldSchema,
@@ -95,6 +110,7 @@ export const JobFiltersSchema = z.object({
   actionName: z.union([z.string(), z.array(z.string())]).optional(),
   groupKey: z.union([z.string(), z.array(z.string())]).optional(),
   clientId: z.union([z.string(), z.array(z.string())]).optional(),
+  description: z.string().optional(),
   createdAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
   startedAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
   finishedAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
@@ -113,8 +129,6 @@ export const GetJobsOptionsSchema = z.object({
 
 export const GetJobStepsOptionsSchema = z.object({
   jobId: z.string(),
-  page: z.number().int().positive().optional(),
-  pageSize: z.number().int().positive().optional(),
   search: z.string().optional(),
   updatedAfter: DateSchema.optional(),
 })
@@ -136,6 +150,10 @@ export const CreateJobOptionsSchema = z.object({
   timeoutMs: z.number(),
   /** The concurrency limit for this job's group */
   concurrencyLimit: z.number(),
+  /** The concurrency limit for steps within this job */
+  concurrencyStepLimit: z.number(),
+  /** Optional description for the job */
+  description: z.string().nullable().optional(),
 })
 
 export const RecoverJobsOptionsSchema = z.object({
@@ -183,6 +201,13 @@ export const DeleteJobOptionsSchema = z.object({
 
 export const DeleteJobsOptionsSchema = GetJobsOptionsSchema.optional()
 
+export const TimeTravelJobOptionsSchema = z.object({
+  /** The ID of the job to time travel */
+  jobId: z.string(),
+  /** The ID of the step to restart from */
+  stepId: z.string(),
+})
+
 // ============================================================================
 // Step Option Schemas
 // ============================================================================
@@ -190,6 +215,10 @@ export const DeleteJobsOptionsSchema = GetJobsOptionsSchema.optional()
 export const CreateOrRecoverJobStepOptionsSchema = z.object({
   /** The ID of the job this step belongs to */
   jobId: z.string(),
+  /** The ID of the parent step (null for root steps) */
+  parentStepId: z.string().nullable().default(null),
+  /** Whether this step runs in parallel (independent from siblings during time travel) */
+  parallel: z.boolean().default(false),
   /** The name of the step */
   name: z.string(),
   /** Timeout in milliseconds for the step */
@@ -258,8 +287,6 @@ export const GetJobsResultSchema = z.object({
 export const GetJobStepsResultSchema = z.object({
   steps: z.array(JobStepWithoutOutputSchema),
   total: z.number().int().nonnegative(),
-  page: z.number().int().positive(),
-  pageSize: z.number().int().positive(),
 })
 
 export const ActionStatsSchema = z.object({
@@ -283,6 +310,98 @@ export const JobStatusResultSchema = z.object({
 export const JobStepStatusResultSchema = z.object({
   status: StepStatusSchema,
   updatedAt: DateSchema,
+})
+
+// ============================================================================
+// Span Schemas (OpenTelemetry compatible)
+// ============================================================================
+
+/**
+ * SpanKind values (OpenTelemetry standard):
+ * 0 = INTERNAL - Default, internal operation
+ * 1 = SERVER - Server-side handling of RPC/HTTP request
+ * 2 = CLIENT - Client-side of RPC/HTTP request
+ * 3 = PRODUCER - Producer of async message
+ * 4 = CONSUMER - Consumer of async message
+ */
+export const SpanKindSchema = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
+
+/**
+ * SpanStatusCode values (OpenTelemetry standard):
+ * 0 = UNSET - Status not set
+ * 1 = OK - Operation completed successfully
+ * 2 = ERROR - Operation failed
+ */
+export const SpanStatusCodeSchema = z.union([z.literal(0), z.literal(1), z.literal(2)])
+
+export const SpanEventSchema = z.object({
+  name: z.string(),
+  timeUnixNano: z.string(),
+  attributes: z.record(z.string(), z.any()).optional(),
+})
+
+export const SpanSchema = z.object({
+  id: z.number(),
+  traceId: z.string(),
+  spanId: z.string(),
+  parentSpanId: z.string().nullable(),
+  jobId: z.string().nullable(),
+  stepId: z.string().nullable(),
+  name: z.string(),
+  kind: SpanKindSchema,
+  startTimeUnixNano: z.string().nullable(), // Stored as bigint but serialized as string for JSON
+  endTimeUnixNano: z.string().nullable(), // Stored as bigint but serialized as string for JSON
+  statusCode: SpanStatusCodeSchema,
+  statusMessage: z.string().nullable(),
+  attributes: z.record(z.string(), z.any()),
+  events: z.array(SpanEventSchema),
+})
+
+export const SpanSortFieldSchema = z.enum(['name', 'startTimeUnixNano', 'endTimeUnixNano'])
+
+export const SpanSortSchema = z.object({
+  field: SpanSortFieldSchema,
+  order: SortOrderSchema,
+})
+
+export const SpanFiltersSchema = z.object({
+  name: z.union([z.string(), z.array(z.string())]).optional(),
+  kind: z.union([SpanKindSchema, z.array(SpanKindSchema)]).optional(),
+  statusCode: z.union([SpanStatusCodeSchema, z.array(SpanStatusCodeSchema)]).optional(),
+  traceId: z.string().optional(),
+  attributesFilter: z.record(z.string(), z.any()).optional(),
+})
+
+export const InsertSpanOptionsSchema = z.object({
+  traceId: z.string(),
+  spanId: z.string(),
+  parentSpanId: z.string().nullable(),
+  jobId: z.string().nullable(),
+  stepId: z.string().nullable(),
+  name: z.string(),
+  kind: SpanKindSchema,
+  startTimeUnixNano: z.bigint(),
+  endTimeUnixNano: z.bigint().nullable(),
+  statusCode: SpanStatusCodeSchema,
+  statusMessage: z.string().nullable(),
+  attributes: z.record(z.string(), z.any()).optional(),
+  events: z.array(SpanEventSchema).optional(),
+})
+
+export const GetSpansOptionsSchema = z.object({
+  jobId: z.string().optional(),
+  stepId: z.string().optional(),
+  filters: SpanFiltersSchema.optional(),
+  sort: SpanSortSchema.optional(),
+})
+
+export const GetSpansResultSchema = z.object({
+  spans: z.array(SpanSchema),
+  total: z.number().int().nonnegative(),
+})
+
+export const DeleteSpansOptionsSchema = z.object({
+  jobId: z.string(),
 })
 
 // ============================================================================
@@ -313,9 +432,21 @@ export type CancelJobOptions = z.infer<typeof CancelJobOptionsSchema>
 export type RetryJobOptions = z.infer<typeof RetryJobOptionsSchema>
 export type DeleteJobOptions = z.infer<typeof DeleteJobOptionsSchema>
 export type DeleteJobsOptions = z.infer<typeof DeleteJobsOptionsSchema>
-export type CreateOrRecoverJobStepOptions = z.infer<typeof CreateOrRecoverJobStepOptionsSchema>
+export type CreateOrRecoverJobStepOptions = z.input<typeof CreateOrRecoverJobStepOptionsSchema>
 export type CompleteJobStepOptions = z.infer<typeof CompleteJobStepOptionsSchema>
 export type FailJobStepOptions = z.infer<typeof FailJobStepOptionsSchema>
 export type DelayJobStepOptions = z.infer<typeof DelayJobStepOptionsSchema>
 export type CancelJobStepOptions = z.infer<typeof CancelJobStepOptionsSchema>
 export type CreateOrRecoverJobStepResult = z.infer<typeof CreateOrRecoverJobStepResultSchema>
+export type TimeTravelJobOptions = z.infer<typeof TimeTravelJobOptionsSchema>
+export type SpanKind = z.infer<typeof SpanKindSchema>
+export type SpanStatusCode = z.infer<typeof SpanStatusCodeSchema>
+export type SpanEvent = z.infer<typeof SpanEventSchema>
+export type Span = z.infer<typeof SpanSchema>
+export type SpanSortField = z.infer<typeof SpanSortFieldSchema>
+export type SpanSort = z.infer<typeof SpanSortSchema>
+export type SpanFilters = z.infer<typeof SpanFiltersSchema>
+export type InsertSpanOptions = z.infer<typeof InsertSpanOptionsSchema>
+export type GetSpansOptions = z.infer<typeof GetSpansOptionsSchema>
+export type GetSpansResult = z.infer<typeof GetSpansResultSchema>
+export type DeleteSpansOptions = z.infer<typeof DeleteSpansOptionsSchema>

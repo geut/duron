@@ -1,10 +1,20 @@
 import type { Action } from './action.js'
 import { Client, type ClientOptions } from './client.js'
 
-export { defineAction } from './action.js'
+export {
+  createStep,
+  defineAction,
+  type StepDefinition,
+  type StepDefinitionHandlerContext,
+  type StepDefinitionInput,
+  type StepNameContext,
+} from './action.js'
+export * from './client.js'
 export * from './constants.js'
-export { NonRetriableError } from './errors.js'
+export { NonRetriableError, UnhandledChildStepsError } from './errors.js'
 export * from './server.js'
+export type { TelemetryContext } from './step-manager.js'
+export * from './telemetry/index.js'
 
 export const duron = <
   TActions extends Record<string, Action<any, any, TVariables>>,

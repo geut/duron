@@ -1,3 +1,4 @@
+import type { Tracer } from '@opentelemetry/api'
 import fastq from 'fastq'
 import type { Logger } from 'pino'
 
@@ -8,6 +9,7 @@ import type { Adapter, Job } from './adapters/adapter.js'
 export interface ActionManagerOptions<TAction extends Action<any, any, any>> {
   action: TAction
   database: Adapter
+  tracer: Tracer
   variables: Record<string, unknown>
   logger: Logger
   concurrencyLimit: number
@@ -22,6 +24,7 @@ export interface ActionManagerOptions<TAction extends Action<any, any, any>> {
 export class ActionManager<TAction extends Action<any, any, any>> {
   #action: TAction
   #database: Adapter
+  #tracer: Tracer
   #variables: Record<string, unknown>
   #logger: Logger
   #queue: fastq.queueAsPromised<Job, void>
@@ -41,6 +44,7 @@ export class ActionManager<TAction extends Action<any, any, any>> {
   constructor(options: ActionManagerOptions<TAction>) {
     this.#action = options.action
     this.#database = options.database
+    this.#tracer = options.tracer
     this.#variables = options.variables
     this.#logger = options.logger
     this.#concurrencyLimit = options.concurrencyLimit
@@ -149,6 +153,7 @@ export class ActionManager<TAction extends Action<any, any, any>> {
       },
       action: this.#action,
       database: this.#database,
+      tracer: this.#tracer,
       variables: this.#variables,
       logger: this.#logger,
     })

@@ -31,9 +31,10 @@ The complete documentation includes detailed guides on actions, adapters, client
 <div align="center">
   <h3>Job List View</h3>
   <img src="./packages/assets/job-list.png" alt="Duron Dashboard - Job List" width="800" />
-
-  <h3>Job Details - Completed</h3>
-  <img src="./packages/assets/complete-job.png" alt="Duron Dashboard - Completed Job" width="800" />
+</div>
+<div align="center">
+  <h3>Timeline</h3>
+  <img src="./packages/assets/timeline-view.png" alt="Duron Dashboard - Timeline" width="800" />
 </div>
 
 ## 🚀 Quick Start
@@ -55,17 +56,17 @@ yarn add duron postgres drizzle-orm@beta
 Actions are defined with Zod schemas and have access to a context object that includes input, variables, and a step function. First define your variables type, then use `defineAction` with the variables type as a generic parameter:
 
 ```typescript
-import { defineAction } from 'duron'
-import { z } from 'zod'
+import { defineAction } from "duron";
+import { z } from "zod";
 
 // Define your variables type
 const variables = {
   apiKey: process.env.EMAIL_API_KEY,
-}
+};
 
 // Define the action with variables type as generic
 const sendEmail = defineAction<typeof variables>()({
-  name: 'send-email',
+  name: "send-email",
   input: z.object({
     email: z.string().email(),
     subject: z.string(),
@@ -76,51 +77,51 @@ const sendEmail = defineAction<typeof variables>()({
   }),
   handler: async (ctx) => {
     // Access input data
-    const { email, subject, body } = ctx.input
+    const { email, subject, body } = ctx.input;
 
     // Access shared variables (type-safe!)
-    const apiKey = ctx.var.apiKey
+    const apiKey = ctx.var.apiKey;
 
     // Execute steps with retry logic
     // Steps are retryable units of work that can be monitored and cancelled
-    const result = await ctx.step('send-email', async ({ signal }) => {
+    const result = await ctx.step("send-email", async ({ signal }) => {
       // Your email sending logic here
       // The signal can be used to handle cancellation
-      const response = await fetch('https://api.email.com/send', {
-        method: 'POST',
+      const response = await fetch("https://api.email.com/send", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({ email, subject, body }),
         signal, // Pass signal to enable cancellation
-      })
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to send email')
+        throw new Error("Failed to send email");
       }
 
-      return await response.json()
-    })
+      return await response.json();
+    });
 
-    return { success: result.success ?? true }
+    return { success: result.success ?? true };
   },
-})
+});
 ```
 
 ### Creating a Client with PostgreSQL
 
 ```typescript
-import { duron } from 'duron'
-import { postgresAdapter } from 'duron/adapters/postgres'
+import { duron } from "duron";
+import { postgresAdapter } from "duron/adapters/postgres";
 
 // Define variables (same type used in defineAction)
 const variables = {
   apiKey: process.env.EMAIL_API_KEY,
-}
+};
 
 const client = duron({
-  id: 'my-app',
+  id: "my-app",
   database: postgresAdapter({
     connection: process.env.DATABASE_URL, // PostgreSQL connection string
   }),
@@ -128,17 +129,17 @@ const client = duron({
     sendEmail,
   },
   variables, // Pass the variables object
-  logger: 'info',
-})
+  logger: "info",
+});
 
-await client.start()
+await client.start();
 
 // Run an action
-const jobId = await client.runAction('sendEmail', {
-  email: 'user@example.com',
-  subject: 'Hello',
-  body: 'Welcome!',
-})
+const jobId = await client.runAction("sendEmail", {
+  email: "user@example.com",
+  subject: "Hello",
+  body: "Welcome!",
+});
 ```
 
 ### Starting a Server with Dashboard
@@ -146,14 +147,14 @@ const jobId = await client.runAction('sendEmail', {
 The server includes authentication and can serve the dashboard as standalone HTML:
 
 ```typescript
-import { createServer } from 'duron/server'
-import { getHTML } from 'duron-dashboard/get-html'
-import { Elysia } from 'elysia'
+import { createServer } from "duron/server";
+import { getHTML } from "duron-dashboard/get-html";
+import { Elysia } from "elysia";
 
 // Define variables (same type used in defineAction)
 const variables = {
   apiKey: process.env.EMAIL_API_KEY,
-}
+};
 
 // Create the Duron client
 const client = duron({
@@ -164,35 +165,35 @@ const client = duron({
     sendEmail,
   },
   variables, // Pass the variables object
-})
+});
 
 // Create the API server with authentication
 const app = createServer({
   client,
-  prefix: '/api',
+  prefix: "/api",
   login: {
     onLogin: async ({ email, password }) => {
       // Implement your authentication logic
       // Return true if credentials are valid
       // In production, validate against your user database
-      return email === 'admin@example.com' && password === 'secure-password'
+      return email === "admin@example.com" && password === "secure-password";
     },
-    jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
-    expirationTime: '24h', // Optional, defaults to '1h'
-    refreshTokenExpirationTime: '7d', // Optional, defaults to '7d'
+    jwtSecret: process.env.JWT_SECRET || "your-secret-key",
+    expirationTime: "24h", // Optional, defaults to '1h'
+    refreshTokenExpirationTime: "7d", // Optional, defaults to '7d'
   },
-})
+});
 
 // Serve the dashboard
-app.get('/', async () => {
-  const html = await getHTML({ url: 'http://localhost:3000/api' })
+app.get("/", async () => {
+  const html = await getHTML({ url: "http://localhost:3000/api" });
   return new Response(html, {
-    headers: { 'Content-Type': 'text/html' },
-  })
-})
+    headers: { "Content-Type": "text/html" },
+  });
+});
 
 // Start the server
-app.listen(3000)
+app.listen(3000);
 ```
 
 #### Dashboard Authentication Setup

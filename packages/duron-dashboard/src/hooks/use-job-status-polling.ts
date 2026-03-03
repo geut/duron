@@ -1,9 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 
+import { usePollingInterval } from '@/contexts/polling-context'
 import { useApiRequest } from '@/lib/api'
-
-const POLL_INTERVAL = 2000 // 2 seconds
 
 interface JobStatusResult {
   status: string
@@ -17,6 +16,7 @@ interface JobStatusResult {
 export function useJobStatusPolling(jobId: string | null, enabled: boolean = true) {
   const queryClient = useQueryClient()
   const apiRequest = useApiRequest()
+  const pollingInterval = usePollingInterval()
   const previousUpdatedAtRef = useRef<string | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -50,7 +50,7 @@ export function useJobStatusPolling(jobId: string | null, enabled: boolean = tru
     }
 
     // Set up polling interval
-    intervalRef.current = setInterval(pollForStatus, POLL_INTERVAL)
+    intervalRef.current = setInterval(pollForStatus, pollingInterval)
 
     return () => {
       if (intervalRef.current) {
@@ -58,7 +58,7 @@ export function useJobStatusPolling(jobId: string | null, enabled: boolean = tru
         intervalRef.current = null
       }
     }
-  }, [enabled, jobId, queryClient, apiRequest])
+  }, [enabled, jobId, queryClient, apiRequest, pollingInterval])
 
   // Reset previous updatedAt when jobId changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: This is intentional

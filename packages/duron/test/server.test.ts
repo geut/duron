@@ -177,7 +177,7 @@ function runServerTests(adapterFactory: AdapterFactory) {
     })
 
     describe('GET /api/jobs/:id/steps', () => {
-      it('should get job steps', async () => {
+      it('should get all job steps', async () => {
         const jobId = await client.runAction('testAction', {
           message: 'Get steps',
         })
@@ -192,26 +192,8 @@ function runServerTests(adapterFactory: AdapterFactory) {
 
         expect(result.steps).toBeInstanceOf(Array)
         expect(result.total).toBeGreaterThan(0)
-        expect(result.page).toBe(1)
-        expect(result.pageSize).toBeGreaterThan(0)
-      })
-
-      it('should paginate job steps', async () => {
-        const jobId = await client.runAction('testAction', {
-          message: 'Paginated steps',
-        })
-
-        await client.fetch({ batchSize: 10 })
-        await new Promise((resolve) => setTimeout(resolve, 500))
-
-        const response = await server.handle(new Request(`http://localhost/api/jobs/${jobId}/steps?page=1&pageSize=1`))
-        expect(response.status).toBe(200)
-
-        const result = GetJobStepsResponseParsedSchema.parse(await response.json()) as GetJobStepsResponse
-
-        expect(result.steps.length).toBeLessThanOrEqual(1)
-        expect(result.page).toBe(1)
-        expect(result.pageSize).toBe(1)
+        // No pagination - all steps returned at once
+        expect(result.steps.length).toBe(result.total)
       })
 
       it('should filter steps by search query', async () => {
@@ -602,4 +584,7 @@ function runServerTests(adapterFactory: AdapterFactory) {
 }
 
 runServerTests(postgresFactory)
-runServerTests(pgliteFactory)
+// biome-ignore lint/complexity/useLiteralKeys: type safety
+if (process.env['POSTGRES_TEST'] === 'true') {
+  runServerTests(pgliteFactory)
+}

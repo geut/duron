@@ -1,25 +1,30 @@
 'use client'
 
-import { List, MoreVertical, Play, X } from 'lucide-react'
+import { Activity, MoreVertical, Play, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import { useSpans } from '@/contexts/spans-context'
 import { useJobStatusPolling } from '@/hooks/use-job-status-polling'
 import { useCancelJob, useDeleteJob, useJob, useRetryJob } from '@/lib/api'
+import { calculateDurationMs, formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
 import { BadgeStatus } from '../components/badge-status'
 import { JsonView } from '../components/json-view'
+import { JobSpansModal } from '../components/spans-panel'
 import { isExpiring } from '../lib/is-expiring'
 
 interface JobDetailsProps {
   jobId: string | null
-  onOpenStepList?: () => void
+  onClose?: () => void
 }
 
-export function JobDetails({ jobId, onOpenStepList }: JobDetailsProps) {
+export function JobDetails({ jobId, onClose }: JobDetailsProps) {
   const { data: job, isLoading: jobLoading } = useJob(jobId)
+  const { spansEnabled } = useSpans()
+  const [showSpans, setShowSpans] = useState(false)
 
   // Enable polling for job status updates - refetches entire job detail when status changes
   useJobStatusPolling(jobId, true)
@@ -28,27 +33,13 @@ export function JobDetails({ jobId, onOpenStepList }: JobDetailsProps) {
   const retryMutation = useRetryJob()
   const deleteMutation = useDeleteJob()
 
-  // Calculate job duration in technical format (HH:MM:SS.mmm)
+  // Calculate job duration in hh:mm:ss format (or hh:mm:ss.mmm if < 1 second)
   const getJobDuration = useCallback((jobData: typeof job) => {
     if (!jobData?.startedAt) {
       return 'Not started'
     }
-    const startTime = new Date(jobData.startedAt).getTime()
-    const endTime = jobData.finishedAt ? new Date(jobData.finishedAt).getTime() : Date.now()
-    const durationMs = endTime - startTime
-
-    const hours = Math.floor(durationMs / 3600000)
-    const minutes = Math.floor((durationMs % 3600000) / 60000)
-    const seconds = Math.floor((durationMs % 60000) / 1000)
-    const milliseconds = durationMs % 1000
-
-    if (hours > 0) {
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
-    }
-    if (minutes > 0) {
-      return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
-    }
-    return `${seconds}.${milliseconds.toString().padStart(3, '0')}s`
+    const durationMs = calculateDurationMs(jobData.startedAt, jobData.finishedAt)
+    return formatMs(durationMs)
   }, [])
 
   const [jobDuration, setJobDuration] = useState(() => getJobDuration(job))
@@ -114,202 +105,176 @@ export function JobDetails({ jobId, onOpenStepList }: JobDetailsProps) {
   }
 
   return (
-    <ScrollArea className="h-full flex flex-col">
-      <div className="p-4 pt-5 space-y-4">
-        <div className="flex items-center justify-end">
-          {/* Mobile: Dropdown menu and Step List button */}
-          <div className="md:hidden flex items-center gap-2">
-            {onOpenStepList && (
-              <Button variant="outline" size="sm" onClick={onOpenStepList} title="View Steps">
-                <List className="h-4 w-4" />
+    <div className="h-full flex flex-col">
+      {/* Header with title and action buttons */}
+      <div className="px-4 min-h-12 border-b shrink-0 flex items-center justify-between gap-2">
+        <h2 className="font-medium shrink-0">Job Details</h2>
+        <div className="flex items-center gap-2">
+          {/* Action buttons dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild={true}>
+              <Button variant="outline" size="sm" disabled={retryMutation.isPending || cancelMutation.isPending}>
+                <MoreVertical className="h-4 w-4" />
               </Button>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild={true}>
-                <Button variant="outline" size="sm" disabled={retryMutation.isPending || cancelMutation.isPending}>
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleRetry} disabled={retryMutation.isPending || cancelMutation.isPending}>
-                  <Play className="h-4 w-4 mr-2" />
-                  Retry
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleRetry} disabled={retryMutation.isPending || cancelMutation.isPending}>
+                <Play className="h-4 w-4 mr-2" />
+                Retry
+              </DropdownMenuItem>
+              {spansEnabled && (
+                <DropdownMenuItem onClick={() => setShowSpans(!showSpans)}>
+                  <Activity className="h-4 w-4 mr-2" />
+                  {showSpans ? 'Hide Spans' : 'Show Spans'}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleCancel}
-                  disabled={
-                    cancelMutation.isPending ||
-                    retryMutation.isPending ||
-                    job.status === 'completed' ||
-                    job.status === 'failed' ||
-                    job.status === 'cancelled'
-                  }
-                  variant="destructive"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleDelete}
-                  disabled={
-                    job.status === 'active' ||
-                    cancelMutation.isPending ||
-                    retryMutation.isPending ||
-                    deleteMutation.isPending
-                  }
-                  variant="destructive"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          {/* Desktop: Individual buttons */}
-          <div className="hidden md:flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRetry}
-              disabled={retryMutation.isPending || cancelMutation.isPending}
-            >
-              <Play className="h-4 w-4 mr-1" />
-              Retry
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCancel}
-              disabled={
-                cancelMutation.isPending ||
-                retryMutation.isPending ||
-                job.status === 'completed' ||
-                job.status === 'failed' ||
-                job.status === 'cancelled'
-              }
-            >
-              <X className="h-4 w-4 mr-1" />
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDelete}
-              disabled={
-                job.status === 'active' ||
-                cancelMutation.isPending ||
-                retryMutation.isPending ||
-                deleteMutation.isPending
-              }
-            >
-              <X className="h-4 w-4 mr-1" />
-              Delete
-            </Button>
-          </div>
-        </div>
-
-        <div className="space-y-2 text-sm">
-          <div>
-            <span className="font-medium">ID:</span> <span className="font-mono text-xs break-all">{job.id}</span>
-          </div>
-          <div>
-            <span className="font-medium">Action:</span> {job.actionName}
-          </div>
-          <div>
-            <span className="font-medium">Group Key:</span> {job.groupKey}
-          </div>
-          {job.clientId && (
-            <div>
-              <span className="font-medium">Client ID:</span> <span className="font-mono text-xs">{job.clientId}</span>
-            </div>
-          )}
-          <div>
-            <span className="font-medium">Status:</span> <BadgeStatus status={job.status} />
-          </div>
-          <div>
-            <span className="font-medium">Created:</span> {formatDate(job.createdAt)}
-          </div>
-          {job.startedAt && (
-            <div>
-              <span className="font-medium">Started:</span> {formatDate(job.startedAt)}
-            </div>
-          )}
-          {job.finishedAt && (
-            <div>
-              <span className="font-medium">Completed:</span> {formatDate(job.finishedAt)}
-            </div>
-          )}
-          {job.startedAt && (
-            <div>
-              <span className="font-medium">Duration:</span> {jobDuration}
-            </div>
-          )}
-          {job.concurrencyLimit && (
-            <div>
-              <span className="font-medium">Concurrency Limit:</span> {job.concurrencyLimit}
-            </div>
-          )}
-          {job.timeoutMs && (
-            <div>
-              <span className="font-medium">Timeout:</span> {job.timeoutMs}ms
-            </div>
-          )}
-          {job.expiresAt && (
-            <div>
-              <span className="font-medium">Expires:</span>{' '}
-              <span
-                className={
-                  isExpiring({
-                    isStep: false,
-                    expiresAt: new Date(job.expiresAt),
-                    status: job.status,
-                    error: job.error,
-                  })
-                    ? 'text-destructive'
-                    : ''
+              )}
+              <DropdownMenuItem
+                onClick={handleCancel}
+                disabled={
+                  cancelMutation.isPending ||
+                  retryMutation.isPending ||
+                  job.status === 'completed' ||
+                  job.status === 'failed' ||
+                  job.status === 'cancelled'
                 }
+                variant="destructive"
               >
-                {formatDate(job.expiresAt)}
-              </span>
-            </div>
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleDelete}
+                disabled={
+                  job.status === 'active' ||
+                  cancelMutation.isPending ||
+                  retryMutation.isPending ||
+                  deleteMutation.isPending
+                }
+                variant="destructive"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {/* Close button */}
+          {onClose && (
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-6 w-6 p-0" title="Hide Job Details">
+              <X className="h-4 w-4" />
+            </Button>
           )}
-        </div>
-
-        {/* Job Input/Output */}
-        <div className="space-y-4">
-          {job.input && (
-            <div>
-              <div className="font-medium mb-1">Input</div>
-              <div className="p-3 border rounded">
-                <JsonView value={job.input} />
-              </div>
-            </div>
-          )}
-
-          {!job.input && <div className="text-sm text-muted-foreground italic">No input available</div>}
-
-          {job.error && (
-            <div>
-              <div className="font-medium text-destructive mb-1">Error</div>
-              <div className="border rounded p-3">
-                <JsonView value={job.error} />
-              </div>
-            </div>
-          )}
-
-          {job.output && (
-            <div>
-              <div className="font-medium mb-1">Output</div>
-              <div className="p-3 border rounded">
-                <JsonView value={job.output} />
-              </div>
-            </div>
-          )}
-
-          {!job.output && <div className="text-sm text-muted-foreground italic">No output available</div>}
         </div>
       </div>
-      <ScrollBar orientation="horizontal" />
-    </ScrollArea>
+
+      {/* Scrollable content */}
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-4">
+          <div className="space-y-2 text-sm">
+            <div>
+              <span className="font-medium">ID:</span> <span className="font-mono text-xs break-all">{job.id}</span>
+            </div>
+            <div>
+              <span className="font-medium">Action:</span> {job.actionName}
+            </div>
+            <div>
+              <span className="font-medium">Group Key:</span> {job.groupKey}
+            </div>
+            {job.clientId && (
+              <div>
+                <span className="font-medium">Client ID:</span>{' '}
+                <span className="font-mono text-xs">{job.clientId}</span>
+              </div>
+            )}
+            <div>
+              <span className="font-medium">Status:</span> <BadgeStatus status={job.status} />
+            </div>
+            <div>
+              <span className="font-medium">Created:</span> {formatDate(job.createdAt)}
+            </div>
+            {job.startedAt && (
+              <div>
+                <span className="font-medium">Started:</span> {formatDate(job.startedAt)}
+              </div>
+            )}
+            {job.finishedAt && (
+              <div>
+                <span className="font-medium">Completed:</span> {formatDate(job.finishedAt)}
+              </div>
+            )}
+            {job.concurrencyLimit && (
+              <div>
+                <span className="font-medium">Group Concurrency:</span> {job.concurrencyLimit}
+              </div>
+            )}
+            {job.concurrencyStepLimit && (
+              <div>
+                <span className="font-medium">Step Concurrency:</span> {job.concurrencyStepLimit}
+              </div>
+            )}
+            {job.startedAt && (
+              <div>
+                <span className="font-medium">Duration:</span> {jobDuration}
+              </div>
+            )}
+            {job.timeoutMs && (
+              <div>
+                <span className="font-medium">Timeout:</span> {formatMs(job.timeoutMs)}
+              </div>
+            )}
+            {job.expiresAt && (
+              <div>
+                <span className="font-medium">Expires:</span>{' '}
+                <span
+                  className={
+                    isExpiring({
+                      isStep: false,
+                      expiresAt: new Date(job.expiresAt),
+                      status: job.status,
+                      error: job.error,
+                    })
+                      ? 'text-destructive'
+                      : ''
+                  }
+                >
+                  {formatDate(job.expiresAt)}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Job Input/Output */}
+          <div className="space-y-4">
+            {job.input && (
+              <div>
+                <div className="font-medium mb-1">Input</div>
+                <JsonView value={job.input} title="Job Input" />
+              </div>
+            )}
+
+            {!job.input && <div className="text-sm text-muted-foreground italic">No input available</div>}
+
+            {job.error && (
+              <div>
+                <div className="font-medium text-destructive mb-1">Error</div>
+                <JsonView value={job.error} title="Job Error" />
+              </div>
+            )}
+
+            {job.output && (
+              <div>
+                <div className="font-medium mb-1">Output</div>
+                <JsonView value={job.output} title="Job Output" />
+              </div>
+            )}
+
+            {!job.output && <div className="text-sm text-muted-foreground italic">No output available</div>}
+          </div>
+        </div>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
+
+      {/* Spans Modal */}
+      {spansEnabled && <JobSpansModal jobId={job.id} open={showSpans} onClose={() => setShowSpans(false)} />}
+    </div>
   )
 }

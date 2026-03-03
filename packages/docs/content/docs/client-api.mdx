@@ -160,11 +160,11 @@ const client = duron({
 
 ### `processTimeout`
 
-**Optional.** Timeout in milliseconds to wait for process ping responses. Defaults to `300000` (5 minutes).
+**Optional.** Timeout in milliseconds to wait for process ping responses. Defaults to `5000` (5 seconds).
 
 ```ts
 {
-  processTimeout: 10 * 60 * 1000, // 10 minutes
+  processTimeout: 10 * 1000, // 10 seconds
 }
 ```
 
@@ -177,6 +177,25 @@ const client = duron({
   logger: 'info', // or a Pino logger instance
 }
 ```
+
+### `telemetry`
+
+**Optional.** Telemetry configuration for OpenTelemetry tracing. See [Telemetry](/docs/telemetry) for details.
+
+```ts
+{
+  telemetry: {
+    local: true,               // Store spans in the database
+    serviceName: 'my-service', // OpenTelemetry service name (default: 'duron')
+  },
+}
+```
+
+**Options:**
+- `local` - Enable local span storage (`boolean | { flushDelayMs?: number }`)
+- `traceExporter` - Export spans to external systems (OTLP, Jaeger, etc.)
+- `spanProcessors` - Add custom span processors
+- `serviceName` - Service name for OpenTelemetry resource (default: `'duron'`)
 
 ## Lifecycle Methods
 
@@ -257,6 +276,92 @@ const newJobId = await client.retryJob(jobId)
 
 **Returns:** Promise resolving to the new job ID, or `null` if retry failed
 
+### `runActionAndWait(actionName, input?, options?)`
+
+Run an action and wait for its completion. This is a convenience method that combines `runAction` and `waitForJob`.
+
+```ts
+const result = await client.runActionAndWait('sendEmail', {
+  to: 'user@example.com',
+  subject: 'Hello',
+  body: 'Test',
+})
+
+console.log(result.status) // 'completed' | 'failed' | 'cancelled'
+console.log(result.output) // Typed based on action's output schema
+```
+
+**Parameters:**
+- `actionName` - Name of the action to run
+- `input` - Input data for the action (validated against action's input schema)
+- `options.signal` - Optional AbortSignal to cancel the operation. If aborted, the job will be cancelled and the promise will reject.
+- `options.timeout` - Optional timeout in milliseconds. If the job doesn't complete within this time, the job will be cancelled and the promise will reject.
+
+**Returns:** Promise resolving to the job result with typed input and output
+
+**Example:**
+
+```ts
+// With timeout
+const result = await client.runActionAndWait('processOrder', { orderId: '123' }, {
+  timeout: 30000, // 30 seconds
+})
+
+// With abort signal
+const controller = new AbortController()
+const result = await client.runActionAndWait('processOrder', { orderId: '123' }, {
+  signal: controller.signal,
+})
+
+// Cancel the operation
+controller.abort()
+```
+
+### `timeTravelJob(jobId, stepId)`
+
+Time travel a job to restart from a specific step. The job must be in completed, failed, or cancelled status. This resets the job and ancestor steps to active status, deletes subsequent steps, and preserves completed parallel siblings.
+
+```ts
+const success = await client.timeTravelJob(jobId, stepId)
+```
+
+**Parameters:**
+- `jobId` - The ID of the job to time travel
+- `stepId` - The ID of the step to restart from
+
+**Returns:** Promise resolving to `true` if time travel succeeded, `false` otherwise
+
+### `deleteJob(jobId)`
+
+Delete a job by its ID. Active jobs cannot be deleted.
+
+```ts
+const deleted = await client.deleteJob(jobId)
+```
+
+**Parameters:**
+- `jobId` - The ID of the job to delete
+
+**Returns:** Promise resolving to `true` if deleted, `false` otherwise
+
+### `deleteJobs(options?)`
+
+Delete multiple jobs using the same filters as `getJobs`. Active jobs cannot be deleted and will be excluded from deletion.
+
+```ts
+const deletedCount = await client.deleteJobs({
+  filters: {
+    status: ['completed', 'failed'],
+    actionName: ['sendEmail'],
+  },
+})
+```
+
+**Parameters:**
+- `options` - Query options including filters (same as `getJobs`)
+
+**Returns:** Promise resolving to the number of jobs deleted
+
 ## Query Methods
 
 ### `getJobById(jobId)`
@@ -285,6 +390,7 @@ const result = await client.getJobs({
     actionName: ['sendEmail'],
     groupKey: ['user-123'],
     clientId: ['worker-1'],
+    description: 'order', // Fuzzy match on description
     createdAt: [new Date('2024-01-01'), new Date('2024-12-31')],
     startedAt: [new Date('2024-01-01'), new Date('2024-12-31')],
     finishedAt: [new Date('2024-01-01'), new Date('2024-12-31')],
@@ -311,6 +417,7 @@ const result = await client.getJobs({
 - `actionName` - Array of action names
 - `groupKey` - Array of group keys
 - `clientId` - Array of client IDs
+- `description` - Filter by job description (fuzzy match)
 - `createdAt` - Date range `[start, end]`
 - `startedAt` - Date range `[start, end]`
 - `finishedAt` - Date range `[start, end]`
@@ -320,7 +427,7 @@ const result = await client.getJobs({
 - `outputFilter` - JSONB filter on output data
 
 **Sort Options:**
-- `field` - Field to sort by: `'createdAt'`, `'startedAt'`, `'finishedAt'`, `'updatedAt'`, `'status'`, `'actionName'`
+- `field` - Field to sort by: `'createdAt'`, `'startedAt'`, `'finishedAt'`, `'updatedAt'`, `'status'`, `'actionName'`, `'description'`
 - `order` - Sort order: `'asc'` or `'desc'`
 
 **Returns:** Promise resolving to jobs result with pagination info
@@ -444,7 +551,50 @@ const metadata = await client.getActionsMetadata()
 
 **Returns:** Promise resolving to action metadata array
 
+### `getSpans(options)`
+
+Get spans for a job or step. Only available when `telemetry.local` is enabled.
+
+```ts
+// Get spans for a job
+const result = await client.getSpans({
+  jobId: 'job-uuid',
+  filters: {
+    name: ['ai.'], // Filter by span name prefix
+  },
+  sort: { field: 'startTimeUnixNano', order: 'asc' },
+})
+
+// Get spans for a step
+const result = await client.getSpans({
+  stepId: 'step-uuid',
+})
+```
+
+**Parameters:**
+- `options.jobId` - The ID of the job to get spans for
+- `options.stepId` - The ID of the step to get spans for
+- `options.filters.name` - Filter by span name (string or array)
+- `options.filters.kind` - Filter by span kind
+- `options.filters.traceId` - Filter by trace ID
+- `options.filters.attributesFilter` - JSONB filter on attributes
+- `options.sort` - Sort options with `field` and `order`
+
+**Returns:** Promise resolving to spans result
+
+**Throws:** Error if local telemetry is not enabled
+
 ## Utility Methods
+
+### `spansEnabled`
+
+Boolean property indicating if local spans are enabled. This is `true` when `telemetry.local` is configured.
+
+```ts
+if (client.spansEnabled) {
+  const spans = await client.getSpans({ jobId })
+}
+```
 
 ### `getConfig()`
 
@@ -458,8 +608,35 @@ const config = client.getConfig()
 
 ### `logger`
 
-Access the logger instance.
+Access the Pino logger instance.
 
 ```ts
 client.logger.info('Client started')
+```
+
+### `tracer`
+
+Access the OpenTelemetry tracer for creating custom spans. Always returns a tracer — it's a no-op tracer when no telemetry SDK is configured.
+
+```ts
+const span = client.tracer.startSpan('custom-operation')
+```
+
+### `database`
+
+Access the database adapter instance.
+
+```ts
+const adapter = client.database
+```
+
+### `flushTelemetry()`
+
+Force flush any pending telemetry data. Useful in tests or when you need to ensure spans are exported before querying.
+
+```ts
+await client.flushTelemetry()
+
+// Now you can safely query spans
+const { spans } = await client.getSpans({ jobId })
 ```

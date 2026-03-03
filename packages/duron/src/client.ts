@@ -1,3 +1,8 @@
+import { type Span, type Tracer, trace } from '@opentelemetry/api'
+import { resourceFromAttributes } from '@opentelemetry/resources'
+import { BatchSpanProcessor, type SpanExporter, type SpanProcessor } from '@opentelemetry/sdk-trace-base'
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
+import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 import pino, { type Logger } from 'pino'
 import { zocker } from 'zocker'
 import * as z from 'zod'
@@ -11,99 +16,261 @@ import type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
+  GetSpansOptions,
+  GetSpansResult,
   Job,
   JobStep,
 } from './adapters/adapter.js'
 import type { JobStatusResult, JobStepStatusResult } from './adapters/schemas.js'
 import { JOB_STATUS_CANCELLED, JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, type JobStatus } from './constants.js'
+import { LocalSpanExporter } from './telemetry/local-span-exporter.js'
 
-const BaseOptionsSchema = z.object({
+/**
+ * Extracts the inferred type from an action's input/output schema.
+ * Handles the case where the schema might be undefined.
+ */
+type InferActionSchema<T> = T extends z.ZodTypeAny ? z.infer<T> : Record<string, unknown>
+
+/**
+ * Result returned from waitForJob with untyped input and output.
+ */
+export interface JobResult {
+  id: string
+  actionName: string
+  status: JobStatus
+  groupKey: string
+  description: string | null
+  input: unknown
+  output: unknown
+  error: Job['error']
+}
+
+/**
+ * Result returned from runActionAndWait with typed input and output based on the action's Zod schemas.
+ */
+export interface TypedJobResult<TAction extends Action<any, any, any>> {
+  id: string
+  actionName: string
+  status: JobStatus
+  groupKey: string
+  description: string | null
+  input: InferActionSchema<NonNullable<TAction['input']>>
+  output: InferActionSchema<NonNullable<TAction['output']>>
+  error: Job['error']
+}
+
+/**
+ * Telemetry context provided to action and step handlers.
+ * Provides access to OpenTelemetry APIs for recording traces and metrics.
+ */
+export interface TelemetryContext {
+  /**
+   * Get the active OpenTelemetry span for the current job/step.
+   * Use standard OTel Span methods: setAttribute, addEvent, recordException, etc.
+   */
+  getActiveSpan(): Span
+
+  /**
+   * Get an OpenTelemetry tracer for creating custom spans.
+   *
+   * @param name - The name of the tracer (typically your service or library name)
+   */
+  getTracer(name: string): Tracer
+
+  /**
+   * Record a custom metric as a span event.
+   * This is a convenience method that stores metrics as span events
+   * which can be queried from the local database when telemetry.local is enabled.
+   *
+   * @param name - The metric name (e.g., 'tokens.input', 'latency.ms')
+   * @param value - The metric value
+   * @param attributes - Optional attributes for the metric
+   */
+  recordMetric(name: string, value: number, attributes?: Record<string, any>): void
+}
+
+/**
+ * Options for local telemetry storage.
+ */
+export interface LocalTelemetryOptions {
+  /**
+   * Delay in milliseconds before flushing spans to the database.
+   * Uses BatchSpanProcessor with this delay.
+   * @default 5000
+   */
+  flushDelayMs?: number
+}
+
+/**
+ * Telemetry configuration options.
+ * Uses OpenTelemetry SDK for tracing.
+ */
+export interface TelemetryOptions {
+  /**
+   * Enable local span storage in the database.
+   * When enabled, spans are stored in the database and can be queried via getSpans().
+   * Set to true for default options, or provide LocalTelemetryOptions for custom config.
+   */
+  local?: LocalTelemetryOptions | boolean
+
+  /**
+   * Additional span processors to add to the tracer provider.
+   * These are merged with the local processor (if enabled).
+   */
+  spanProcessors?: SpanProcessor[]
+
+  /**
+   * Additional span exporter to use.
+   * Will be wrapped in a BatchSpanProcessor and merged with other processors.
+   */
+  traceExporter?: SpanExporter
+
+  /**
+   * Service name for OpenTelemetry resource.
+   * @default 'duron'
+   */
+  serviceName?: string
+}
+
+/**
+ * Base configuration options for a Duron client instance.
+ * These options control job fetching, concurrency, and recovery behavior.
+ */
+export interface BaseOptionsInput {
   /**
    * Unique identifier for this Duron instance.
    * Used for multi-process coordination and job ownership.
-   * Defaults to a random UUID if not provided.
+   * If not provided, a random UUID will be generated.
+   *
+   * @example 'worker-1', 'api-server', 'background-processor'
    */
-  id: z.string().optional(),
+  id?: string
 
   /**
-   * Synchronization pattern for fetching jobs.
-   * - `'pull'`: Periodically poll the database for new jobs
-   * - `'push'`: Listen for database notifications when jobs are available
-   * - `'hybrid'`: Use both pull and push patterns (recommended)
-   * - `false`: Disable automatic job fetching (manual fetching only)
+   * Synchronization pattern for fetching jobs from the database.
+   *
+   * - `'pull'`: Periodically poll the database for new jobs at `pullInterval`
+   * - `'push'`: Listen for database notifications when jobs are available (real-time)
+   * - `'hybrid'`: Use both pull and push patterns (recommended for reliability)
+   * - `false`: Disable automatic job fetching (use `fetch()` manually)
    *
    * @default 'hybrid'
+   *
+   * @example
+   * ```typescript
+   * // Real-time job processing with fallback polling
+   * syncPattern: 'hybrid'
+   *
+   * // Disable auto-fetching for API-only servers
+   * syncPattern: false
+   * ```
    */
-  syncPattern: z.union([z.literal('pull'), z.literal('push'), z.literal('hybrid'), z.literal(false)]).default('hybrid'),
+  syncPattern?: 'pull' | 'push' | 'hybrid' | false
 
   /**
-   * Interval in milliseconds between pull operations when using pull or hybrid sync pattern.
+   * Interval in milliseconds between pull operations when using `'pull'` or `'hybrid'` sync pattern.
+   * Lower values mean faster job pickup but more database queries.
    *
    * @default 5000
    */
-  pullInterval: z.number().default(5_000),
+  pullInterval?: number
 
   /**
-   * Maximum number of jobs to fetch in a single batch.
+   * Maximum number of jobs to fetch in a single batch from the database.
+   * Higher values reduce database round-trips but may increase memory usage.
    *
    * @default 10
    */
-  batchSize: z.number().default(10),
+  batchSize?: number
 
   /**
    * Maximum number of jobs that can run concurrently per action.
-   * This controls the concurrency limit for the action's fastq queue.
+   * This controls the concurrency limit for each action's internal queue.
+   * Use this to prevent any single action from consuming all resources.
    *
    * @default 100
    */
-  actionConcurrencyLimit: z.number().default(100),
+  actionConcurrencyLimit?: number
 
   /**
    * Maximum number of jobs that can run concurrently per group key.
    * Jobs with the same group key will respect this limit.
-   * This can be overridden using action -> groups -> concurrency.
+   * This is the default value; it can be overridden per-job using `action.groups.concurrency`.
    *
    * @default 10
+   *
+   * @example
+   * ```typescript
+   * // Limit concurrent jobs per user to 2
+   * groupConcurrencyLimit: 2
+   * ```
    */
-  groupConcurrencyLimit: z.number().default(10),
+  groupConcurrencyLimit?: number
 
   /**
    * Whether to run database migrations on startup.
    * When enabled, Duron will automatically apply pending migrations when the adapter starts.
+   * Disable this if you manage migrations separately or use a read-only database connection.
    *
    * @default true
    */
-  migrateOnStart: z.boolean().default(true),
+  migrateOnStart?: boolean
 
   /**
    * Whether to recover stuck jobs on startup.
    * Stuck jobs are jobs that were marked as active but the process that owned them
-   * is no longer running.
+   * is no longer running (e.g., after a crash or restart).
+   * These jobs will be reset to 'created' status so they can be picked up again.
    *
    * @default true
    */
-  recoverJobsOnStart: z.boolean().default(true),
+  recoverJobsOnStart?: boolean
 
   /**
    * Enable multi-process mode for job recovery.
    * When enabled, Duron will ping other processes to check if they're alive
-   * before recovering their jobs.
+   * before recovering their jobs. This prevents recovering jobs from processes
+   * that are still running but slow to respond.
+   *
+   * Only enable this if you're running multiple Duron instances sharing the same database.
    *
    * @default false
    */
-  multiProcessMode: z.boolean().default(false),
+  multiProcessMode?: boolean
 
   /**
    * Timeout in milliseconds to wait for process ping responses in multi-process mode.
    * Processes that don't respond within this timeout will have their jobs recovered.
+   * Increase this value if your processes may be temporarily unresponsive under load.
    *
-   * @default 5000 (5 seconds)
+   * @default 5000
    */
-  processTimeout: z.number().default(5 * 1000), // 5 seconds
+  processTimeout?: number
+}
+
+const BaseOptionsSchema = z.object({
+  id: z.string().optional(),
+  syncPattern: z.union([z.literal('pull'), z.literal('push'), z.literal('hybrid'), z.literal(false)]).default('hybrid'),
+  pullInterval: z.number().default(5_000),
+  batchSize: z.number().default(10),
+  actionConcurrencyLimit: z.number().default(100),
+  groupConcurrencyLimit: z.number().default(10),
+  migrateOnStart: z.boolean().default(true),
+  recoverJobsOnStart: z.boolean().default(true),
+  multiProcessMode: z.boolean().default(false),
+  processTimeout: z.number().default(5 * 1000),
 })
 
+// Compile-time check: ensure BaseOptionsInput is assignable to the Zod schema's input type
+type _EnsureBaseOptionsCompatible = BaseOptionsInput extends z.input<typeof BaseOptionsSchema>
+  ? true
+  : 'ERROR: BaseOptionsInput does not match Zod schema input type'
+
+declare const _baseOptionsCheck: _EnsureBaseOptionsCompatible
+const _checkOptions: _EnsureBaseOptionsCompatible = true
+
 /**
- * Options for configuring a Duron instance.
+ * Options for configuring a Duron client instance.
  *
  * @template TActions - Record of action definitions keyed by action name
  * @template TVariables - Type of variables available to actions
@@ -111,7 +278,7 @@ const BaseOptionsSchema = z.object({
 export interface ClientOptions<
   TActions extends Record<string, Action<any, any, TVariables>>,
   TVariables = Record<string, unknown>,
-> extends z.input<typeof BaseOptionsSchema> {
+> extends BaseOptionsInput {
   /**
    * The database adapter to use for storing jobs and steps.
    * Required.
@@ -136,6 +303,27 @@ export interface ClientOptions<
    * These can be accessed in action handlers using `ctx.var`.
    */
   variables?: TVariables
+
+  /**
+   * Optional telemetry configuration for observability.
+   * Uses OpenTelemetry SDK for tracing.
+   *
+   * @example
+   * ```typescript
+   * // Enable local span storage (stored in the database)
+   * telemetry: { local: true }
+   *
+   * // Enable local storage with custom flush delay
+   * telemetry: { local: { flushDelayMs: 10000 } }
+   *
+   * // Export to external systems (e.g., OTLP)
+   * telemetry: { traceExporter: new OTLPTraceExporter() }
+   *
+   * // Both local storage and external export
+   * telemetry: { local: true, traceExporter: new OTLPTraceExporter() }
+   * ```
+   */
+  telemetry?: TelemetryOptions
 }
 
 interface FetchOptions {
@@ -157,6 +345,10 @@ export class Client<
   #id: string
   #actions: TActions | null
   #database: Adapter
+  #tracerProvider: NodeTracerProvider | null = null
+  #tracer: Tracer
+  #telemetryOptions: TelemetryOptions | null = null
+  #localSpansEnabled: boolean = false
   #variables: Record<string, unknown>
   #logger: Logger
   #started: boolean = false
@@ -169,7 +361,7 @@ export class Client<
   #pendingJobWaits = new Map<
     string,
     Set<{
-      resolve: (job: Job | null) => void
+      resolve: (result: JobResult | null) => void
       timeoutId?: NodeJS.Timeout
       signal?: AbortSignal
       abortHandler?: () => void
@@ -190,11 +382,66 @@ export class Client<
     this.#options = BaseOptionsSchema.parse(options)
     this.#id = options.id ?? globalThis.crypto.randomUUID()
     this.#database = options.database
+    this.#telemetryOptions = options.telemetry ?? null
     this.#actions = options.actions ?? null
     this.#variables = options?.variables ?? {}
     this.#logger = this.#normalizeLogger(options?.logger)
     this.#database.setId(this.#id)
     this.#database.setLogger(this.#logger)
+
+    // Initialize OpenTelemetry TracerProvider if telemetry options are provided
+    // When no options are provided, the tracer will be a no-op (from OpenTelemetry API)
+    if (this.#telemetryOptions) {
+      this.#initTelemetry(this.#telemetryOptions)
+    }
+
+    // Get tracer from our provider if configured, otherwise use global no-op tracer
+    // This keeps telemetry scoped to this client instance rather than globally registered
+    this.#tracer = this.#tracerProvider?.getTracer('duron') ?? trace.getTracer('duron')
+  }
+
+  /**
+   * Initialize OpenTelemetry TracerProvider with configured processors.
+   */
+  #initTelemetry(options: TelemetryOptions): void {
+    const serviceName = options.serviceName ?? 'duron'
+    const processors: SpanProcessor[] = []
+
+    // Add local span exporter if enabled
+    if (options.local) {
+      const localOptions = typeof options.local === 'boolean' ? {} : options.local
+      const flushDelayMs = localOptions.flushDelayMs ?? 5000
+
+      const localExporter = new LocalSpanExporter({ adapter: this.#database })
+      processors.push(
+        new BatchSpanProcessor(localExporter, {
+          scheduledDelayMillis: flushDelayMs,
+        }),
+      )
+      this.#localSpansEnabled = true
+    }
+
+    // Add custom span processors
+    if (options.spanProcessors) {
+      processors.push(...options.spanProcessors)
+    }
+
+    // Add custom trace exporter wrapped in BatchSpanProcessor
+    if (options.traceExporter) {
+      processors.push(new BatchSpanProcessor(options.traceExporter))
+    }
+
+    // Only create TracerProvider if we have processors
+    if (processors.length > 0) {
+      this.#tracerProvider = new NodeTracerProvider({
+        resource: resourceFromAttributes({
+          [ATTR_SERVICE_NAME]: serviceName,
+        }),
+        spanProcessors: processors,
+      })
+      // Note: We do NOT call .register() here to avoid global state pollution
+      // The tracer is obtained directly from this provider instance
+    }
   }
 
   #normalizeLogger(logger?: Logger | 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent'): Logger {
@@ -215,6 +462,39 @@ export class Client<
 
   get logger() {
     return this.#logger
+  }
+
+  /**
+   * Get the OpenTelemetry tracer for creating custom spans.
+   * Always returns a tracer - it's a no-op tracer when no SDK is configured.
+   */
+  get tracer(): Tracer {
+    return this.#tracer
+  }
+
+  /**
+   * Get the database adapter instance.
+   */
+  get database(): Adapter {
+    return this.#database
+  }
+
+  /**
+   * Check if local span storage is enabled.
+   * Returns true if telemetry.local is enabled.
+   */
+  get spansEnabled(): boolean {
+    return this.#localSpansEnabled
+  }
+
+  /**
+   * Force flush any pending telemetry data.
+   * Useful in tests or when you need to ensure spans are exported before querying.
+   */
+  async flushTelemetry(): Promise<void> {
+    if (this.#tracerProvider) {
+      await this.#tracerProvider.forceFlush()
+    }
   }
 
   /**
@@ -276,6 +556,12 @@ export class Client<
       concurrencyLimit = await action.groups.concurrency(concurrencyCtx)
     }
 
+    // Calculate description if provided
+    let description: string | null = null
+    if (action.description) {
+      description = await action.description(concurrencyCtx)
+    }
+
     // Create job in database
     const jobId = await this.#database.createJob({
       queue: action.name,
@@ -284,6 +570,8 @@ export class Client<
       timeoutMs: action.expire,
       checksum: action.checksum,
       concurrencyLimit,
+      concurrencyStepLimit: action.steps.concurrency,
+      description,
     })
 
     if (!jobId) {
@@ -296,13 +584,139 @@ export class Client<
   }
 
   /**
+   * Run an action and wait for its completion.
+   * This is a convenience method that combines `runAction` and `waitForJob`.
+   *
+   * @param actionName - Name of the action to run
+   * @param input - Input data for the action (validated against action's input schema if provided)
+   * @param options - Options including abort signal and timeout
+   * @returns Promise resolving to the job result with typed input and output
+   * @throws Error if action is not found, job creation fails, job is cancelled, or operation is aborted
+   */
+  async runActionAndWait<TActionName extends keyof TActions>(
+    actionName: TActionName,
+    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodObject
+      ? z.input<NonNullable<TActions[TActionName]['input']>>
+      : never,
+    options?: {
+      /**
+       * AbortSignal to cancel the operation. If aborted, the job will be cancelled and the promise will reject.
+       */
+      signal?: AbortSignal
+      /**
+       * Timeout in milliseconds. If the job doesn't complete within this time, the job will be cancelled and the promise will reject.
+       */
+      timeout?: number
+    },
+  ): Promise<TypedJobResult<TActions[TActionName]>> {
+    // Check if already aborted before starting
+    if (options?.signal?.aborted) {
+      throw new Error('Operation was aborted')
+    }
+
+    // Create the job
+    const jobId = await this.runAction(actionName, input)
+
+    // Set up abort handler to cancel the job if signal is aborted
+    let abortHandler: (() => void) | undefined
+    if (options?.signal) {
+      abortHandler = () => {
+        this.cancelJob(jobId).catch((err) => {
+          this.#logger.error({ err, jobId }, '[Duron] Error cancelling job on abort')
+        })
+      }
+      options.signal.addEventListener('abort', abortHandler, { once: true })
+    }
+
+    // Set up timeout handler to cancel the job if timeout is reached
+    let timeoutId: NodeJS.Timeout | undefined
+    let timeoutAbortController: AbortController | undefined
+    if (options?.timeout) {
+      timeoutAbortController = new AbortController()
+      timeoutId = setTimeout(() => {
+        timeoutAbortController!.abort()
+        this.cancelJob(jobId).catch((err) => {
+          this.#logger.error({ err, jobId }, '[Duron] Error cancelling job on timeout')
+        })
+      }, options.timeout)
+    }
+
+    try {
+      // Combine signals if both are provided
+      let waitSignal: AbortSignal | undefined
+      if (options?.signal && timeoutAbortController) {
+        waitSignal = AbortSignal.any([options.signal, timeoutAbortController.signal])
+      } else if (options?.signal) {
+        waitSignal = options.signal
+      } else if (timeoutAbortController) {
+        waitSignal = timeoutAbortController.signal
+      }
+
+      // Wait for the job to complete
+      const job = await this.waitForJob(jobId, { signal: waitSignal })
+
+      // Clean up
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      if (options?.signal && abortHandler) {
+        options.signal.removeEventListener('abort', abortHandler)
+      }
+
+      // Handle null result (aborted or timed out)
+      if (!job) {
+        if (options?.signal?.aborted) {
+          throw new Error('Operation was aborted')
+        }
+        if (timeoutAbortController?.signal.aborted) {
+          throw new Error('Operation timed out')
+        }
+        throw new Error('Job not found')
+      }
+
+      // Handle cancelled job
+      if (job.status === JOB_STATUS_CANCELLED) {
+        if (options?.signal?.aborted) {
+          throw new Error('Operation was aborted')
+        }
+        if (timeoutAbortController?.signal.aborted) {
+          throw new Error('Operation timed out')
+        }
+        throw new Error('Job was cancelled')
+      }
+
+      // Handle failed job
+      if (job.status === JOB_STATUS_FAILED) {
+        const errorMessage = job.error?.message ?? 'Job failed'
+        const error = new Error(errorMessage)
+        if (job.error?.stack) {
+          error.stack = job.error.stack
+        }
+        throw error
+      }
+
+      // Return the job result with typed input/output
+      return job as TypedJobResult<TActions[TActionName]>
+    } catch (err) {
+      // Clean up on error
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      if (options?.signal && abortHandler) {
+        options.signal.removeEventListener('abort', abortHandler)
+      }
+      throw err
+    }
+  }
+
+  /**
    * Fetch and process jobs from the database.
    * Concurrency limits are determined from the latest job created for each groupKey.
    *
-   * @param options - Fetch options including batch size
+   * @param [options.batchSize] - Maximum number of jobs to fetch in this batch (defaults to `batchSize` from client options)
    * @returns Promise resolving to the array of fetched jobs
    */
-  async fetch(options: FetchOptions) {
+  async fetch(options: FetchOptions = {}) {
     await this.start()
 
     if (!this.#actions) {
@@ -359,6 +773,21 @@ export class Client<
   async retryJob(jobId: string): Promise<string | null> {
     await this.start()
     return this.#database.retryJob({ jobId })
+  }
+
+  /**
+   * Time travel a job to restart from a specific step.
+   * The job must be in completed, failed, or cancelled status.
+   * Resets the job and ancestor steps to active status, deletes subsequent steps,
+   * and preserves completed parallel siblings.
+   *
+   * @param jobId - The ID of the job to time travel
+   * @param stepId - The ID of the step to restart from
+   * @returns Promise resolving to `true` if time travel succeeded, `false` otherwise
+   */
+  async timeTravelJob(jobId: string, stepId: string): Promise<boolean> {
+    await this.start()
+    return this.#database.timeTravelJob({ jobId, stepId })
   }
 
   /**
@@ -460,11 +889,11 @@ export class Client<
 
   /**
    * Wait for a job to change status by subscribing to job-status-changed events.
-   * When the job status changes, the job is fetched and returned.
+   * When the job status changes, the job result is returned.
    *
    * @param jobId - The ID of the job to wait for
    * @param options - Optional configuration including timeout
-   * @returns Promise resolving to the job when its status changes, or `null` if timeout
+   * @returns Promise resolving to the job result when its status changes, or `null` if timeout
    */
   async waitForJob(
     jobId: string,
@@ -479,7 +908,7 @@ export class Client<
        */
       signal?: AbortSignal
     },
-  ): Promise<Job | null> {
+  ): Promise<JobResult | null> {
     await this.start()
 
     // First, check if the job already exists and is in a terminal state
@@ -491,14 +920,23 @@ export class Client<
         if (!job) {
           return null
         }
-        return job
+        return {
+          id: job.id,
+          actionName: job.actionName,
+          status: job.status,
+          groupKey: job.groupKey,
+          description: job.description,
+          input: job.input,
+          output: job.output,
+          error: job.error,
+        }
       }
     }
 
     // Set up the shared event listener if not already set up
     this.#setupJobStatusListener()
 
-    return new Promise<Job | null>((resolve) => {
+    return new Promise<JobResult | null>((resolve) => {
       // Check if already aborted before setting up wait
       if (options?.signal?.aborted) {
         resolve(null)
@@ -549,6 +987,22 @@ export class Client<
   }
 
   /**
+   * Get spans for a job or step.
+   * Only available when telemetry.local is enabled.
+   *
+   * @param options - Query options including jobId/stepId, filters, and sort
+   * @returns Promise resolving to spans result
+   * @throws Error if local telemetry is not enabled
+   */
+  async getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
+    await this.start()
+    if (!this.spansEnabled) {
+      throw new Error('Spans are only available when telemetry.local is enabled')
+    }
+    return this.#database.getSpans(options)
+  }
+
+  /**
    * Get action metadata including input schemas and mock data.
    * This is useful for generating UI forms or mock data.
    *
@@ -569,6 +1023,43 @@ export class Client<
             action.name,
             zocker(action.input as z.ZodObject)
               .override(z.ZodString, 'string')
+              .override(z.ZodBigInt, '4000' as any) // Convert BigInt to string for JSON serialization
+              .override(z.ZodNumber, (schema, _ctx) => {
+                const greaterThan = schema.def.checks?.find((check) => check._zod.def.check === 'greater_than')?._zod
+                  .def as unknown as { value: number; inclusive: boolean }
+                const lessThan = schema.def.checks?.find((check) => check._zod.def.check === 'less_than')?._zod
+                  .def as unknown as { value: number; inclusive: boolean }
+
+                if (greaterThan && lessThan) {
+                  const min = greaterThan.inclusive ? greaterThan.value : greaterThan.value + 1
+                  // For inclusive lessThan, we want to include the value, so max should be value + 1
+                  // For exclusive lessThan, we want to exclude the value, so max is the value itself
+                  const max = lessThan.inclusive ? lessThan.value + 1 : lessThan.value
+                  // Ensure min < max
+                  if (min >= max) {
+                    return Math.floor(min)
+                  }
+                  return Math.floor(Math.random() * (max - min) + min)
+                }
+
+                if (greaterThan) {
+                  const min = greaterThan.inclusive ? greaterThan.value : greaterThan.value + 1
+                  const max = min + 1000 // Use 1000 as default range
+                  return Math.floor(Math.random() * (max - min) + min)
+                }
+
+                if (lessThan) {
+                  // For inclusive lessThan, we want to include the value, so max should be value + 1
+                  // For exclusive lessThan, we want to exclude the value, so max is the value itself
+                  const max = lessThan.inclusive ? lessThan.value + 1 : lessThan.value
+                  return Math.floor(Math.random() * max)
+                }
+
+                return Math.floor(Math.random() * 1000)
+              })
+              .number({
+                extreme_value_chance: 0.01,
+              })
               .generate(),
           )
         }
@@ -680,6 +1171,11 @@ export class Client<
         }),
       )
 
+      // Shutdown TracerProvider if configured
+      if (this.#tracerProvider) {
+        await this.#tracerProvider.shutdown()
+      }
+
       const dbStopped = await this.#database.stop()
       if (!dbStopped) {
         return false
@@ -719,6 +1215,20 @@ export class Client<
         // Fetch the job once for all pending waits
         const job = await this.getJobById(event.jobId)
 
+        // Transform to JobResult
+        const result: JobResult | null = job
+          ? {
+              id: job.id,
+              actionName: job.actionName,
+              status: job.status,
+              groupKey: job.groupKey,
+              description: job.description,
+              input: job.input,
+              output: job.output,
+              error: job.error,
+            }
+          : null
+
         // Resolve all pending waits for this job
         const waitsToResolve = Array.from(pendingWaits)
         this.#pendingJobWaits.delete(event.jobId)
@@ -731,7 +1241,7 @@ export class Client<
           if (wait.signal && wait.abortHandler) {
             wait.signal.removeEventListener('abort', wait.abortHandler)
           }
-          wait.resolve(job)
+          wait.resolve(result)
         }
       },
     )
@@ -743,7 +1253,7 @@ export class Client<
    * @param jobId - The job ID
    * @param resolve - The resolve function to remove
    */
-  #removeJobWait(jobId: string, resolve: (job: Job | null) => void) {
+  #removeJobWait(jobId: string, resolve: (result: JobResult | null) => void) {
     const pendingWaits = this.#pendingJobWaits.get(jobId)
     if (!pendingWaits) {
       return
@@ -795,6 +1305,7 @@ export class Client<
       actionManager = new ActionManager({
         action,
         database: this.#database,
+        tracer: this.#tracer,
         variables: this.#variables,
         logger: this.#logger,
         concurrencyLimit: this.#options.actionConcurrencyLimit,

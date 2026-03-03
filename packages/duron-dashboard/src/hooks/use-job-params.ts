@@ -46,6 +46,7 @@ export function useJobParams(pageSize: number = 10) {
     return finishedAtFilterParam.map((ts) => new Date(ts))
   }, [finishedAtFilterParam])
   const [search] = useQueryState('search', parseAsString.withDefault(''))
+  const [description] = useQueryState('description', parseAsString.withDefault(''))
 
   const sortString = useMemo(() => {
     if (sortingParam.length === 0) return 'createdAt:desc'
@@ -67,11 +68,24 @@ export function useJobParams(pageSize: number = 10) {
         fCreatedAt: fCreatedAt,
         fStartedAt: fStartedAt,
         fFinishedAt: fFinishedAt,
+        fDescription: description || undefined,
         fSearch: search || undefined,
         sort: sortString,
       },
       sort: sortingParam,
     }),
-    [page, perPage, statusFilters, fActionName, fCreatedAt, fStartedAt, fFinishedAt, search, sortString, sortingParam],
+    [
+      page,
+      perPage,
+      statusFilters,
+      fActionName,
+      fCreatedAt,
+      fStartedAt,
+      fFinishedAt,
+      description,
+      search,
+      sortString,
+      sortingParam,
+    ],
   )
 }

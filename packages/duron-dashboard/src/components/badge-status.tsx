@@ -11,27 +11,64 @@ const icons = {
   cancelled: Ban,
 }
 
-const colors = {
-  created: 'bg-gray-100 text-gray-800 border-gray-800',
-  active: 'bg-blue-100 text-blue-800 border-blue-800',
-  completed: 'bg-green-100 text-green-800 border-green-800',
-  failed: 'bg-red-100 text-red-800 border-red-800',
-  cancelled: 'bg-yellow-100 text-yellow-800 border-yellow-800',
-}
+export const statusConfig = {
+  created: {
+    label: 'Created',
+    variant: 'outline',
+    badgeClassName: '',
+    iconClassName: '',
+  },
+  active: {
+    label: 'Active',
+    variant: 'outline',
+    badgeClassName:
+      'border-none bg-amber-600/10 text-amber-600 focus-visible:ring-amber-600/20 focus-visible:outline-none dark:bg-amber-400/10 dark:text-amber-400 dark:focus-visible:ring-amber-400/40 [a&]:hover:bg-amber-600/5 dark:[a&]:hover:bg-amber-400/5',
+    iconClassName: 'rounded-full bg-amber-600 dark:bg-amber-400',
+  },
+  completed: {
+    label: 'Completed',
+    variant: 'outline',
+    badgeClassName:
+      'border-none bg-green-600/10 text-green-600 focus-visible:ring-green-600/20 focus-visible:outline-none dark:bg-green-400/10 dark:text-green-400 dark:focus-visible:ring-green-400/40 [a&]:hover:bg-green-600/5 dark:[a&]:hover:bg-green-400/5',
+    iconClassName: 'rounded-full bg-green-600 dark:bg-green-400',
+  },
+  failed: {
+    label: 'Failed',
+    variant: 'outline',
+    badgeClassName:
+      'bg-destructive/10 [a&]:hover:bg-destructive/5 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 text-destructive border-none focus-visible:outline-none',
+    iconClassName: 'bg-destructive rounded-full',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    variant: 'secondary',
+    badgeClassName: '',
+    iconClassName: '',
+  },
+} as const
+
+export type Status = keyof typeof statusConfig
 
 export function BadgeStatus({ status, justIcon = false }: { status: string; justIcon?: boolean }) {
-  const Icon = icons[status as keyof typeof icons]
-  const color = colors[status as keyof typeof colors]
+  const Icon = icons[status as Status]
+  const config = statusConfig[status as Status]
+
+  if (!config) {
+    return <Badge variant="outline">{status.charAt(0).toUpperCase() + status.slice(1)}</Badge>
+  }
+
   if (justIcon) {
     return (
-      <Badge className={cn(color, 'size-4 p-0 border-none')}>{Icon && <Icon height={'100%'} width={'100%'} />}</Badge>
+      <Badge className={cn(config.badgeClassName, 'size-4 p-0 border-none')}>
+        {Icon && <Icon height={'100%'} width={'100%'} className={config.iconClassName} />}
+      </Badge>
     )
   }
 
   return (
-    <Badge variant="outline" className={color}>
-      {Icon && <Icon className="mr-1 h-3 w-3" />}
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <Badge variant={config.variant} className={config.badgeClassName}>
+      {Icon && <Icon className={cn('mr-1 h-3 w-3', config.iconClassName)} />}
+      {config.label}
     </Badge>
   )
 }

@@ -39,6 +39,7 @@ Each job has the following properties:
 - **`id`** - Unique identifier (UUID)
 - **`actionName`** - Name of the action
 - **`groupKey`** - Group key for concurrency control
+- **`description`** - Dynamic description of the job (if defined on the action)
 - **`status`** - Current status
 - **`input`** - Input data passed to the action
 - **`output`** - Output data returned by the action (if completed)
@@ -125,14 +126,297 @@ const processOrder = defineAction()({
 The step handler receives a context object with:
 
 - **`signal`** - AbortSignal for cancellation support
+- **`stepId`** - Unique identifier for the current step
+- **`parentStepId`** - ID of the parent step (null for root steps)
+- **`step`** - Function to create nested inline child steps
+- **`run`** - Function to execute reusable step definitions
+- **`telemetry`** - Telemetry context for metrics and tracing (see [Telemetry](/docs/telemetry))
 
 ```ts
-await ctx.step('fetchData', async ({ signal }) => {
+await ctx.step('fetchData', async ({ signal, stepId, parentStepId, run }) => {
+  console.log(`Executing step ${stepId}, parent: ${parentStepId}`)
+
   // Use signal for cancellation
   const response = await fetch(url, { signal })
+
+  // Call a step definition from within an inline step
+  await run(sendEmailStep, { to: 'user@example.com', body: 'Done!' })
+
   return response.json()
 })
 ```
+
+### Nested Steps
+
+Steps can create child steps using the `step` function available in the step handler context. This is useful for breaking down complex operations into smaller, trackable units.
+
+```ts
+const processOrder = defineAction()({
+  name: 'processOrder',
+  input: z.object({ orderId: z.string() }),
+  handler: async (ctx) => {
+    const result = await ctx.step('process', async ({ step, stepId }) => {
+      console.log('Processing step:', stepId)
+
+      // Create child steps - they inherit the parent's abort signal
+      const validation = await step('validate', async ({ parentStepId }) => {
+        // parentStepId links back to the 'process' step
+        console.log('Parent step:', parentStepId)
+        return { valid: true }
+      })
+
+      // Child steps can also be nested further
+      const payment = await step('charge', async ({ step: nestedStep }) => {
+        const auth = await nestedStep('authorize', async () => {
+          return { authCode: '123' }
+        })
+        return { charged: true, authCode: auth.authCode }
+      })
+
+      return { success: validation.valid && payment.charged }
+    })
+
+    return result
+  },
+})
+```
+
+#### Abort Signal Propagation
+
+Child steps automatically inherit the abort signal chain from their parent. When a parent step is cancelled or times out, all child steps receive the abort signal.
+
+```ts
+await ctx.step('parent', async ({ step, signal }) => {
+  // If this step times out, all children are also aborted
+  const child1 = await step('child1', async ({ signal: childSignal }) => {
+    // childSignal is linked to the parent's signal
+    return await fetch(url, { signal: childSignal })
+  })
+
+  return child1
+})
+```
+
+#### Important: Await All Child Steps
+
+All child steps **must** be awaited before the parent step returns. If a parent step completes with unawaited children, Duron will:
+
+1. Abort all pending child steps
+2. Wait for them to settle
+3. Throw an `UnhandledChildStepsError`
+
+```ts
+// ❌ Bad: Unawaited child steps
+await ctx.step('parent', async ({ step }) => {
+  step('child1', async () => { /* ... */ }) // Not awaited!
+  step('child2', async () => { /* ... */ }) // Not awaited!
+  return { done: true } // Throws UnhandledChildStepsError
+})
+
+// ✅ Good: All children awaited
+await ctx.step('parent', async ({ step }) => {
+  await step('child1', async () => { /* ... */ })
+  await step('child2', async () => { /* ... */ })
+  return { done: true }
+})
+
+// ✅ Good: Parallel execution with Promise.all
+await ctx.step('parent', async ({ step }) => {
+  const [result1, result2] = await Promise.all([
+    step('child1', async () => { /* ... */ }),
+    step('child2', async () => { /* ... */ }),
+  ])
+  return { result1, result2 }
+})
+```
+
+#### Step Hierarchy in the Dashboard
+
+Nested steps are displayed hierarchically in the Duron Dashboard. Each step shows its parent relationship, making it easy to understand the execution flow of complex workflows.
+
+## Reusable Step Definitions
+
+For steps that are used across multiple actions or need to be called multiple times with different inputs, you can create **reusable step definitions** using `createStep()`.
+
+### Creating a Reusable Step
+
+Use `createStep()` to define a step with its own input schema, options, and handler:
+
+```ts
+import { createStep } from 'duron'
+import { z } from 'zod'
+
+const sendEmailStep = createStep<typeof variables>()({
+  name: 'send-email',
+  input: z.object({
+    to: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  retry: { limit: 3 },
+  expire: 60000,
+  handler: async (ctx) => {
+    // ctx includes all step context plus action-level properties
+    const result = await ctx.var.emailService.send({
+      to: ctx.input.to,
+      subject: ctx.input.subject,
+      body: ctx.input.body,
+    })
+    return { success: true, messageId: result.id }
+  },
+})
+```
+
+### Step Definition Context
+
+The handler receives an extended context that includes:
+
+- **`input`** - The validated input data based on the step's input schema
+- **`signal`** - AbortSignal for cancellation support
+- **`stepId`** - Unique identifier for the current step
+- **`parentStepId`** - ID of the parent step (null for root steps)
+- **`step`** - Function to create nested inline child steps
+- **`run`** - Function to execute other reusable step definitions
+- **`telemetry`** - Telemetry context for metrics and tracing
+- **`var`** - Variables from the action context
+- **`logger`** - Pino logger instance
+- **`jobId`** - The job ID this step belongs to
+
+### Executing Step Definitions
+
+Use `ctx.run()` to execute a step definition within an action handler:
+
+```ts
+const processOrder = defineAction<typeof variables>()({
+  name: 'processOrder',
+  handler: async (ctx) => {
+    // Execute the reusable step
+    const emailResult = await ctx.run(sendEmailStep, {
+      to: ctx.input.email,
+      subject: 'Order Confirmation',
+      body: `Your order ${ctx.input.orderId} has been placed.`,
+    })
+
+    return { success: emailResult.success }
+  },
+})
+```
+
+### Overriding Step Options
+
+You can override step options at call time:
+
+```ts
+// Override expire and retry at call time
+const result = await ctx.run(
+  sendEmailStep,
+  { to: 'user@example.com', subject: 'Hello', body: 'World' },
+  { expire: 30000, retry: { limit: 5 } }
+)
+```
+
+### Dynamic Step Names
+
+Use a function for the `name` property to generate unique step names based on input. This is essential when calling the same step definition multiple times within a single job.
+
+The name function receives a context object with:
+
+- **`input`** - The validated step input
+- **`var`** - Variables from the action context
+- **`jobId`** - The job ID this step belongs to
+- **`parentStepId`** - The ID of the parent step (null for root steps)
+
+```ts
+const sendEmailStep = createStep<typeof variables>()({
+  // Dynamic name based on input and context
+  name: (ctx) => `send-email-${ctx.input.to}`,
+  input: z.object({
+    to: z.string().email(),
+    body: z.string(),
+  }),
+  handler: async (ctx) => {
+    // ...
+  },
+})
+
+// Now you can call it multiple times with different inputs
+const processOrder = defineAction<typeof variables>()({
+  name: 'processOrder',
+  handler: async (ctx) => {
+    // Each call creates a uniquely named step
+    await ctx.run(sendEmailStep, { to: 'customer@example.com', body: 'Confirmation' })
+    await ctx.run(sendEmailStep, { to: 'admin@example.com', body: 'Notification' })
+    return { success: true }
+  },
+})
+```
+
+### Nested Steps in Step Definitions
+
+Step definitions can create nested child steps using `ctx.step()`:
+
+```ts
+const processPaymentStep = createStep<typeof variables>()({
+  name: 'process-payment',
+  input: z.object({ amount: z.number(), currency: z.string() }),
+  handler: async (ctx) => {
+    // Create nested child steps
+    const auth = await ctx.step('authorize', async () => {
+      return await ctx.var.paymentGateway.authorize(ctx.input.amount)
+    })
+
+    const capture = await ctx.step('capture', async () => {
+      return await ctx.var.paymentGateway.capture(auth.transactionId)
+    })
+
+    return { success: true, transactionId: capture.id }
+  },
+})
+```
+
+### Composing Step Definitions
+
+Step definitions can call other step definitions using `ctx.run()`. This enables powerful composition patterns where you can build complex workflows from reusable building blocks:
+
+```ts
+// Inner step definition
+const validateOrderStep = createStep<typeof variables>()({
+  name: (ctx) => `validate-order-${ctx.input.orderId}`,
+  input: z.object({ orderId: z.string() }),
+  handler: async (ctx) => {
+    const order = await ctx.var.db.getOrder(ctx.input.orderId)
+    return { valid: order.items.length > 0, total: order.total }
+  },
+})
+
+// Outer step that calls inner step via ctx.run()
+const processOrderStep = createStep<typeof variables>()({
+  name: (ctx) => `process-order-${ctx.input.orderId}`,
+  input: z.object({ orderId: z.string() }),
+  handler: async (ctx) => {
+    // Call another step definition from within this step definition
+    const validation = await ctx.run(validateOrderStep, {
+      orderId: ctx.input.orderId,
+    })
+
+    if (!validation.valid) {
+      throw new Error('Invalid order')
+    }
+
+    return { processed: true, total: validation.total }
+  },
+})
+
+// Use in an action
+const orderAction = defineAction<typeof variables>()({
+  name: 'orderAction',
+  handler: async (ctx) => {
+    return ctx.run(processOrderStep, { orderId: ctx.input.orderId })
+  },
+})
+```
+
+This pattern supports arbitrary nesting depths. Each step definition call creates its own step in the database for tracking and observability.
 
 ### Step Options
 
@@ -181,6 +465,34 @@ Retry configuration for the step. See [Retries](/docs/retries) for details.
 }
 ```
 
+#### `parallel`
+
+Whether this step runs independently from its siblings. Defaults to `false`.
+
+When a step is marked as `parallel: true`, it is treated as independent during time travel operations. If you time travel to a specific step, completed parallel siblings are preserved rather than deleted. This is useful for steps that don't depend on each other and can safely coexist.
+
+```ts
+await ctx.step(
+  'sendNotification',
+  async ({ signal }) => {
+    return await sendNotification({ signal })
+  },
+  { parallel: true }
+)
+```
+
+You can also set `parallel` on reusable step definitions:
+
+```ts
+const notifyStep = createStep()({
+  name: 'notify',
+  parallel: true,
+  handler: async (ctx) => {
+    // This step is independent from siblings
+  },
+})
+```
+
 ### Step Lifecycle
 
 Steps go through the following states:
@@ -196,16 +508,21 @@ Each step has the following properties:
 
 - **`id`** - Unique identifier (UUID)
 - **`jobId`** - ID of the parent job
+- **`parentStepId`** - ID of the parent step (null for root steps)
 - **`name`** - Name of the step
 - **`status`** - Current status
-- **`input`** - Input data (serialized)
 - **`output`** - Output data (if completed)
 - **`error`** - Error information (if failed)
-- **`createdAt`** - Timestamp when step was created
+- **`timeoutMs`** - Timeout in milliseconds
+- **`expiresAt`** - Expiration timestamp
+- **`retriesLimit`** - Maximum retry attempts
+- **`retriesCount`** - Current retry count
+- **`delayedMs`** - Delay before next retry (if retrying)
+- **`historyFailedAttempts`** - Record of previous failed attempts
 - **`startedAt`** - Timestamp when step started
 - **`finishedAt`** - Timestamp when step finished
+- **`createdAt`** - Timestamp when step was created
 - **`updatedAt`** - Timestamp when step was last updated
-- **`clientId`** - ID of the Duron instance that owns the step
 
 ### Querying Steps
 
@@ -226,7 +543,7 @@ const step = await client.getJobStepById(stepId)
 
 ### Step Concurrency
 
-Steps within an action respect the `steps.concurrency` limit. By default, up to 10 steps can run concurrently per action.
+Steps within an action respect the `steps.concurrency` limit. By default, up to 100 steps can run concurrently per action.
 
 ```ts
 {

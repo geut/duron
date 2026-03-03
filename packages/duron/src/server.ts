@@ -2,11 +2,12 @@ import { Elysia } from 'elysia'
 import { jwtVerify, SignJWT } from 'jose'
 import { z } from 'zod'
 
-import type { GetJobStepsOptions, GetJobsOptions } from './adapters/adapter.js'
+import type { GetJobStepsOptions, GetJobsOptions, GetSpansOptions } from './adapters/adapter.js'
 import {
   GetActionsResultSchema,
   GetJobStepsResultSchema,
   GetJobsResultSchema,
+  GetSpansResultSchema,
   JobSchema,
   JobSortFieldSchema,
   JobStatusResultSchema,
@@ -14,6 +15,8 @@ import {
   JobStepSchema,
   JobStepStatusResultSchema,
   SortOrderSchema,
+  SpanKindSchema,
+  SpanSortFieldSchema,
 } from './adapters/schemas.js'
 import type { Client } from './client.js'
 
@@ -61,14 +64,10 @@ export class UnauthorizedError extends Error {
 
 export const GetJobStepsQuerySchema = z
   .object({
-    page: z.coerce.number().int().min(1).optional(),
-    pageSize: z.coerce.number().int().min(1).max(1000).optional(),
     search: z.string().optional(),
     fUpdatedAfter: z.coerce.date().optional(),
   })
   .transform((data) => ({
-    page: data.page,
-    pageSize: data.pageSize,
     search: data.search,
     updatedAfter: data.fUpdatedAfter,
   }))
@@ -87,6 +86,7 @@ export const GetJobsQuerySchema = z
     fActionName: z.union([z.string(), z.array(z.string())]).optional(),
     fGroupKey: z.union([z.string(), z.array(z.string())]).optional(),
     fClientId: z.union([z.string(), z.array(z.string())]).optional(),
+    fDescription: z.string().optional(),
     // Date filters: can be a single ISO string or JSON array [start, end] - both coerced to Date objects
     fCreatedAt: z.union([z.coerce.date(), z.array(z.coerce.date())]).optional(),
     fStartedAt: z.union([z.coerce.date(), z.array(z.coerce.date())]).optional(),
@@ -108,6 +108,7 @@ export const GetJobsQuerySchema = z
     if (data.fActionName) filters.actionName = data.fActionName
     if (data.fGroupKey) filters.groupKey = data.fGroupKey
     if (data.fClientId) filters.clientId = data.fClientId
+    if (data.fDescription) filters.description = data.fDescription
     if (data.fCreatedAt) filters.createdAt = data.fCreatedAt
     if (data.fStartedAt) filters.startedAt = data.fStartedAt
     if (data.fFinishedAt) filters.finishedAt = data.fFinishedAt
@@ -177,6 +178,50 @@ export const GetActionsMetadataResponseSchema = z.array(
 export type GetJobsQueryInput = z.input<typeof GetJobsQuerySchema>
 export type GetJobStepsQueryInput = z.input<typeof GetJobStepsQuerySchema>
 
+// Spans query schema
+export const GetSpansQuerySchema = z
+  .object({
+    // Filters
+    fName: z.union([z.string(), z.array(z.string())]).optional(),
+    fKind: z.union([SpanKindSchema, z.array(SpanKindSchema)]).optional(),
+    fTraceId: z.string().optional(),
+    fAttributesFilter: z.record(z.string(), z.any()).optional(),
+
+    // Sort - format: "field:asc" or "field:desc"
+    sort: z.string().optional(),
+  })
+  .transform((data) => {
+    const filters: any = {}
+
+    if (data.fName) filters.name = data.fName
+    if (data.fKind) filters.kind = data.fKind
+    if (data.fTraceId) filters.traceId = data.fTraceId
+    if (data.fAttributesFilter) filters.attributesFilter = data.fAttributesFilter
+
+    // Parse sort string: "field:asc" -> { field: 'field', order: 'asc' }
+    let sort: { field: z.infer<typeof SpanSortFieldSchema>; order: z.infer<typeof SortOrderSchema> } | undefined
+    if (data.sort) {
+      const [field, order] = data.sort.split(':').map((s) => s.trim())
+      if (field && order) {
+        const fieldResult = SpanSortFieldSchema.safeParse(field)
+        const orderResult = SortOrderSchema.safeParse(order.toLowerCase())
+        if (fieldResult.success && orderResult.success) {
+          sort = {
+            field: fieldResult.data,
+            order: orderResult.data,
+          }
+        }
+      }
+    }
+
+    return {
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
+      sort,
+    }
+  })
+
+export type GetSpansQueryInput = z.input<typeof GetSpansQuerySchema>
+
 export const ErrorResponseSchema = z.object({
   error: z.string(),
   message: z.string().optional(),
@@ -201,6 +246,15 @@ export const RetryJobResponseSchema = z.object({
   newJobId: z.string(),
 })
 
+export const TimeTravelJobBodySchema = z.object({
+  stepId: z.uuid(),
+})
+
+export const TimeTravelJobResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+})
+
 // ============================================================================
 // Server Factory
 // ============================================================================
@@ -215,6 +269,14 @@ export interface CreateServerOptions<P extends string> {
    * Optional prefix for all routes (default: '/api')
    */
   prefix?: P
+
+  /**
+   * Enable spans endpoints (/jobs/:id/spans, /steps/:id/spans).
+   * Only works when client is configured with telemetry.local enabled.
+   * When true, enables the dashboard to show spans buttons.
+   * @default auto-detected from client.spansEnabled
+   */
+  spansEnabled?: boolean
 
   login?: {
     onLogin: (body: { email: string; password: string }) => Promise<boolean>
@@ -237,11 +299,14 @@ export interface CreateServerOptions<P extends string> {
  * @param options - Configuration options
  * @returns Elysia server instance
  */
-export function createServer<P extends string>({ client, prefix, login }: CreateServerOptions<P>) {
+export function createServer<P extends string>({ client, prefix, login, spansEnabled }: CreateServerOptions<P>) {
   // Convert string secret to Uint8Array if needed
   const secretKey = typeof login?.jwtSecret === 'string' ? new TextEncoder().encode(login?.jwtSecret) : login?.jwtSecret
 
   const routePrefix = (prefix ?? '/api') as P
+
+  // Auto-detect spansEnabled from client if not explicitly set
+  const isSpansEnabled = spansEnabled ?? client.spansEnabled
 
   return new Elysia({
     prefix: routePrefix,
@@ -345,8 +410,6 @@ export function createServer<P extends string>({ client, prefix, login }: Create
       async ({ params, query }) => {
         const options: GetJobStepsOptions = {
           jobId: params.id,
-          page: query.page,
-          pageSize: query.pageSize,
           search: query.search,
           updatedAfter: query.updatedAfter,
         }
@@ -490,6 +553,32 @@ export function createServer<P extends string>({ client, prefix, login }: Create
         auth: true,
       },
     )
+    .post(
+      '/jobs/:id/time-travel',
+      async ({ params, body }) => {
+        const success = await client.timeTravelJob(params.id, body.stepId)
+        if (!success) {
+          throw new Error(
+            `Could not time travel job ${params.id}. The job may not be in a terminal state or the step may not exist.`,
+          )
+        }
+        return {
+          success: true,
+          message: `Job ${params.id} has been time traveled to step ${body.stepId}`,
+        }
+      },
+      {
+        params: JobIdParamsSchema,
+        body: TimeTravelJobBodySchema,
+        response: {
+          200: TimeTravelJobResponseSchema,
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+        auth: true,
+      },
+    )
     .delete(
       '/jobs/:id',
       async ({ params }) => {
@@ -572,6 +661,74 @@ export function createServer<P extends string>({ client, prefix, login }: Create
       {
         response: {
           200: GetActionsMetadataResponseSchema,
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+        auth: true,
+      },
+    )
+    .get(
+      '/config',
+      async () => {
+        return {
+          spansEnabled: isSpansEnabled,
+          authEnabled: !!login,
+        }
+      },
+      {
+        response: {
+          200: z.object({
+            spansEnabled: z.boolean(),
+            authEnabled: z.boolean(),
+          }),
+          500: ErrorResponseSchema,
+        },
+      },
+    )
+    .get(
+      '/jobs/:id/spans',
+      async ({ params, query }) => {
+        if (!isSpansEnabled) {
+          throw new Error('Spans are not enabled. Enable telemetry.local to enable spans.')
+        }
+        const options: GetSpansOptions = {
+          jobId: params.id,
+          filters: query.filters,
+          sort: query.sort,
+        }
+        return client.getSpans(options)
+      },
+      {
+        params: JobIdParamsSchema,
+        query: GetSpansQuerySchema,
+        response: {
+          200: GetSpansResultSchema,
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+        auth: true,
+      },
+    )
+    .get(
+      '/steps/:id/spans',
+      async ({ params, query }) => {
+        if (!isSpansEnabled) {
+          throw new Error('Spans are not enabled. Enable telemetry.local to enable spans.')
+        }
+        const options: GetSpansOptions = {
+          stepId: params.id,
+          filters: query.filters,
+          sort: query.sort,
+        }
+        return client.getSpans(options)
+      },
+      {
+        params: StepIdParamsSchema,
+        query: GetSpansQuerySchema,
+        response: {
+          200: GetSpansResultSchema,
           400: ErrorResponseSchema,
           500: ErrorResponseSchema,
           401: ErrorResponseSchema,

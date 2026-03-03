@@ -8,6 +8,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import type { Job, JobStep } from '@/lib/api'
 import { calculateDurationSeconds, formatDurationSeconds } from '@/lib/duration'
 
+// Step with optional parentStepId field
+type StepWithParent = Omit<JobStep, 'output'> & { parentStepId?: string | null }
+
 interface TimelineItem {
   id: string
   name: string
@@ -16,13 +19,70 @@ interface TimelineItem {
   finishedAt: Date | string | number | null | undefined
   status: string
   level: number
+  parentStepId?: string | null
 }
 
 interface TimelineProps {
   job: Job | null
-  steps: Omit<JobStep, 'output'>[]
+  steps: StepWithParent[]
   selectedStepId?: string | null
   onStepSelect?: (stepId: string) => void
+}
+
+interface StepNode {
+  step: StepWithParent
+  children: StepNode[]
+  depth: number
+}
+
+/**
+ * Build a tree structure from flat steps list using parentStepId
+ */
+function buildStepTree(steps: StepWithParent[]): StepNode[] {
+  const stepMap = new Map<string, StepNode>()
+  const rootNodes: StepNode[] = []
+
+  // First pass: create nodes for all steps
+  for (const step of steps) {
+    stepMap.set(step.id, { step, children: [], depth: 0 })
+  }
+
+  // Second pass: build parent-child relationships
+  for (const step of steps) {
+    const node = stepMap.get(step.id)!
+    const parentStepId = step.parentStepId
+
+    if (parentStepId && stepMap.has(parentStepId)) {
+      const parentNode = stepMap.get(parentStepId)!
+      parentNode.children.push(node)
+      node.depth = parentNode.depth + 1
+    } else {
+      // Root step (no parent or parent not in current view)
+      rootNodes.push(node)
+    }
+  }
+
+  return rootNodes
+}
+
+/**
+ * Flatten tree back to ordered list with depth info for rendering
+ */
+function flattenStepTree(nodes: StepNode[]): Array<{ step: StepWithParent; depth: number }> {
+  const result: Array<{ step: StepWithParent; depth: number }> = []
+
+  function traverse(node: StepNode) {
+    result.push({ step: node.step, depth: node.depth })
+    for (const child of node.children) {
+      traverse(child)
+    }
+  }
+
+  for (const node of nodes) {
+    traverse(node)
+  }
+
+  return result
 }
 
 const ROW_HEIGHT = 48
@@ -30,7 +90,7 @@ const ROW_HEIGHT = 48
 export function Timeline({ job, steps, selectedStepId, onStepSelect }: TimelineProps) {
   const parentRef = useRef<HTMLDivElement>(null)
 
-  // Build timeline items from job and steps
+  // Build timeline items from job and steps with proper nesting
   const timelineItems = useMemo<TimelineItem[]>(() => {
     if (!job) {
       return []
@@ -49,14 +109,18 @@ export function Timeline({ job, steps, selectedStepId, onStepSelect }: TimelineP
       level: 0,
     })
 
-    // Add steps as children
+    // Sort steps by startedAt for initial ordering
     const sortedSteps = [...steps].sort((a, b) => {
       const aStart = a.startedAt ? new Date(a.startedAt).getTime() : 0
       const bStart = b.startedAt ? new Date(b.startedAt).getTime() : 0
       return aStart - bStart
     })
 
-    sortedSteps.forEach((step) => {
+    // Build tree structure and flatten with proper depth
+    const tree = buildStepTree(sortedSteps)
+    const orderedSteps = flattenStepTree(tree)
+
+    orderedSteps.forEach(({ step, depth }) => {
       items.push({
         id: step.id,
         name: step.name,
@@ -64,7 +128,8 @@ export function Timeline({ job, steps, selectedStepId, onStepSelect }: TimelineP
         startedAt: step.startedAt,
         finishedAt: step.finishedAt,
         status: step.status,
-        level: 1,
+        level: depth + 1, // +1 because job is at level 0
+        parentStepId: step.parentStepId,
       })
     })
 

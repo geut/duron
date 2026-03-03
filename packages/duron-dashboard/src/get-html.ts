@@ -1,16 +1,66 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-let cachedHTML: string | null = null
-export async function getHTML({
-  url,
-  enableLogin,
-  showLogo,
-}: {
+/**
+ * Theme values that can be applied to the dashboard.
+ */
+export type Theme = 'light' | 'dark'
+
+/**
+ * Theme options for configuring the dashboard theme.
+ * - 'light': Always use light theme
+ * - 'dark': Always use dark theme
+ * - 'system': Use the system preference (default)
+ */
+export type ThemeOption = Theme | 'system'
+
+/**
+ * Options for generating the dashboard HTML.
+ */
+export interface GetHTMLOptions {
+  /**
+   * The base URL for the Duron API.
+   */
   url: string
+  /**
+   * Enable authentication flow (login/logout) in the dashboard.
+   */
   enableLogin: boolean
+  /**
+   * Controls whether the Duron logo is shown in the navbar.
+   */
   showLogo: boolean
-}): Promise<string> {
+  /**
+   * The theme to use for the dashboard.
+   * - 'light': Always use light theme
+   * - 'dark': Always use dark theme
+   * - 'system': Use the system preference (default)
+   */
+  theme?: ThemeOption
+}
+
+let cachedHTML: string | null = null
+
+/**
+ * Generate the HTML for the Duron Dashboard.
+ * The HTML is cached after the first call.
+ *
+ * @param options - Configuration options for the dashboard
+ * @returns The complete HTML string for the dashboard
+ *
+ * @example
+ * ```ts
+ * import { getHTML } from 'duron-dashboard/get-html'
+ *
+ * const html = await getHTML({
+ *   url: 'http://localhost:3000/api',
+ *   enableLogin: true,
+ *   showLogo: true,
+ *   theme: 'dark'
+ * })
+ * ```
+ */
+export async function getHTML({ url, enableLogin, showLogo, theme }: GetHTMLOptions): Promise<string> {
   if (cachedHTML) return cachedHTML
 
   let css = ''
@@ -43,6 +93,13 @@ export async function getHTML({
     favicon = `<link rel="icon" href="${dataUri}" type="${mimeType}" />`
   }
 
+  const config = {
+    url,
+    enableLogin,
+    showLogo,
+    theme,
+  }
+
   cachedHTML = `
     <!doctype html>
     <html lang="en">
@@ -55,11 +112,7 @@ export async function getHTML({
         ${js}
         <script>
           function autoInit() {
-            globalThis.initDuron('#root', {
-              url: '${url}',
-              enableLogin: ${enableLogin},
-              showLogo: ${showLogo},
-            })
+            globalThis.initDuron('#root', ${JSON.stringify(config, null, 2)})
           }
 
           if (document.readyState === 'loading') {

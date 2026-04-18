@@ -152,7 +152,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     description,
   }: CreateJobOptions) {
     const [result] = await this.db
-      .insert(this.tables.jobsActiveTable)
+      .insert(this.tables.jobsTable)
       .values({
         action_name: queue,
         group_key: groupKey,
@@ -164,7 +164,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         concurrency_limit: concurrencyLimit,
         concurrency_step_limit: concurrencyStepLimit,
       })
-      .returning({ id: this.tables.jobsActiveTable.id })
+      .returning({ id: this.tables.jobsTable.id })
 
     if (!result) {
       return null
@@ -180,7 +180,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _completeJob({ jobId, output }: CompleteJobOptions) {
     const result = await this.db
-      .update(this.tables.jobsActiveTable)
+      .update(this.tables.jobsTable)
       .set({
         status: JOB_STATUS_COMPLETED,
         output,
@@ -189,13 +189,13 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       })
       .where(
         and(
-          eq(this.tables.jobsActiveTable.id, jobId),
-          eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
-          eq(this.tables.jobsActiveTable.client_id, this.id),
-          gt(this.tables.jobsActiveTable.expires_at, sql`now()`),
+          eq(this.tables.jobsTable.id, jobId),
+          eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE),
+          eq(this.tables.jobsTable.client_id, this.id),
+          gt(this.tables.jobsTable.expires_at, sql`now()`),
         ),
       )
-      .returning({ id: this.tables.jobsActiveTable.id })
+      .returning({ id: this.tables.jobsTable.id })
 
     return result.length > 0
   }
@@ -207,7 +207,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _failJob({ jobId, error }: FailJobOptions) {
     const result = await this.db
-      .update(this.tables.jobsActiveTable)
+      .update(this.tables.jobsTable)
       .set({
         status: JOB_STATUS_FAILED,
         error,
@@ -216,12 +216,12 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       })
       .where(
         and(
-          eq(this.tables.jobsActiveTable.id, jobId),
-          eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
-          eq(this.tables.jobsActiveTable.client_id, this.id),
+          eq(this.tables.jobsTable.id, jobId),
+          eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE),
+          eq(this.tables.jobsTable.client_id, this.id),
         ),
       )
-      .returning({ id: this.tables.jobsActiveTable.id })
+      .returning({ id: this.tables.jobsTable.id })
 
     return result.length > 0
   }
@@ -233,7 +233,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _cancelJob({ jobId }: CancelJobOptions) {
     const result = await this.db
-      .update(this.tables.jobsActiveTable)
+      .update(this.tables.jobsTable)
       .set({
         status: JOB_STATUS_CANCELLED,
         finished_at: sql`now()`,
@@ -241,11 +241,11 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       })
       .where(
         and(
-          eq(this.tables.jobsActiveTable.id, jobId),
-          or(eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE), eq(this.tables.jobsActiveTable.status, JOB_STATUS_CREATED)),
+          eq(this.tables.jobsTable.id, jobId),
+          or(eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE), eq(this.tables.jobsTable.status, JOB_STATUS_CREATED)),
         ),
       )
-      .returning({ id: this.tables.jobsActiveTable.id })
+      .returning({ id: this.tables.jobsTable.id })
 
     return result.length > 0
   }
@@ -272,7 +272,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           j.created_at,
           j.concurrency_limit,
           j.concurrency_step_limit
-        FROM ${this.tables.jobsActiveTable} j
+        FROM ${this.tables.jobsTable} j
         WHERE j.id = ${jobId}
           AND j.status IN (${JOB_STATUS_COMPLETED}, ${JOB_STATUS_CANCELLED}, ${JOB_STATUS_FAILED})
         FOR UPDATE OF j SKIP LOCKED
@@ -280,7 +280,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       existing_retry AS (
         -- Check if a retry already exists (a newer job with same checksum, group_key, and input)
         SELECT j.id
-        FROM ${this.tables.jobsActiveTable} j
+        FROM ${this.tables.jobsTable} j
         INNER JOIN locked_source ls
           ON j.action_name = ls.action_name
           AND j.group_key = ls.group_key
@@ -293,7 +293,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       inserted_retry AS (
         -- Insert the retry only if no existing retry was found
         -- Get concurrency_limit from the latest job at insertion time to avoid stale values
-        INSERT INTO ${this.tables.jobsActiveTable} (
+        INSERT INTO ${this.tables.jobsTable} (
           action_name,
           group_key,
           description,
@@ -315,7 +315,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           COALESCE(
             (
               SELECT j.concurrency_limit
-              FROM ${this.tables.jobsActiveTable} j
+              FROM ${this.tables.jobsTable} j
               WHERE j.action_name = ls.action_name
                 AND j.group_key = ls.group_key
                 AND (j.expires_at IS NULL OR j.expires_at > now())
@@ -368,7 +368,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       -- Lock and validate the job
       locked_job AS (
         SELECT j.id
-        FROM ${this.tables.jobsActiveTable} j
+        FROM ${this.tables.jobsTable} j
         WHERE j.id = ${jobId}
           AND j.status IN (${JOB_STATUS_COMPLETED}, ${JOB_STATUS_FAILED}, ${JOB_STATUS_CANCELLED})
         FOR UPDATE OF j
@@ -376,7 +376,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       -- Validate target step exists and belongs to job
       target_step AS (
         SELECT s.id, s.parent_step_id, s.created_at
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         WHERE s.id = ${stepId}
           AND s.job_id = ${jobId}
           AND EXISTS (SELECT 1 FROM locked_job)
@@ -384,19 +384,19 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       -- Find all ancestor steps recursively (from target up to root)
       ancestors AS (
         SELECT s.id, s.parent_step_id, 0 AS depth
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         WHERE s.id = (SELECT parent_step_id FROM target_step)
           AND EXISTS (SELECT 1 FROM target_step)
         UNION ALL
         SELECT s.id, s.parent_step_id, a.depth + 1
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         INNER JOIN ancestors a ON s.id = a.parent_step_id
       ),
       -- Steps to keep: completed steps created before target + completed parallel siblings of target and ancestors + their descendants
       parallel_siblings AS (
         -- Completed parallel siblings of target step
         SELECT s.id
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         CROSS JOIN target_step ts
         WHERE s.job_id = ${jobId}
           AND s.id != ts.id
@@ -409,7 +409,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         UNION
         -- Completed parallel siblings of each ancestor
         SELECT s.id
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         INNER JOIN ancestors a ON (
           (s.parent_step_id IS NULL AND a.parent_step_id IS NULL)
           OR s.parent_step_id = a.parent_step_id
@@ -422,18 +422,18 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       -- Find all descendants of parallel siblings (to keep their children too)
       parallel_descendants AS (
         SELECT s.id
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         WHERE s.id IN (SELECT id FROM parallel_siblings)
         UNION ALL
         SELECT s.id
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         INNER JOIN parallel_descendants pd ON s.parent_step_id = pd.id
         WHERE s.job_id = ${jobId}
       ),
       steps_to_keep AS (
         -- Steps created before target that are completed (non-ancestor, non-target)
         SELECT s.id
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         CROSS JOIN target_step ts
         WHERE s.job_id = ${jobId}
           AND s.created_at < ts.created_at
@@ -448,12 +448,12 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       time_offset AS (
         SELECT
           now() - MIN(s.started_at) AS offset_interval
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         WHERE s.id IN (SELECT id FROM steps_to_keep)
       ),
       -- Shift times of preserved steps to align with current time (only started_at/finished_at, NOT created_at to preserve ordering)
       shift_preserved_times AS (
-        UPDATE ${this.tables.jobStepsActiveTable}
+        UPDATE ${this.tables.jobStepsTable}
         SET
           started_at = started_at + (SELECT offset_interval FROM time_offset),
           finished_at = CASE
@@ -468,7 +468,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       ),
       -- Delete steps that are not in the keep list and are not ancestors/target
       deleted_steps AS (
-        DELETE FROM ${this.tables.jobStepsActiveTable}
+        DELETE FROM ${this.tables.jobStepsTable}
         WHERE job_id = ${jobId}
           AND id NOT IN (SELECT id FROM steps_to_keep)
           AND id NOT IN (SELECT id FROM ancestors)
@@ -477,7 +477,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       ),
       -- Reset ancestor steps to active
       reset_ancestors AS (
-        UPDATE ${this.tables.jobStepsActiveTable}
+        UPDATE ${this.tables.jobStepsTable}
         SET
           status = ${STEP_STATUS_ACTIVE},
           output = NULL,
@@ -494,7 +494,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       ),
       -- Reset target step to active
       reset_target AS (
-        UPDATE ${this.tables.jobStepsActiveTable}
+        UPDATE ${this.tables.jobStepsTable}
         SET
           status = ${STEP_STATUS_ACTIVE},
           output = NULL,
@@ -511,7 +511,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       ),
       -- Reset job to created status
       reset_job AS (
-        UPDATE ${this.tables.jobsActiveTable}
+        UPDATE ${this.tables.jobsTable}
         SET
           status = ${JOB_STATUS_CREATED},
           output = NULL,
@@ -540,13 +540,13 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _deleteJob({ jobId }: DeleteJobOptions): Promise<boolean> {
     const result = await this.db
-      .delete(this.tables.jobsActiveTable)
-      .where(and(eq(this.tables.jobsActiveTable.id, jobId), ne(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE)))
-      .returning({ id: this.tables.jobsActiveTable.id })
+      .delete(this.tables.jobsTable)
+      .where(and(eq(this.tables.jobsTable.id, jobId), ne(this.tables.jobsTable.status, JOB_STATUS_ACTIVE)))
+      .returning({ id: this.tables.jobsTable.id })
 
     // Also delete associated steps
     if (result.length > 0) {
-      await this.db.delete(this.tables.jobStepsActiveTable).where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
+      await this.db.delete(this.tables.jobStepsTable).where(eq(this.tables.jobStepsTable.job_id, jobId))
     }
 
     return result.length > 0
@@ -559,7 +559,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * @returns Promise resolving to the number of jobs deleted
    */
   protected async _deleteJobs(options?: DeleteJobsOptions): Promise<number> {
-    const jobsTable = this.tables.jobsActiveTable
+    const jobsTable = this.tables.jobsTable
     const filters = options?.filters ?? {}
 
     const where = this._buildJobsWhereClause(filters)
@@ -585,7 +585,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           j.group_key as group_key,
           j.action_name as action_name,
           j.concurrency_limit as concurrency_limit
-        FROM ${this.tables.jobsActiveTable} j
+        FROM ${this.tables.jobsTable} j
         WHERE j.group_key IS NOT NULL
           AND (j.expires_at IS NULL OR j.expires_at > now())
         ORDER BY j.group_key, j.action_name, j.created_at DESC, j.id DESC
@@ -598,7 +598,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           gc.concurrency_limit,
           COUNT(*) FILTER (WHERE j.status = ${JOB_STATUS_ACTIVE}) as active_count
         FROM group_concurrency gc
-        LEFT JOIN ${this.tables.jobsActiveTable} j
+        LEFT JOIN ${this.tables.jobsTable} j
           ON j.group_key = gc.group_key
           AND j.action_name = gc.action_name
           AND (j.expires_at IS NULL OR j.expires_at > now())
@@ -612,7 +612,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           j.action_name,
           j.group_key as job_group_key,
           j.created_at
-        FROM ${this.tables.jobsActiveTable} j
+        FROM ${this.tables.jobsTable} j
         INNER JOIN eligible_groups eg
           ON j.group_key = eg.group_key
           AND j.action_name = eg.action_name
@@ -652,7 +652,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           nj.job_group_key,
           eg.concurrency_limit,
           (SELECT COUNT(*)
-          FROM ${this.tables.jobsActiveTable}
+          FROM ${this.tables.jobsTable}
           WHERE action_name = nj.action_name
             AND group_key = nj.job_group_key
             AND status = ${JOB_STATUS_ACTIVE}) as current_active
@@ -661,7 +661,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           ON nj.job_group_key = eg.group_key
           AND nj.action_name = eg.action_name
       )
-      UPDATE ${this.tables.jobsActiveTable} j
+      UPDATE ${this.tables.jobsTable} j
       SET status = ${JOB_STATUS_ACTIVE},
           started_at = now(),
           expires_at = now() + (timeout_ms || ' milliseconds')::interval,
@@ -707,11 +707,11 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     if (multiProcessMode) {
       const result = (await this.db
         .selectDistinct({
-          clientId: this.tables.jobsActiveTable.client_id,
+          clientId: this.tables.jobsTable.client_id,
         })
-        .from(this.tables.jobsActiveTable)
+        .from(this.tables.jobsTable)
         .where(
-          and(eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE), ne(this.tables.jobsActiveTable.client_id, this.id)),
+          and(eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE), ne(this.tables.jobsTable.client_id, this.id)),
         )) as unknown as { clientId: string }[]
 
       if (result.length > 0) {
@@ -741,13 +741,13 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         await this.db.execute<{ id: string }>(sql`
         WITH locked_jobs AS (
           SELECT j.id
-          FROM ${this.tables.jobsActiveTable} j
+          FROM ${this.tables.jobsTable} j
           WHERE j.status = ${JOB_STATUS_ACTIVE}
             AND j.client_id IN ${unresponsiveClientIds}
           FOR UPDATE OF j SKIP LOCKED
         ),
         updated_jobs AS (
-          UPDATE ${this.tables.jobsActiveTable} j
+          UPDATE ${this.tables.jobsTable} j
           SET status = ${JOB_STATUS_CREATED},
               started_at = NULL,
               expires_at = NULL,
@@ -759,7 +759,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           RETURNING id, checksum
         ),
         deleted_steps AS (
-          DELETE FROM ${this.tables.jobStepsActiveTable} s
+          DELETE FROM ${this.tables.jobStepsTable} s
           WHERE EXISTS (
             SELECT 1 FROM updated_jobs uj
             WHERE uj.id = s.job_id
@@ -799,21 +799,21 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       await this.db.execute<StepResult>(sql`
       WITH job_check AS (
         SELECT j.id
-        FROM ${this.tables.jobsActiveTable} j
+        FROM ${this.tables.jobsTable} j
         WHERE j.id = ${jobId}
           AND j.status = ${JOB_STATUS_ACTIVE}
           AND (j.expires_at IS NULL OR j.expires_at > now())
       ),
       step_existed AS (
         SELECT EXISTS(
-          SELECT 1 FROM ${this.tables.jobStepsActiveTable} s
+          SELECT 1 FROM ${this.tables.jobStepsTable} s
           WHERE s.job_id = ${jobId}
             AND s.name = ${name}
             AND s.parent_step_id IS NOT DISTINCT FROM ${parentStepId}
         ) AS existed
       ),
       upserted_step AS (
-        INSERT INTO ${this.tables.jobStepsActiveTable} (
+        INSERT INTO ${this.tables.jobStepsTable} (
           job_id,
           parent_step_id,
           branch,
@@ -848,7 +848,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           delayed_ms = NULL,
           started_at = now(),
           history_failed_attempts = '{}'::jsonb
-        WHERE ${this.tables.jobStepsActiveTable}.status = ${STEP_STATUS_ACTIVE}
+        WHERE ${this.tables.jobStepsTable}.status = ${STEP_STATUS_ACTIVE}
         RETURNING
           id,
           status,
@@ -875,7 +875,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           s.error,
           s.output,
           false AS "isNew"
-        FROM ${this.tables.jobStepsActiveTable} s
+        FROM ${this.tables.jobStepsTable} s
         INNER JOIN job_check jc ON s.job_id = jc.id
         WHERE s.job_id = ${jobId}
           AND s.name = ${name}
@@ -903,24 +903,24 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _completeJobStep({ stepId, output }: CompleteJobStepOptions) {
     const result = await this.db
-      .update(this.tables.jobStepsActiveTable)
+      .update(this.tables.jobStepsTable)
       .set({
         status: STEP_STATUS_COMPLETED,
         output,
         finished_at: sql`now()`,
         updated_at: sql`now()`,
       })
-      .from(this.tables.jobsActiveTable)
+      .from(this.tables.jobsTable)
       .where(
         and(
-          eq(this.tables.jobStepsActiveTable.job_id, this.tables.jobsActiveTable.id),
-          eq(this.tables.jobStepsActiveTable.id, stepId),
-          eq(this.tables.jobStepsActiveTable.status, STEP_STATUS_ACTIVE),
-          eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
-          or(isNull(this.tables.jobsActiveTable.expires_at), gt(this.tables.jobsActiveTable.expires_at, sql`now()`)),
+          eq(this.tables.jobStepsTable.job_id, this.tables.jobsTable.id),
+          eq(this.tables.jobStepsTable.id, stepId),
+          eq(this.tables.jobStepsTable.status, STEP_STATUS_ACTIVE),
+          eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE),
+          or(isNull(this.tables.jobsTable.expires_at), gt(this.tables.jobsTable.expires_at, sql`now()`)),
         ),
       )
-      .returning({ id: this.tables.jobStepsActiveTable.id })
+      .returning({ id: this.tables.jobStepsTable.id })
 
     return result.length > 0
   }
@@ -932,23 +932,23 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _failJobStep({ stepId, error }: FailJobStepOptions) {
     const result = await this.db
-      .update(this.tables.jobStepsActiveTable)
+      .update(this.tables.jobStepsTable)
       .set({
         status: STEP_STATUS_FAILED,
         error,
         finished_at: sql`now()`,
         updated_at: sql`now()`,
       })
-      .from(this.tables.jobsActiveTable)
+      .from(this.tables.jobsTable)
       .where(
         and(
-          eq(this.tables.jobStepsActiveTable.job_id, this.tables.jobsActiveTable.id),
-          eq(this.tables.jobStepsActiveTable.id, stepId),
-          eq(this.tables.jobStepsActiveTable.status, STEP_STATUS_ACTIVE),
-          eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
+          eq(this.tables.jobStepsTable.job_id, this.tables.jobsTable.id),
+          eq(this.tables.jobStepsTable.id, stepId),
+          eq(this.tables.jobStepsTable.status, STEP_STATUS_ACTIVE),
+          eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE),
         ),
       )
-      .returning({ id: this.tables.jobStepsActiveTable.id })
+      .returning({ id: this.tables.jobStepsTable.id })
 
     return result.length > 0
   }
@@ -959,8 +959,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * @returns Promise resolving to `true` if delayed, `false` otherwise
    */
   protected async _delayJobStep({ stepId, delayMs, error }: DelayJobStepOptions) {
-    const jobStepsTable = this.tables.jobStepsActiveTable
-    const jobsTable = this.tables.jobsActiveTable
+    const jobStepsTable = this.tables.jobStepsTable
+    const jobsTable = this.tables.jobsTable
 
     const result = await this.db
       .update(jobStepsTable)
@@ -999,25 +999,25 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _cancelJobStep({ stepId }: CancelJobStepOptions) {
     const result = await this.db
-      .update(this.tables.jobStepsActiveTable)
+      .update(this.tables.jobStepsTable)
       .set({
         status: STEP_STATUS_CANCELLED,
         finished_at: sql`now()`,
         updated_at: sql`now()`,
       })
-      .from(this.tables.jobsActiveTable)
+      .from(this.tables.jobsTable)
       .where(
         and(
-          eq(this.tables.jobStepsActiveTable.job_id, this.tables.jobsActiveTable.id),
-          eq(this.tables.jobStepsActiveTable.id, stepId),
-          eq(this.tables.jobStepsActiveTable.status, STEP_STATUS_ACTIVE),
+          eq(this.tables.jobStepsTable.job_id, this.tables.jobsTable.id),
+          eq(this.tables.jobStepsTable.id, stepId),
+          eq(this.tables.jobStepsTable.status, STEP_STATUS_ACTIVE),
           or(
-            eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
-            eq(this.tables.jobsActiveTable.status, JOB_STATUS_CANCELLED),
+            eq(this.tables.jobsTable.status, JOB_STATUS_ACTIVE),
+            eq(this.tables.jobsTable.status, JOB_STATUS_CANCELLED),
           ),
         ),
       )
-      .returning({ id: this.tables.jobStepsActiveTable.id })
+      .returning({ id: this.tables.jobStepsTable.id })
 
     return result.length > 0
   }
@@ -1030,7 +1030,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Internal method to get a job by its ID. Does not include step information.
    */
   protected async _getJobById(jobId: string): Promise<Job | null> {
-    const jobsTable = this.tables.jobsActiveTable
+    const jobsTable = this.tables.jobsTable
 
     // Calculate duration as a SQL expression (finishedAt - startedAt in milliseconds)
     const durationMs = sql<number | null>`
@@ -1077,7 +1077,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected async _getJobSteps(options: GetJobStepsOptions): Promise<GetJobStepsResult> {
     const { jobId, search } = options
 
-    const jobStepsTable = this.tables.jobStepsActiveTable
+    const jobStepsTable = this.tables.jobStepsTable
 
     const fuzzySearch = search?.trim()
 
@@ -1129,7 +1129,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       return undefined
     }
 
-    const jobsTable = this.tables.jobsActiveTable
+    const jobsTable = this.tables.jobsTable
 
     const fuzzySearch = filters.search?.trim()
 
@@ -1208,7 +1208,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Does not include step information or job output.
    */
   protected async _getJobs(options?: GetJobsOptions): Promise<GetJobsResult> {
-    const jobsTable = this.tables.jobsActiveTable
+    const jobsTable = this.tables.jobsTable
     const page = options?.page ?? 1
     const pageSize = options?.pageSize ?? 10
     const filters = options?.filters ?? {}
@@ -1301,27 +1301,27 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected async _getJobStepById(stepId: string): Promise<JobStep | null> {
     const [step] = await this.db
       .select({
-        id: this.tables.jobStepsActiveTable.id,
-        jobId: this.tables.jobStepsActiveTable.job_id,
-        parentStepId: this.tables.jobStepsActiveTable.parent_step_id,
-        parallel: this.tables.jobStepsActiveTable.parallel,
-        name: this.tables.jobStepsActiveTable.name,
-        output: this.tables.jobStepsActiveTable.output,
-        status: this.tables.jobStepsActiveTable.status,
-        error: this.tables.jobStepsActiveTable.error,
-        startedAt: this.tables.jobStepsActiveTable.started_at,
-        finishedAt: this.tables.jobStepsActiveTable.finished_at,
-        timeoutMs: this.tables.jobStepsActiveTable.timeout_ms,
-        expiresAt: this.tables.jobStepsActiveTable.expires_at,
-        retriesLimit: this.tables.jobStepsActiveTable.retries_limit,
-        retriesCount: this.tables.jobStepsActiveTable.retries_count,
-        delayedMs: this.tables.jobStepsActiveTable.delayed_ms,
-        historyFailedAttempts: this.tables.jobStepsActiveTable.history_failed_attempts,
-        createdAt: this.tables.jobStepsActiveTable.created_at,
-        updatedAt: this.tables.jobStepsActiveTable.updated_at,
+        id: this.tables.jobStepsTable.id,
+        jobId: this.tables.jobStepsTable.job_id,
+        parentStepId: this.tables.jobStepsTable.parent_step_id,
+        parallel: this.tables.jobStepsTable.parallel,
+        name: this.tables.jobStepsTable.name,
+        output: this.tables.jobStepsTable.output,
+        status: this.tables.jobStepsTable.status,
+        error: this.tables.jobStepsTable.error,
+        startedAt: this.tables.jobStepsTable.started_at,
+        finishedAt: this.tables.jobStepsTable.finished_at,
+        timeoutMs: this.tables.jobStepsTable.timeout_ms,
+        expiresAt: this.tables.jobStepsTable.expires_at,
+        retriesLimit: this.tables.jobStepsTable.retries_limit,
+        retriesCount: this.tables.jobStepsTable.retries_count,
+        delayedMs: this.tables.jobStepsTable.delayed_ms,
+        historyFailedAttempts: this.tables.jobStepsTable.history_failed_attempts,
+        createdAt: this.tables.jobStepsTable.created_at,
+        updatedAt: this.tables.jobStepsTable.updated_at,
       })
-      .from(this.tables.jobStepsActiveTable)
-      .where(eq(this.tables.jobStepsActiveTable.id, stepId))
+      .from(this.tables.jobStepsTable)
+      .where(eq(this.tables.jobStepsTable.id, stepId))
       .limit(1)
 
     return step ?? null
@@ -1333,11 +1333,11 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected async _getJobStatus(jobId: string): Promise<JobStatusResult | null> {
     const [job] = await this.db
       .select({
-        status: this.tables.jobsActiveTable.status,
-        updatedAt: this.tables.jobsActiveTable.updated_at,
+        status: this.tables.jobsTable.status,
+        updatedAt: this.tables.jobsTable.updated_at,
       })
-      .from(this.tables.jobsActiveTable)
-      .where(eq(this.tables.jobsActiveTable.id, jobId))
+      .from(this.tables.jobsTable)
+      .where(eq(this.tables.jobsTable.id, jobId))
       .limit(1)
 
     return job ?? null
@@ -1349,11 +1349,11 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected async _getJobStepStatus(stepId: string): Promise<JobStepStatusResult | null> {
     const [step] = await this.db
       .select({
-        status: this.tables.jobStepsActiveTable.status,
-        updatedAt: this.tables.jobStepsActiveTable.updated_at,
+        status: this.tables.jobStepsTable.status,
+        updatedAt: this.tables.jobStepsTable.updated_at,
       })
-      .from(this.tables.jobStepsActiveTable)
-      .where(eq(this.tables.jobStepsActiveTable.id, stepId))
+      .from(this.tables.jobStepsTable)
+      .where(eq(this.tables.jobStepsTable.id, stepId))
       .limit(1)
 
     return step ?? null
@@ -1366,23 +1366,23 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     const actionStats = this.db.$with('action_stats').as(
       this.db
         .select({
-          name: this.tables.jobsActiveTable.action_name,
-          last_job_created: sql<Date | null>`MAX(${this.tables.jobsActiveTable.created_at})`.as('last_job_created'),
-          active: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsActiveTable.status} = ${JOB_STATUS_ACTIVE})`.as(
+          name: this.tables.jobsTable.action_name,
+          last_job_created: sql<Date | null>`MAX(${this.tables.jobsTable.created_at})`.as('last_job_created'),
+          active: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsTable.status} = ${JOB_STATUS_ACTIVE})`.as(
             'active',
           ),
-          completed: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsActiveTable.status} = ${JOB_STATUS_COMPLETED})`.as(
+          completed: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsTable.status} = ${JOB_STATUS_COMPLETED})`.as(
             'completed',
           ),
-          failed: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsActiveTable.status} = ${JOB_STATUS_FAILED})`.as(
+          failed: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsTable.status} = ${JOB_STATUS_FAILED})`.as(
             'failed',
           ),
-          cancelled: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsActiveTable.status} = ${JOB_STATUS_CANCELLED})`.as(
+          cancelled: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsTable.status} = ${JOB_STATUS_CANCELLED})`.as(
             'cancelled',
           ),
         })
-        .from(this.tables.jobsActiveTable)
-        .groupBy(this.tables.jobsActiveTable.action_name),
+        .from(this.tables.jobsTable)
+        .groupBy(this.tables.jobsTable.action_name),
     )
 
     const actions = await this.db
@@ -1435,9 +1435,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     }))
 
     const result = await this.db
-      .insert(this.tables.spansActiveTable)
+      .insert(this.tables.spansTable)
       .values(values)
-      .returning({ id: this.tables.spansActiveTable.id })
+      .returning({ id: this.tables.spansTable.id })
 
     return result.length
   }
@@ -1447,7 +1447,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * For step queries, uses a recursive CTE to find all descendant spans.
    */
   protected async _getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
-    const spansTable = this.tables.spansActiveTable
+    const spansTable = this.tables.spansTable
     const filters = options.filters ?? {}
 
     // Build sort
@@ -1608,9 +1608,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _deleteSpans(options: DeleteSpansOptions): Promise<number> {
     const result = await this.db
-      .delete(this.tables.spansActiveTable)
-      .where(eq(this.tables.spansActiveTable.job_id, options.jobId))
-      .returning({ id: this.tables.spansActiveTable.id })
+      .delete(this.tables.spansTable)
+      .where(eq(this.tables.spansTable.job_id, options.jobId))
+      .returning({ id: this.tables.spansTable.id })
 
     return result.length
   }
@@ -1625,7 +1625,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * a recursive CTE to traverse the span hierarchy.
    */
   protected _buildSpansWhereClause(jobId?: string, _stepId?: string, filters?: GetSpansOptions['filters']) {
-    const spansTable = this.tables.spansActiveTable
+    const spansTable = this.tables.spansTable
 
     // Build condition for finding spans by trace_id (includes external spans)
     let traceCondition: ReturnType<typeof eq> | undefined
@@ -1797,28 +1797,5 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected _map(result: any) {
     return result
-  }
-
-  // ============================================================================
-  // Archive Methods (Stub implementations - to be filled in)
-  // ============================================================================
-
-  protected async _pruneArchive(_options: any): Promise<number> {
-    return 0
-  }
-
-  protected async _truncateArchive(): Promise<void> {
-    // TODO: Implement
-  }
-
-  protected async _getArchiveStats(): Promise<any> {
-    return {
-      jobsCount: 0,
-      stepsCount: 0,
-      spansCount: 0,
-      oldestJobDate: null,
-      totalSizeBytes: null,
-      lastPrunedAt: null,
-    }
   }
 }

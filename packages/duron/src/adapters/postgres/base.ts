@@ -1189,7 +1189,15 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected async _getJobSteps(options: GetJobStepsOptions): Promise<GetJobStepsResult> {
     const { jobId, search } = options
 
-    const jobStepsTable = this.tables.jobStepsActiveTable
+    // Determine if job is in active or archive table
+    const jobInActive = await this.db
+      .select({ id: this.tables.jobsActiveTable.id })
+      .from(this.tables.jobsActiveTable)
+      .where(eq(this.tables.jobsActiveTable.id, jobId))
+      .limit(1)
+
+    const isActive = jobInActive.length > 0
+    const jobStepsTable = isActive ? this.tables.jobStepsActiveTable : this.tables.jobStepsArchiveTable
 
     const fuzzySearch = search?.trim()
 
@@ -1548,7 +1556,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Internal method to get a step by its ID with all information.
    */
   protected async _getJobStepById(stepId: string): Promise<JobStep | null> {
-    const [step] = await this.db
+    // Try active table first
+    const [activeStep] = await this.db
       .select({
         id: this.tables.jobStepsActiveTable.id,
         jobId: this.tables.jobStepsActiveTable.job_id,
@@ -1573,14 +1582,45 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .where(eq(this.tables.jobStepsActiveTable.id, stepId))
       .limit(1)
 
-    return step ?? null
+    if (activeStep) {
+      return activeStep
+    }
+
+    // Try archive table
+    const [archiveStep] = await this.db
+      .select({
+        id: this.tables.jobStepsArchiveTable.id,
+        jobId: this.tables.jobStepsArchiveTable.job_id,
+        parentStepId: this.tables.jobStepsArchiveTable.parent_step_id,
+        parallel: this.tables.jobStepsArchiveTable.parallel,
+        name: this.tables.jobStepsArchiveTable.name,
+        output: this.tables.jobStepsArchiveTable.output,
+        status: this.tables.jobStepsArchiveTable.status,
+        error: this.tables.jobStepsArchiveTable.error,
+        startedAt: this.tables.jobStepsArchiveTable.started_at,
+        finishedAt: this.tables.jobStepsArchiveTable.finished_at,
+        timeoutMs: this.tables.jobStepsArchiveTable.timeout_ms,
+        expiresAt: this.tables.jobStepsArchiveTable.expires_at,
+        retriesLimit: this.tables.jobStepsArchiveTable.retries_limit,
+        retriesCount: this.tables.jobStepsArchiveTable.retries_count,
+        delayedMs: this.tables.jobStepsArchiveTable.delayed_ms,
+        historyFailedAttempts: this.tables.jobStepsArchiveTable.history_failed_attempts,
+        createdAt: this.tables.jobStepsArchiveTable.created_at,
+        updatedAt: this.tables.jobStepsArchiveTable.updated_at,
+      })
+      .from(this.tables.jobStepsArchiveTable)
+      .where(eq(this.tables.jobStepsArchiveTable.id, stepId))
+      .limit(1)
+
+    return archiveStep ?? null
   }
 
   /**
    * Internal method to get job status and updatedAt timestamp.
    */
   protected async _getJobStatus(jobId: string): Promise<JobStatusResult | null> {
-    const [job] = await this.db
+    // Try active table first
+    const [activeJob] = await this.db
       .select({
         status: this.tables.jobsActiveTable.status,
         updatedAt: this.tables.jobsActiveTable.updated_at,
@@ -1589,14 +1629,29 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .where(eq(this.tables.jobsActiveTable.id, jobId))
       .limit(1)
 
-    return job ?? null
+    if (activeJob) {
+      return activeJob
+    }
+
+    // Try archive table
+    const [archiveJob] = await this.db
+      .select({
+        status: this.tables.jobsArchiveTable.status,
+        updatedAt: this.tables.jobsArchiveTable.updated_at,
+      })
+      .from(this.tables.jobsArchiveTable)
+      .where(eq(this.tables.jobsArchiveTable.id, jobId))
+      .limit(1)
+
+    return archiveJob ?? null
   }
 
   /**
    * Internal method to get job step status and updatedAt timestamp.
    */
   protected async _getJobStepStatus(stepId: string): Promise<JobStepStatusResult | null> {
-    const [step] = await this.db
+    // Try active table first
+    const [activeStep] = await this.db
       .select({
         status: this.tables.jobStepsActiveTable.status,
         updatedAt: this.tables.jobStepsActiveTable.updated_at,
@@ -1605,7 +1660,21 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .where(eq(this.tables.jobStepsActiveTable.id, stepId))
       .limit(1)
 
-    return step ?? null
+    if (activeStep) {
+      return activeStep
+    }
+
+    // Try archive table
+    const [archiveStep] = await this.db
+      .select({
+        status: this.tables.jobStepsArchiveTable.status,
+        updatedAt: this.tables.jobStepsArchiveTable.updated_at,
+      })
+      .from(this.tables.jobStepsArchiveTable)
+      .where(eq(this.tables.jobStepsArchiveTable.id, stepId))
+      .limit(1)
+
+    return archiveStep ?? null
   }
 
   /**
@@ -1696,7 +1765,6 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * For step queries, uses a recursive CTE to find all descendant spans.
    */
   protected async _getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
-    const spansTable = this.tables.spansActiveTable
     const filters = options.filters ?? {}
 
     // Build sort
@@ -1714,8 +1782,21 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       return this._getStepSpansRecursive(options.stepId, sortField, sortOrder, filters)
     }
 
+    // Determine if job is active or archived
+    let isActive = true
+    if (options.jobId) {
+      const jobInActive = await this.db
+        .select({ id: this.tables.jobsActiveTable.id })
+        .from(this.tables.jobsActiveTable)
+        .where(eq(this.tables.jobsActiveTable.id, options.jobId))
+        .limit(1)
+      isActive = jobInActive.length > 0
+    }
+
+    const spansTable = isActive ? this.tables.spansActiveTable : this.tables.spansArchiveTable
+
     // Build WHERE clause for job queries
-    const where = this._buildSpansWhereClause(options.jobId, undefined, filters)
+    const where = this._buildSpansWhereClause(options.jobId, undefined, filters, isActive)
 
     // Get total count
     const total = await this.db.$count(spansTable, where)
@@ -1781,16 +1862,19 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   ): Promise<GetSpansResult> {
     const schemaName = this.schema
 
-    // Use a recursive CTE to find all descendant spans
-    // 1. Base case: find the span with step_id = stepId
-    // 2. Recursive case: find all spans where parent_span_id = span_id of a span we've already found
+    // Query both active and archive spans tables
     const query = sql`
       WITH RECURSIVE span_tree AS (
-        -- Base case: the span(s) for the step
-        SELECT * FROM ${sql.identifier(schemaName)}.spans WHERE step_id = ${stepId}::uuid
+        -- Base case: the span(s) for the step (check both tables)
+        SELECT * FROM ${sql.identifier(schemaName)}.spans_active WHERE step_id = ${stepId}::uuid
+        UNION
+        SELECT * FROM ${sql.identifier(schemaName)}.spans_archive WHERE step_id = ${stepId}::uuid
         UNION ALL
-        -- Recursive case: children of spans we've found
-        SELECT s.* FROM ${sql.identifier(schemaName)}.spans s
+        -- Recursive case: children of spans we've found (check both tables)
+        SELECT s.* FROM ${sql.identifier(schemaName)}.spans_active s
+        INNER JOIN span_tree st ON s.parent_span_id = st.span_id
+        UNION
+        SELECT s.* FROM ${sql.identifier(schemaName)}.spans_archive s
         INNER JOIN span_tree st ON s.parent_span_id = st.span_id
       )
       SELECT
@@ -1856,12 +1940,18 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Internal method to delete all spans for a job.
    */
   protected async _deleteSpans(options: DeleteSpansOptions): Promise<number> {
-    const result = await this.db
+    // Delete from both tables to be safe
+    const activeResult = await this.db
       .delete(this.tables.spansActiveTable)
       .where(eq(this.tables.spansActiveTable.job_id, options.jobId))
       .returning({ id: this.tables.spansActiveTable.id })
 
-    return result.length
+    const archiveResult = await this.db
+      .delete(this.tables.spansArchiveTable)
+      .where(eq(this.tables.spansArchiveTable.job_id, options.jobId))
+      .returning({ id: this.tables.spansArchiveTable.id })
+
+    return activeResult.length + archiveResult.length
   }
 
   /**
@@ -1873,8 +1963,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Note: Step queries are handled separately by _getStepSpansRecursive using
    * a recursive CTE to traverse the span hierarchy.
    */
-  protected _buildSpansWhereClause(jobId?: string, _stepId?: string, filters?: GetSpansOptions['filters']) {
-    const spansTable = this.tables.spansActiveTable
+  protected _buildSpansWhereClause(jobId?: string, _stepId?: string, filters?: GetSpansOptions['filters'], isActive: boolean = true) {
+    const spansTable = isActive ? this.tables.spansActiveTable : this.tables.spansArchiveTable
 
     // Build condition for finding spans by trace_id (includes external spans)
     let traceCondition: ReturnType<typeof eq> | undefined

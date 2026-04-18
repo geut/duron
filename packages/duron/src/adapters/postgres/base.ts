@@ -179,25 +179,64 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * @returns Promise resolving to `true` if completed, `false` otherwise
    */
   protected async _completeJob({ jobId, output }: CompleteJobOptions) {
-    const result = await this.db
-      .update(this.tables.jobsActiveTable)
-      .set({
+    return this.db.transaction(async (tx) => {
+      // 1. Delete job from active and get its data
+      const movedJob = await tx
+        .delete(this.tables.jobsActiveTable)
+        .where(
+          and(
+            eq(this.tables.jobsActiveTable.id, jobId),
+            eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
+            eq(this.tables.jobsActiveTable.client_id, this.id),
+            gt(this.tables.jobsActiveTable.expires_at, sql`now()`),
+          ),
+        )
+        .returning()
+
+      if (movedJob.length === 0) {
+        return false
+      }
+
+      const job = movedJob[0]!
+
+      // 2. Delete steps from active
+      const movedSteps = await tx
+        .delete(this.tables.jobStepsActiveTable)
+        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
+        .returning()
+
+      // 3. Delete spans from active
+      const movedSpans = await tx
+        .delete(this.tables.spansActiveTable)
+        .where(eq(this.tables.spansActiveTable.job_id, jobId))
+        .returning()
+
+      // 4. Insert job into archive
+      await tx.insert(this.tables.jobsArchiveTable).values({
+        ...job,
         status: JOB_STATUS_COMPLETED,
         output,
-        finished_at: sql`now()`,
-        updated_at: sql`now()`,
+        finished_at: new Date(),
+        updated_at: new Date(),
       })
-      .where(
-        and(
-          eq(this.tables.jobsActiveTable.id, jobId),
-          eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
-          eq(this.tables.jobsActiveTable.client_id, this.id),
-          gt(this.tables.jobsActiveTable.expires_at, sql`now()`),
-        ),
-      )
-      .returning({ id: this.tables.jobsActiveTable.id })
 
-    return result.length > 0
+      // 5. Insert steps into archive
+      if (movedSteps.length > 0) {
+        await tx.insert(this.tables.jobStepsArchiveTable).values(
+          movedSteps.map((step) => ({
+            ...step,
+            job_finished_at: job.finished_at,
+          })),
+        )
+      }
+
+      // 6. Insert spans into archive
+      if (movedSpans.length > 0) {
+        await tx.insert(this.tables.spansArchiveTable).values(movedSpans)
+      }
+
+      return true
+    })
   }
 
   /**
@@ -206,24 +245,57 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * @returns Promise resolving to `true` if failed, `false` otherwise
    */
   protected async _failJob({ jobId, error }: FailJobOptions) {
-    const result = await this.db
-      .update(this.tables.jobsActiveTable)
-      .set({
+    return this.db.transaction(async (tx) => {
+      const movedJob = await tx
+        .delete(this.tables.jobsActiveTable)
+        .where(
+          and(
+            eq(this.tables.jobsActiveTable.id, jobId),
+            eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
+            eq(this.tables.jobsActiveTable.client_id, this.id),
+          ),
+        )
+        .returning()
+
+      if (movedJob.length === 0) {
+        return false
+      }
+
+      const job = movedJob[0]!
+
+      const movedSteps = await tx
+        .delete(this.tables.jobStepsActiveTable)
+        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
+        .returning()
+
+      const movedSpans = await tx
+        .delete(this.tables.spansActiveTable)
+        .where(eq(this.tables.spansActiveTable.job_id, jobId))
+        .returning()
+
+      await tx.insert(this.tables.jobsArchiveTable).values({
+        ...job,
         status: JOB_STATUS_FAILED,
         error,
-        finished_at: sql`now()`,
-        updated_at: sql`now()`,
+        finished_at: new Date(),
+        updated_at: new Date(),
       })
-      .where(
-        and(
-          eq(this.tables.jobsActiveTable.id, jobId),
-          eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
-          eq(this.tables.jobsActiveTable.client_id, this.id),
-        ),
-      )
-      .returning({ id: this.tables.jobsActiveTable.id })
 
-    return result.length > 0
+      if (movedSteps.length > 0) {
+        await tx.insert(this.tables.jobStepsArchiveTable).values(
+          movedSteps.map((step) => ({
+            ...step,
+            job_finished_at: job.finished_at,
+          })),
+        )
+      }
+
+      if (movedSpans.length > 0) {
+        await tx.insert(this.tables.spansArchiveTable).values(movedSpans)
+      }
+
+      return true
+    })
   }
 
   /**
@@ -232,22 +304,55 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * @returns Promise resolving to `true` if cancelled, `false` otherwise
    */
   protected async _cancelJob({ jobId }: CancelJobOptions) {
-    const result = await this.db
-      .update(this.tables.jobsActiveTable)
-      .set({
-        status: JOB_STATUS_CANCELLED,
-        finished_at: sql`now()`,
-        updated_at: sql`now()`,
-      })
-      .where(
-        and(
-          eq(this.tables.jobsActiveTable.id, jobId),
-          or(eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE), eq(this.tables.jobsActiveTable.status, JOB_STATUS_CREATED)),
-        ),
-      )
-      .returning({ id: this.tables.jobsActiveTable.id })
+    return this.db.transaction(async (tx) => {
+      const movedJob = await tx
+        .delete(this.tables.jobsActiveTable)
+        .where(
+          and(
+            eq(this.tables.jobsActiveTable.id, jobId),
+            or(eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE), eq(this.tables.jobsActiveTable.status, JOB_STATUS_CREATED)),
+          ),
+        )
+        .returning()
 
-    return result.length > 0
+      if (movedJob.length === 0) {
+        return false
+      }
+
+      const job = movedJob[0]!
+
+      const movedSteps = await tx
+        .delete(this.tables.jobStepsActiveTable)
+        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
+        .returning()
+
+      const movedSpans = await tx
+        .delete(this.tables.spansActiveTable)
+        .where(eq(this.tables.spansActiveTable.job_id, jobId))
+        .returning()
+
+      await tx.insert(this.tables.jobsArchiveTable).values({
+        ...job,
+        status: JOB_STATUS_CANCELLED,
+        finished_at: new Date(),
+        updated_at: new Date(),
+      })
+
+      if (movedSteps.length > 0) {
+        await tx.insert(this.tables.jobStepsArchiveTable).values(
+          movedSteps.map((step) => ({
+            ...step,
+            job_finished_at: job.finished_at,
+          })),
+        )
+      }
+
+      if (movedSpans.length > 0) {
+        await tx.insert(this.tables.spansArchiveTable).values(movedSpans)
+      }
+
+      return true
+    })
   }
 
   /**
@@ -272,10 +377,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           j.created_at,
           j.concurrency_limit,
           j.concurrency_step_limit
-        FROM ${this.tables.jobsActiveTable} j
+        FROM ${this.tables.jobsArchiveTable} j
         WHERE j.id = ${jobId}
           AND j.status IN (${JOB_STATUS_COMPLETED}, ${JOB_STATUS_CANCELLED}, ${JOB_STATUS_FAILED})
-        FOR UPDATE OF j SKIP LOCKED
       ),
       existing_retry AS (
         -- Check if a retry already exists (a newer job with same checksum, group_key, and input)
@@ -1030,9 +1134,17 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Internal method to get a job by its ID. Does not include step information.
    */
   protected async _getJobById(jobId: string): Promise<Job | null> {
-    const jobsTable = this.tables.jobsActiveTable
+    // Try active table first
+    const activeJob = await this._getJobFromTable(jobId, this.tables.jobsActiveTable)
+    if (activeJob) {
+      return activeJob
+    }
 
-    // Calculate duration as a SQL expression (finishedAt - startedAt in milliseconds)
+    // Then try archive table
+    return this._getJobFromTable(jobId, this.tables.jobsArchiveTable)
+  }
+
+  private async _getJobFromTable(jobId: string, jobsTable: any): Promise<Job | null> {
     const durationMs = sql<number | null>`
       CASE
         WHEN ${jobsTable.started_at} IS NOT NULL AND ${jobsTable.finished_at} IS NOT NULL
@@ -1204,91 +1316,228 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     )
   }
   /**
+   * Build WHERE clause for archive jobs (same logic as active but for archive table).
+   */
+  protected _buildArchiveJobsWhereClause(filters: GetJobsOptions['filters']) {
+    if (!filters) {
+      return undefined
+    }
+
+    const archiveTable = this.tables.jobsArchiveTable
+
+    const fuzzySearch = filters.search?.trim()
+
+    return and(
+      filters.status
+        ? inArray(archiveTable.status, Array.isArray(filters.status) ? filters.status : [filters.status])
+        : undefined,
+      filters.actionName
+        ? inArray(archiveTable.action_name, Array.isArray(filters.actionName) ? filters.actionName : [filters.actionName])
+        : undefined,
+      filters.groupKey && Array.isArray(filters.groupKey)
+        ? sql`j.group_key LIKE ANY(ARRAY[${sql.raw(filters.groupKey.map((key) => `'${key}'`).join(','))}]::text[])`
+        : undefined,
+      filters.groupKey && !Array.isArray(filters.groupKey)
+        ? ilike(archiveTable.group_key, `%${filters.groupKey}%`)
+        : undefined,
+      filters.clientId
+        ? inArray(archiveTable.client_id, Array.isArray(filters.clientId) ? filters.clientId : [filters.clientId])
+        : undefined,
+      filters.description ? ilike(archiveTable.description, `%${filters.description}%`) : undefined,
+      filters.createdAt && Array.isArray(filters.createdAt)
+        ? between(
+            sql`date_trunc('second', ${archiveTable.created_at})`,
+            filters.createdAt[0]!.toISOString(),
+            filters.createdAt[1]!.toISOString(),
+          )
+        : undefined,
+      filters.createdAt && !Array.isArray(filters.createdAt)
+        ? gte(sql`date_trunc('second', ${archiveTable.created_at})`, filters.createdAt.toISOString())
+        : undefined,
+      filters.startedAt && Array.isArray(filters.startedAt)
+        ? between(
+            sql`date_trunc('second', ${archiveTable.started_at})`,
+            filters.startedAt[0]!.toISOString(),
+            filters.startedAt[1]!.toISOString(),
+          )
+        : undefined,
+      filters.startedAt && !Array.isArray(filters.startedAt)
+        ? gte(sql`date_trunc('second', ${archiveTable.started_at})`, filters.startedAt.toISOString())
+        : undefined,
+      filters.finishedAt && Array.isArray(filters.finishedAt)
+        ? between(
+            sql`date_trunc('second', ${archiveTable.finished_at})`,
+            filters.finishedAt[0]!.toISOString(),
+            filters.finishedAt[1]!.toISOString(),
+          )
+        : undefined,
+      filters.finishedAt && !Array.isArray(filters.finishedAt)
+        ? gte(sql`date_trunc('second', ${archiveTable.finished_at})`, filters.finishedAt.toISOString())
+        : undefined,
+      filters.updatedAfter
+        ? sql`date_trunc('milliseconds', ${archiveTable.updated_at}) > ${filters.updatedAfter.toISOString()}::timestamptz`
+        : undefined,
+      fuzzySearch
+        ? or(
+            ilike(archiveTable.action_name, `%${fuzzySearch}%`),
+            ilike(archiveTable.group_key, `%${fuzzySearch}%`),
+            ilike(archiveTable.description, `%${fuzzySearch}%`),
+            ilike(archiveTable.client_id, `%${fuzzySearch}%`),
+            sql`${archiveTable.id}::text ilike ${`%${fuzzySearch}%`}`,
+            sql`to_tsvector('english', ${archiveTable.input}::text) @@ plainto_tsquery('english', ${fuzzySearch})`,
+            sql`to_tsvector('english', ${archiveTable.output}::text) @@ plainto_tsquery('english', ${fuzzySearch})`,
+          )
+        : undefined,
+      ...(filters.inputFilter && Object.keys(filters.inputFilter).length > 0
+        ? this.#buildJsonbWhereConditions(filters.inputFilter, archiveTable.input)
+        : []),
+      ...(filters.outputFilter && Object.keys(filters.outputFilter).length > 0
+        ? this.#buildJsonbWhereConditions(filters.outputFilter, archiveTable.output)
+        : []),
+    )
+  }
+
+  /**
    * Internal method to get jobs with pagination, filtering, and sorting.
    * Does not include step information or job output.
    */
   protected async _getJobs(options?: GetJobsOptions): Promise<GetJobsResult> {
-    const jobsTable = this.tables.jobsActiveTable
     const page = options?.page ?? 1
     const pageSize = options?.pageSize ?? 10
     const filters = options?.filters ?? {}
 
-    const sortInput = options?.sort ?? { field: 'startedAt', order: 'desc' }
-    const sorts = Array.isArray(sortInput) ? sortInput : [sortInput]
+    // Determine which table(s) to query based on status filter
+    const activeStatuses = [JOB_STATUS_CREATED, JOB_STATUS_ACTIVE]
+    const archiveStatuses = [JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, JOB_STATUS_CANCELLED]
+    const statusFilter = filters.status
+    const statuses = Array.isArray(statusFilter) ? statusFilter : statusFilter ? [statusFilter] : []
 
-    const where = this._buildJobsWhereClause(filters)
+    const queryActive = statuses.length === 0 || statuses.some(s => (activeStatuses as string[]).includes(s))
+    const queryArchive = statuses.length === 0 || statuses.some(s => (archiveStatuses as string[]).includes(s))
 
-    // Get total count
-    const total = await this.db.$count(jobsTable, where)
-    if (!total) {
-      return {
-        jobs: [],
-        total: 0,
-        page,
-        pageSize,
+    // Query active table
+    let activeJobs: any[] = []
+    let activeTotal = 0
+    if (queryActive) {
+      const jobsTable = this.tables.jobsActiveTable
+      const where = this._buildJobsWhereClause(filters)
+      activeTotal = await this.db.$count(jobsTable, where)
+
+      if (activeTotal > 0) {
+        const durationMs = sql<number | null>`
+          CASE
+            WHEN ${jobsTable.started_at} IS NOT NULL AND ${jobsTable.finished_at} IS NOT NULL
+            THEN EXTRACT(EPOCH FROM (${jobsTable.finished_at} - ${jobsTable.started_at})) * 1000
+            ELSE NULL
+          END
+        `.as('duration_ms')
+
+        activeJobs = await this.db
+          .select({
+            id: jobsTable.id,
+            actionName: jobsTable.action_name,
+            groupKey: jobsTable.group_key,
+            description: jobsTable.description,
+            input: jobsTable.input,
+            output: jobsTable.output,
+            error: jobsTable.error,
+            status: jobsTable.status,
+            timeoutMs: jobsTable.timeout_ms,
+            expiresAt: jobsTable.expires_at,
+            startedAt: jobsTable.started_at,
+            finishedAt: jobsTable.finished_at,
+            createdAt: jobsTable.created_at,
+            updatedAt: jobsTable.updated_at,
+            concurrencyLimit: jobsTable.concurrency_limit,
+            concurrencyStepLimit: jobsTable.concurrency_step_limit,
+            clientId: jobsTable.client_id,
+            durationMs,
+          })
+          .from(jobsTable)
+          .where(where)
+          .orderBy(desc(jobsTable.created_at))
+          .limit(pageSize)
+          .offset((page - 1) * pageSize)
       }
     }
 
-    // Calculate duration as a SQL expression (finishedAt - startedAt in milliseconds)
-    const durationMs = sql<number | null>`
-      CASE
-        WHEN ${jobsTable.started_at} IS NOT NULL AND ${jobsTable.finished_at} IS NOT NULL
-        THEN EXTRACT(EPOCH FROM (${jobsTable.finished_at} - ${jobsTable.started_at})) * 1000
-        ELSE NULL
-      END
-    `.as('duration_ms')
+    // Query archive table
+    let archiveJobs: any[] = []
+    let archiveTotal = 0
+    if (queryArchive) {
+      const archiveTable = this.tables.jobsArchiveTable
+      // Build where clause for archive (similar to active but using archive table)
+      const archiveWhere = this._buildArchiveJobsWhereClause(filters)
+      archiveTotal = await this.db.$count(archiveTable, archiveWhere)
 
-    const sortFieldMap: Record<JobSort['field'], any> = {
-      createdAt: jobsTable.created_at,
-      startedAt: jobsTable.started_at,
-      finishedAt: jobsTable.finished_at,
-      status: jobsTable.status,
-      actionName: jobsTable.action_name,
-      expiresAt: jobsTable.expires_at,
-      duration: durationMs,
-      description: jobsTable.description,
+      if (archiveTotal > 0) {
+        const durationMs = sql<number | null>`
+          CASE
+            WHEN ${archiveTable.started_at} IS NOT NULL AND ${archiveTable.finished_at} IS NOT NULL
+            THEN EXTRACT(EPOCH FROM (${archiveTable.finished_at} - ${archiveTable.started_at})) * 1000
+            ELSE NULL
+          END
+        `.as('duration_ms')
+
+        archiveJobs = await this.db
+          .select({
+            id: archiveTable.id,
+            actionName: archiveTable.action_name,
+            groupKey: archiveTable.group_key,
+            description: archiveTable.description,
+            input: archiveTable.input,
+            output: archiveTable.output,
+            error: archiveTable.error,
+            status: archiveTable.status,
+            timeoutMs: archiveTable.timeout_ms,
+            expiresAt: archiveTable.expires_at,
+            startedAt: archiveTable.started_at,
+            finishedAt: archiveTable.finished_at,
+            createdAt: archiveTable.created_at,
+            updatedAt: archiveTable.updated_at,
+            concurrencyLimit: archiveTable.concurrency_limit,
+            concurrencyStepLimit: archiveTable.concurrency_step_limit,
+            clientId: archiveTable.client_id,
+            durationMs,
+          })
+          .from(archiveTable)
+          .where(archiveWhere)
+          .orderBy(desc(archiveTable.created_at))
+          .limit(pageSize)
+          .offset((page - 1) * pageSize)
+      }
     }
 
-    const jobs = await this.db
-      .select({
-        id: jobsTable.id,
-        actionName: jobsTable.action_name,
-        groupKey: jobsTable.group_key,
-        description: jobsTable.description,
-        input: jobsTable.input,
-        output: jobsTable.output,
-        error: jobsTable.error,
-        status: jobsTable.status,
-        timeoutMs: jobsTable.timeout_ms,
-        expiresAt: jobsTable.expires_at,
-        startedAt: jobsTable.started_at,
-        finishedAt: jobsTable.finished_at,
-        createdAt: jobsTable.created_at,
-        updatedAt: jobsTable.updated_at,
-        concurrencyLimit: jobsTable.concurrency_limit,
-        concurrencyStepLimit: jobsTable.concurrency_step_limit,
-        clientId: jobsTable.client_id,
-        durationMs,
-      })
-      .from(jobsTable)
-      .where(where)
-      .orderBy(
-        ...sorts
-          .filter((sortItem) => sortItem.field in sortFieldMap)
-          .map((sortItem) => {
-            const sortField = sortFieldMap[sortItem.field]
-            if (sortItem.order.toUpperCase() === 'ASC') {
-              return asc(sortField)
-            } else {
-              return desc(sortField)
-            }
-          }),
-      )
-      .limit(pageSize)
-      .offset((page - 1) * pageSize)
+    // Combine results
+    const allJobs = [...activeJobs, ...archiveJobs]
+    const total = activeTotal + archiveTotal
+
+    // Sort combined results
+    const sortInput = options?.sort ?? { field: 'startedAt', order: 'desc' }
+    const sorts = Array.isArray(sortInput) ? sortInput : [sortInput]
+
+    allJobs.sort((a, b) => {
+      for (const sort of sorts) {
+        const field = sort.field
+        const order = sort.order.toUpperCase() === 'ASC' ? 1 : -1
+        const aVal = a[field]
+        const bVal = b[field]
+
+        if (aVal === null && bVal === null) continue
+        if (aVal === null) return order
+        if (bVal === null) return -order
+
+        if (aVal < bVal) return -order
+        if (aVal > bVal) return order
+      }
+      return 0
+    })
+
+    // Apply pagination
+    const paginatedJobs = allJobs.slice(0, pageSize)
 
     return {
-      jobs,
+      jobs: paginatedJobs,
       total,
       page,
       pageSize,

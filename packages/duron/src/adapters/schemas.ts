@@ -405,6 +405,25 @@ export const DeleteSpansOptionsSchema = z.object({
 })
 
 // ============================================================================
+// Archive Schemas
+// ============================================================================
+
+export const PruneArchiveOptionsSchema = z.object({
+  olderThan: z.union([z.string(), z.date(), z.number()]),
+  batchSize: z.number().optional(),
+  maxBatches: z.number().optional(),
+})
+
+export const ArchiveStatsSchema = z.object({
+  jobsCount: z.number(),
+  stepsCount: z.number(),
+  spansCount: z.number(),
+  oldestJobDate: z.date().nullable(),
+  totalSizeBytes: z.number().nullable(),
+  lastPrunedAt: z.date().nullable(),
+})
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -450,3 +469,5 @@ export type InsertSpanOptions = z.infer<typeof InsertSpanOptionsSchema>
 export type GetSpansOptions = z.infer<typeof GetSpansOptionsSchema>
 export type GetSpansResult = z.infer<typeof GetSpansResultSchema>
 export type DeleteSpansOptions = z.infer<typeof DeleteSpansOptionsSchema>
+export type PruneArchiveOptions = z.infer<typeof PruneArchiveOptionsSchema>
+export type ArchiveStats = z.infer<typeof ArchiveStatsSchema>

@@ -40,6 +40,7 @@ import type {
   JobStatusResult,
   JobStep,
   JobStepStatusResult,
+  PruneArchiveOptions,
   RecoverJobsOptions,
   RetryJobOptions,
   TimeTravelJobOptions,
@@ -75,6 +76,7 @@ import {
   JobStepStatusResultSchema,
   JobsArrayResultSchema,
   NumberResultSchema,
+  PruneArchiveOptionsSchema,
   RecoverJobsOptionsSchema,
   RetryJobOptionsSchema,
   TimeTravelJobOptionsSchema,
@@ -83,6 +85,7 @@ import {
 // Re-export types from schemas for backward compatibility
 export type {
   ActionStats,
+  ArchiveStats,
   CancelJobOptions,
   CancelJobStepOptions,
   CompleteJobOptions,
@@ -112,6 +115,7 @@ export type {
   JobStatusResult,
   JobStep,
   JobStepStatusResult,
+  PruneArchiveOptions,
   RecoverJobsOptions,
   RetryJobOptions,
   SortOrder,
@@ -1087,6 +1091,85 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    * @returns Promise resolving to the number of spans deleted
    */
   protected abstract _deleteSpans(options: DeleteSpansOptions): Promise<number>
+
+  // ============================================================================
+  // Archive Methods
+  // ============================================================================
+
+  /**
+   * Prune archived jobs older than the specified threshold.
+   *
+   * @param options - Prune options including olderThan, batchSize, maxBatches
+   * @returns Promise resolving to the number of jobs deleted
+   */
+  async pruneArchive(options: PruneArchiveOptions): Promise<number> {
+    try {
+      await this.start()
+      const parsedOptions = PruneArchiveOptionsSchema.parse(options)
+      const result = await this._pruneArchive(parsedOptions)
+      return NumberResultSchema.parse(result)
+    } catch (error) {
+      this.logger?.error(error, 'Error in Adapter.pruneArchive()')
+      throw error
+    }
+  }
+
+  /**
+   * Truncate all archive tables (nuclear option).
+   *
+   * @returns Promise resolving to void
+   */
+  async truncateArchive(): Promise<void> {
+    try {
+      await this.start()
+      await this._truncateArchive()
+    } catch (error) {
+      this.logger?.error(error, 'Error in Adapter.truncateArchive()')
+      throw error
+    }
+  }
+
+  /**
+   * Get archive statistics.
+   *
+   * @returns Promise resolving to archive stats
+   */
+  async getArchiveStats(): Promise<ArchiveStats> {
+    try {
+      await this.start()
+      const result = await this._getArchiveStats()
+      return ArchiveStatsSchema.parse(result)
+    } catch (error) {
+      this.logger?.error(error, 'Error in Adapter.getArchiveStats()')
+      throw error
+    }
+  }
+
+  // ============================================================================
+  // Private Archive Methods (to be implemented by adapters)
+  // ============================================================================
+
+  /**
+   * Internal method to prune archived jobs.
+   *
+   * @param options - Validated prune options
+   * @returns Promise resolving to the number of jobs deleted
+   */
+  protected abstract _pruneArchive(options: PruneArchiveOptions): Promise<number>
+
+  /**
+   * Internal method to truncate all archive tables.
+   *
+   * @returns Promise resolving to void
+   */
+  protected abstract _truncateArchive(): Promise<void>
+
+  /**
+   * Internal method to get archive statistics.
+   *
+   * @returns Promise resolving to archive stats
+   */
+  protected abstract _getArchiveStats(): Promise<ArchiveStats>
 
   // ============================================================================
   // Protected Abstract Methods (to be implemented by adapters)

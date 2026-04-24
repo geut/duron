@@ -97,6 +97,12 @@ bun run build:docs  # docs only
 
 Workflow `.github/workflows/test.yml` runs: `bun install` → `typecheck` → `lint` → `test`.
 
+## Branch Workflow
+
+- Create feature branches from `main` for all changes
+- Do **not** use git worktrees
+- Commit directly to the feature branch
+
 ## Telemetry
 
 Configured on the Duron client:

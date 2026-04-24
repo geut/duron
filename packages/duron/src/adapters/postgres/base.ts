@@ -14,6 +14,7 @@ import {
 } from '../../constants.js'
 import {
   Adapter,
+  type ArchiveStats,
   type CancelJobOptions,
   type CancelJobStepOptions,
   type CompleteJobOptions,
@@ -37,10 +38,10 @@ import {
   type GetSpansResult,
   type InsertSpanOptions,
   type Job,
-  type JobSort,
   type JobStatusResult,
   type JobStep,
   type JobStepStatusResult,
+  type PruneArchiveOptions,
   type RecoverJobsOptions,
   type RetryJobOptions,
   type SpanSort,
@@ -55,11 +56,19 @@ export type { Job, JobStep } from '../adapter.js'
 
 type DrizzleDatabase = PgAsyncDatabase<any, Schema>
 
+export interface PruneSchedulerConfig {
+  olderThan: string | Date | number
+  intervalMs: number
+  batchSize?: number
+  maxBatches?: number
+}
+
 export interface AdapterOptions<Connection> {
   connection: Connection
   schema?: string
   migrateOnStart?: boolean
   migrationsFolder?: string
+  pruneArchive?: PruneSchedulerConfig
 }
 
 export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> extends Adapter {
@@ -68,6 +77,11 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected tables: Schema
   protected schema: string = 'duron'
   protected migrateOnStart: boolean = true
+
+  // Scheduler state
+  private pruneTimer: ReturnType<typeof setInterval> | null = null
+  private pruneConfig: PruneSchedulerConfig | null = null
+  private lastPrunedAt: Date | null = null
 
   // ============================================================================
   // Constructor
@@ -84,6 +98,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     this.connection = options.connection
     this.schema = options.schema ?? 'duron'
     this.migrateOnStart = options.migrateOnStart ?? true
+    this.pruneConfig = options.pruneArchive ?? null
 
     this.tables = createSchema(this.schema)
 
@@ -126,10 +141,80 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         this.emit('job-available', { jobId })
       }
     })
+
+    // Start archive prune scheduler if configured
+    this._startScheduler()
   }
 
   protected async _stop() {
-    // do nothing
+    this._stopScheduler()
+  }
+
+  // ============================================================================
+  // Scheduler Methods
+  // ============================================================================
+
+  /**
+   * Generate a consistent advisory lock key from the schema name.
+   */
+  private _advisoryLockKey(): number {
+    let hash = 0
+    for (let i = 0; i < this.schema.length; i++) {
+      hash = (hash << 5) - hash + this.schema.charCodeAt(i)
+      hash |= 0
+    }
+    return Math.abs(hash)
+  }
+
+  /**
+   * Start the archive prune scheduler.
+   */
+  private _startScheduler(): void {
+    const config = this.pruneConfig
+    if (!config) return
+
+    const run = async () => {
+      try {
+        // Try to acquire advisory lock
+        const lockResult = await this.db.execute<{ pg_try_advisory_lock: boolean }>(
+          sql`SELECT pg_try_advisory_lock(${this._advisoryLockKey()})`,
+        )
+
+        if (!lockResult[0]?.pg_try_advisory_lock) {
+          this.logger?.debug('Another process holds the prune lock, skipping')
+          return
+        }
+
+        try {
+          this.logger?.info('Running scheduled archive prune')
+          const deleted = await this._pruneArchive({
+            olderThan: config.olderThan,
+            batchSize: config.batchSize,
+            maxBatches: config.maxBatches,
+          })
+          this.lastPrunedAt = new Date()
+          this.logger?.info({ deletedJobs: deleted }, 'Archive prune completed')
+        } finally {
+          await this.db.execute(sql`SELECT pg_advisory_unlock(${this._advisoryLockKey()})`)
+        }
+      } catch (error) {
+        this.logger?.error(error, 'Error in prune scheduler')
+      }
+    }
+
+    // Run immediately on start, then on interval
+    run().catch((err) => this.logger?.error(err, 'Initial prune run failed'))
+    this.pruneTimer = setInterval(run, config.intervalMs)
+  }
+
+  /**
+   * Stop the archive prune scheduler.
+   */
+  private _stopScheduler(): void {
+    if (this.pruneTimer) {
+      clearInterval(this.pruneTimer)
+      this.pruneTimer = null
+    }
   }
 
   // ============================================================================
@@ -180,9 +265,12 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _completeJob({ jobId, output }: CompleteJobOptions) {
     return this.db.transaction(async (tx) => {
-      // 1. Delete job from active and get its data
-      const movedJob = await tx
-        .delete(this.tables.jobsActiveTable)
+      const finishedAt = new Date()
+
+      // 1. Check job exists and meets conditions before archiving
+      const [job] = await tx
+        .select()
+        .from(this.tables.jobsActiveTable)
         .where(
           and(
             eq(this.tables.jobsActiveTable.id, jobId),
@@ -191,49 +279,39 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
             gt(this.tables.jobsActiveTable.expires_at, sql`now()`),
           ),
         )
-        .returning()
 
-      if (movedJob.length === 0) {
+      if (!job) {
         return false
       }
 
-      const job = movedJob[0]!
-
-      // 2. Delete steps from active
-      const movedSteps = await tx
-        .delete(this.tables.jobStepsActiveTable)
-        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
-        .returning()
-
-      // 3. Delete spans from active
-      const movedSpans = await tx
-        .delete(this.tables.spansActiveTable)
-        .where(eq(this.tables.spansActiveTable.job_id, jobId))
-        .returning()
-
-      // 4. Insert job into archive
+      // 2. Insert job into archive FIRST (required for FK constraints)
       await tx.insert(this.tables.jobsArchiveTable).values({
         ...job,
         status: JOB_STATUS_COMPLETED,
         output,
-        finished_at: new Date(),
-        updated_at: new Date(),
+        finished_at: finishedAt,
+        updated_at: finishedAt,
       })
 
-      // 5. Insert steps into archive
-      if (movedSteps.length > 0) {
-        await tx.insert(this.tables.jobStepsArchiveTable).values(
-          movedSteps.map((step) => ({
-            ...step,
-            job_finished_at: job.finished_at,
-          })),
+      // 3. Archive steps using INSERT ... SELECT (SQL-native, no JS round-trip)
+      await tx.execute(sql`
+        INSERT INTO ${this.tables.jobStepsArchiveTable} (
+          id, job_id, parent_step_id, branch, name, status, output, error,
+          started_at, finished_at, timeout_ms, expires_at, retries_limit,
+          retries_count, delayed_ms, history_failed_attempts, created_at,
+          updated_at, job_finished_at
         )
-      }
+        SELECT
+          id, job_id, parent_step_id, branch, name, status, output, error,
+          started_at, finished_at, timeout_ms, expires_at, retries_limit,
+          retries_count, delayed_ms, history_failed_attempts, created_at,
+          updated_at, ${finishedAt.toISOString()}
+        FROM ${this.tables.jobStepsActiveTable}
+        WHERE job_id = ${jobId}
+      `)
 
-      // 6. Insert spans into archive
-      if (movedSpans.length > 0) {
-        await tx.insert(this.tables.spansArchiveTable).values(movedSpans)
-      }
+      // 4. Delete job from active (cascade deletes steps)
+      await tx.delete(this.tables.jobsActiveTable).where(eq(this.tables.jobsActiveTable.id, jobId))
 
       return true
     })
@@ -246,8 +324,12 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _failJob({ jobId, error }: FailJobOptions) {
     return this.db.transaction(async (tx) => {
-      const movedJob = await tx
-        .delete(this.tables.jobsActiveTable)
+      const finishedAt = new Date()
+
+      // 1. Check job exists before archiving
+      const [job] = await tx
+        .select()
+        .from(this.tables.jobsActiveTable)
         .where(
           and(
             eq(this.tables.jobsActiveTable.id, jobId),
@@ -255,44 +337,39 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
             eq(this.tables.jobsActiveTable.client_id, this.id),
           ),
         )
-        .returning()
 
-      if (movedJob.length === 0) {
+      if (!job) {
         return false
       }
 
-      const job = movedJob[0]!
-
-      const movedSteps = await tx
-        .delete(this.tables.jobStepsActiveTable)
-        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
-        .returning()
-
-      const movedSpans = await tx
-        .delete(this.tables.spansActiveTable)
-        .where(eq(this.tables.spansActiveTable.job_id, jobId))
-        .returning()
-
+      // 2. Insert job into archive FIRST (required for FK constraints)
       await tx.insert(this.tables.jobsArchiveTable).values({
         ...job,
         status: JOB_STATUS_FAILED,
         error,
-        finished_at: new Date(),
-        updated_at: new Date(),
+        finished_at: finishedAt,
+        updated_at: finishedAt,
       })
 
-      if (movedSteps.length > 0) {
-        await tx.insert(this.tables.jobStepsArchiveTable).values(
-          movedSteps.map((step) => ({
-            ...step,
-            job_finished_at: job.finished_at,
-          })),
+      // 3. Archive steps using INSERT ... SELECT
+      await tx.execute(sql`
+        INSERT INTO ${this.tables.jobStepsArchiveTable} (
+          id, job_id, parent_step_id, branch, name, status, output, error,
+          started_at, finished_at, timeout_ms, expires_at, retries_limit,
+          retries_count, delayed_ms, history_failed_attempts, created_at,
+          updated_at, job_finished_at
         )
-      }
+        SELECT
+          id, job_id, parent_step_id, branch, name, status, output, error,
+          started_at, finished_at, timeout_ms, expires_at, retries_limit,
+          retries_count, delayed_ms, history_failed_attempts, created_at,
+          updated_at, ${finishedAt.toISOString()}
+        FROM ${this.tables.jobStepsActiveTable}
+        WHERE job_id = ${jobId}
+      `)
 
-      if (movedSpans.length > 0) {
-        await tx.insert(this.tables.spansArchiveTable).values(movedSpans)
-      }
+      // 4. Delete job from active (cascade deletes steps)
+      await tx.delete(this.tables.jobsActiveTable).where(eq(this.tables.jobsActiveTable.id, jobId))
 
       return true
     })
@@ -305,51 +382,63 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    */
   protected async _cancelJob({ jobId }: CancelJobOptions) {
     return this.db.transaction(async (tx) => {
-      const movedJob = await tx
-        .delete(this.tables.jobsActiveTable)
+      const finishedAt = new Date()
+
+      // 1. Update all steps to cancelled status
+      await tx
+        .update(this.tables.jobStepsActiveTable)
+        .set({
+          status: STEP_STATUS_CANCELLED,
+          finished_at: finishedAt,
+          updated_at: finishedAt,
+        })
+        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
+
+      // 2. Check job exists before archiving
+      const [job] = await tx
+        .select()
+        .from(this.tables.jobsActiveTable)
         .where(
           and(
             eq(this.tables.jobsActiveTable.id, jobId),
-            or(eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE), eq(this.tables.jobsActiveTable.status, JOB_STATUS_CREATED)),
+            or(
+              eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
+              eq(this.tables.jobsActiveTable.status, JOB_STATUS_CREATED),
+            ),
           ),
         )
-        .returning()
 
-      if (movedJob.length === 0) {
+      if (!job) {
         return false
       }
 
-      const job = movedJob[0]!
-
-      const movedSteps = await tx
-        .delete(this.tables.jobStepsActiveTable)
-        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
-        .returning()
-
-      const movedSpans = await tx
-        .delete(this.tables.spansActiveTable)
-        .where(eq(this.tables.spansActiveTable.job_id, jobId))
-        .returning()
-
+      // 3. Insert job into archive FIRST (required for FK constraints)
       await tx.insert(this.tables.jobsArchiveTable).values({
         ...job,
         status: JOB_STATUS_CANCELLED,
-        finished_at: new Date(),
-        updated_at: new Date(),
+        finished_at: finishedAt,
+        updated_at: finishedAt,
       })
 
-      if (movedSteps.length > 0) {
-        await tx.insert(this.tables.jobStepsArchiveTable).values(
-          movedSteps.map((step) => ({
-            ...step,
-            job_finished_at: job.finished_at,
-          })),
+      // 4. Archive steps using INSERT ... SELECT
+      await tx.execute(sql`
+        INSERT INTO ${this.tables.jobStepsArchiveTable} (
+          id, job_id, parent_step_id, branch, name, status, output, error,
+          started_at, finished_at, timeout_ms, expires_at, retries_limit,
+          retries_count, delayed_ms, history_failed_attempts, created_at,
+          updated_at, job_finished_at
         )
-      }
+        SELECT
+          id, job_id, parent_step_id, branch, name, status, output, error,
+          started_at, finished_at, timeout_ms, expires_at, retries_limit,
+          retries_count, delayed_ms, history_failed_attempts, created_at,
+          updated_at, ${finishedAt.toISOString()}
+        FROM ${this.tables.jobStepsActiveTable}
+        WHERE job_id = ${jobId}
+      `)
 
-      if (movedSpans.length > 0) {
-        await tx.insert(this.tables.spansArchiveTable).values(movedSpans)
-      }
+      // 5. Delete job from active (cascade deletes steps)
+      await tx.delete(this.tables.jobsActiveTable).where(eq(this.tables.jobsActiveTable.id, jobId))
 
       return true
     })
@@ -466,25 +555,92 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * @returns Promise resolving to `true` if time travel succeeded, `false` otherwise
    */
   protected async _timeTravelJob({ jobId, stepId }: TimeTravelJobOptions): Promise<boolean> {
-    const result = this._map(
-      await this.db.execute<{ success: boolean }>(sql`
-      WITH RECURSIVE
-      -- Lock and validate the job
-      locked_job AS (
-        SELECT j.id
-        FROM ${this.tables.jobsActiveTable} j
-        WHERE j.id = ${jobId}
-          AND j.status IN (${JOB_STATUS_COMPLETED}, ${JOB_STATUS_FAILED}, ${JOB_STATUS_CANCELLED})
-        FOR UPDATE OF j
-      ),
-      -- Validate target step exists and belongs to job
-      target_step AS (
-        SELECT s.id, s.parent_step_id, s.created_at
-        FROM ${this.tables.jobStepsActiveTable} s
-        WHERE s.id = ${stepId}
-          AND s.job_id = ${jobId}
-          AND EXISTS (SELECT 1 FROM locked_job)
-      ),
+    return this.db.transaction(async (tx) => {
+      // First, check if the job is in the archive and restore it if needed
+      const archivedJob = await tx
+        .select()
+        .from(this.tables.jobsArchiveTable)
+        .where(eq(this.tables.jobsArchiveTable.id, jobId))
+        .limit(1)
+
+      if (archivedJob.length > 0) {
+        // Restore job from archive to active
+        const job = archivedJob[0]!
+        await tx.insert(this.tables.jobsActiveTable).values({
+          id: job.id,
+          action_name: job.action_name,
+          group_key: job.group_key,
+          description: job.description,
+          status: job.status,
+          checksum: job.checksum,
+          input: job.input,
+          output: job.output,
+          error: job.error,
+          timeout_ms: job.timeout_ms,
+          expires_at: job.expires_at,
+          started_at: job.started_at,
+          finished_at: job.finished_at,
+          client_id: job.client_id,
+          concurrency_limit: job.concurrency_limit,
+          concurrency_step_limit: job.concurrency_step_limit,
+          created_at: job.created_at,
+          updated_at: job.updated_at,
+        })
+
+        // Restore steps from archive to active
+        const archivedSteps = await tx
+          .select()
+          .from(this.tables.jobStepsArchiveTable)
+          .where(eq(this.tables.jobStepsArchiveTable.job_id, jobId))
+
+        if (archivedSteps.length > 0) {
+          await tx.insert(this.tables.jobStepsActiveTable).values(
+            archivedSteps.map((s) => ({
+              id: s.id,
+              job_id: s.job_id,
+              parent_step_id: s.parent_step_id,
+              parallel: s.parallel,
+              name: s.name,
+              status: s.status,
+              output: s.output,
+              error: s.error,
+              started_at: s.started_at,
+              finished_at: s.finished_at,
+              timeout_ms: s.timeout_ms,
+              expires_at: s.expires_at,
+              retries_limit: s.retries_limit,
+              retries_count: s.retries_count,
+              delayed_ms: s.delayed_ms,
+              history_failed_attempts: s.history_failed_attempts,
+              created_at: s.created_at,
+              updated_at: s.updated_at,
+            })),
+          )
+        }
+
+        // Delete archived job and steps (cascade via FK on steps)
+        await tx.delete(this.tables.jobsArchiveTable).where(eq(this.tables.jobsArchiveTable.id, jobId))
+      }
+
+      const result = this._map(
+        await tx.execute<{ success: boolean }>(sql`
+        WITH RECURSIVE
+        -- Lock and validate the job
+        locked_job AS (
+          SELECT j.id
+          FROM ${this.tables.jobsActiveTable} j
+          WHERE j.id = ${jobId}
+            AND j.status IN (${JOB_STATUS_COMPLETED}, ${JOB_STATUS_FAILED}, ${JOB_STATUS_CANCELLED})
+          FOR UPDATE OF j
+        ),
+        -- Validate target step exists and belongs to job
+        target_step AS (
+          SELECT s.id, s.parent_step_id, s.created_at
+          FROM ${this.tables.jobStepsActiveTable} s
+          WHERE s.id = ${stepId}
+            AND s.job_id = ${jobId}
+            AND EXISTS (SELECT 1 FROM locked_job)
+        ),
       -- Find all ancestor steps recursively (from target up to root)
       ancestors AS (
         SELECT s.id, s.parent_step_id, 0 AS depth
@@ -631,9 +787,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       )
       SELECT EXISTS(SELECT 1 FROM reset_job) AS success
     `),
-    )
+      )
 
-    return result.length > 0 && result[0]!.success === true
+      return result.length > 0 && result[0]!.success === true
+    })
   }
 
   /**
@@ -815,7 +972,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         })
         .from(this.tables.jobsActiveTable)
         .where(
-          and(eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE), ne(this.tables.jobsActiveTable.client_id, this.id)),
+          and(
+            eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
+            ne(this.tables.jobsActiveTable.client_id, this.id),
+          ),
         )) as unknown as { clientId: string }[]
 
       if (result.length > 0) {
@@ -1340,7 +1500,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         ? inArray(archiveTable.status, Array.isArray(filters.status) ? filters.status : [filters.status])
         : undefined,
       filters.actionName
-        ? inArray(archiveTable.action_name, Array.isArray(filters.actionName) ? filters.actionName : [filters.actionName])
+        ? inArray(
+            archiveTable.action_name,
+            Array.isArray(filters.actionName) ? filters.actionName : [filters.actionName],
+          )
         : undefined,
       filters.groupKey && Array.isArray(filters.groupKey)
         ? sql`j.group_key LIKE ANY(ARRAY[${sql.raw(filters.groupKey.map((key) => `'${key}'`).join(','))}]::text[])`
@@ -1420,8 +1583,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     const statusFilter = filters.status
     const statuses = Array.isArray(statusFilter) ? statusFilter : statusFilter ? [statusFilter] : []
 
-    const queryActive = statuses.length === 0 || statuses.some(s => (activeStatuses as string[]).includes(s))
-    const queryArchive = statuses.length === 0 || statuses.some(s => (archiveStatuses as string[]).includes(s))
+    const queryActive = statuses.length === 0 || statuses.some((s) => (activeStatuses as string[]).includes(s))
+    const queryArchive = statuses.length === 0 || statuses.some((s) => (archiveStatuses as string[]).includes(s))
 
     // Query active table
     let activeJobs: any[] = []
@@ -1681,45 +1844,53 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Internal method to get action statistics including counts and last job created date.
    */
   protected async _getActions(): Promise<GetActionsResult> {
-    const actionStats = this.db.$with('action_stats').as(
-      this.db
-        .select({
-          name: this.tables.jobsActiveTable.action_name,
-          last_job_created: sql<Date | null>`MAX(${this.tables.jobsActiveTable.created_at})`.as('last_job_created'),
-          active: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsActiveTable.status} = ${JOB_STATUS_ACTIVE})`.as(
-            'active',
-          ),
-          completed: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsActiveTable.status} = ${JOB_STATUS_COMPLETED})`.as(
-            'completed',
-          ),
-          failed: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsActiveTable.status} = ${JOB_STATUS_FAILED})`.as(
-            'failed',
-          ),
-          cancelled: sql<number>`COUNT(*) FILTER (WHERE ${this.tables.jobsActiveTable.status} = ${JOB_STATUS_CANCELLED})`.as(
-            'cancelled',
-          ),
-        })
-        .from(this.tables.jobsActiveTable)
-        .groupBy(this.tables.jobsActiveTable.action_name),
+    const schemaName = this.schema
+    const result = this._map(
+      await this.db.execute<{
+        name: string
+        last_job_created: Date | null
+        active: number
+        completed: number
+        failed: number
+        cancelled: number
+      }>(sql`
+        WITH combined_jobs AS (
+          SELECT action_name, status, created_at
+          FROM ${sql.identifier(schemaName)}.jobs_active
+          UNION ALL
+          SELECT action_name, status, created_at
+          FROM ${sql.identifier(schemaName)}.jobs_archive
+        )
+        SELECT
+          action_name AS name,
+          MAX(created_at) AS last_job_created,
+          COUNT(*) FILTER (WHERE status = ${JOB_STATUS_ACTIVE})::int AS active,
+          COUNT(*) FILTER (WHERE status = ${JOB_STATUS_COMPLETED})::int AS completed,
+          COUNT(*) FILTER (WHERE status = ${JOB_STATUS_FAILED})::int AS failed,
+          COUNT(*) FILTER (WHERE status = ${JOB_STATUS_CANCELLED})::int AS cancelled
+        FROM combined_jobs
+        GROUP BY action_name
+        ORDER BY action_name
+      `),
     )
 
-    const actions = await this.db
-      .with(actionStats)
-      .select({
-        name: actionStats.name,
-        lastJobCreated: actionStats.last_job_created,
-        active: sql<number>`${actionStats.active}::int`,
-        completed: sql<number>`${actionStats.completed}::int`,
-        failed: sql<number>`${actionStats.failed}::int`,
-        cancelled: sql<number>`${actionStats.cancelled}::int`,
-      })
-      .from(actionStats)
-      .orderBy(actionStats.name)
-
     return {
-      actions: actions.map((action) => ({
-        ...action,
-        lastJobCreated: action.lastJobCreated ?? null,
+      actions: (
+        result as Array<{
+          name: string
+          last_job_created: Date | null
+          active: number
+          completed: number
+          failed: number
+          cancelled: number
+        }>
+      ).map((action) => ({
+        name: action.name,
+        lastJobCreated: action.last_job_created ?? null,
+        active: action.active,
+        completed: action.completed,
+        failed: action.failed,
+        cancelled: action.cancelled,
       })),
     }
   }
@@ -1730,6 +1901,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
 
   /**
    * Internal method to insert multiple span records in a single batch.
+   * Routes spans to active or archive table based on job location.
    */
   protected async _insertSpans(spans: InsertSpanOptions[]): Promise<number> {
     if (spans.length === 0) {
@@ -1753,9 +1925,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     }))
 
     const result = await this.db
-      .insert(this.tables.spansActiveTable)
+      .insert(this.tables.spansTable)
       .values(values)
-      .returning({ id: this.tables.spansActiveTable.id })
+      .returning({ id: this.tables.spansTable.id })
 
     return result.length
   }
@@ -1782,21 +1954,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       return this._getStepSpansRecursive(options.stepId, sortField, sortOrder, filters)
     }
 
-    // Determine if job is active or archived
-    let isActive = true
-    if (options.jobId) {
-      const jobInActive = await this.db
-        .select({ id: this.tables.jobsActiveTable.id })
-        .from(this.tables.jobsActiveTable)
-        .where(eq(this.tables.jobsActiveTable.id, options.jobId))
-        .limit(1)
-      isActive = jobInActive.length > 0
-    }
-
-    const spansTable = isActive ? this.tables.spansActiveTable : this.tables.spansArchiveTable
+    const spansTable = this.tables.spansTable
 
     // Build WHERE clause for job queries
-    const where = this._buildSpansWhereClause(options.jobId, undefined, filters, isActive)
+    const where = this._buildSpansWhereClause(options.jobId, undefined, filters)
 
     // Get total count
     const total = await this.db.$count(spansTable, where)
@@ -1862,19 +2023,13 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   ): Promise<GetSpansResult> {
     const schemaName = this.schema
 
-    // Query both active and archive spans tables
     const query = sql`
       WITH RECURSIVE span_tree AS (
-        -- Base case: the span(s) for the step (check both tables)
-        SELECT * FROM ${sql.identifier(schemaName)}.spans_active WHERE step_id = ${stepId}::uuid
-        UNION
-        SELECT * FROM ${sql.identifier(schemaName)}.spans_archive WHERE step_id = ${stepId}::uuid
+        -- Base case: the span(s) for the step
+        SELECT * FROM ${sql.identifier(schemaName)}.spans WHERE step_id = ${stepId}::uuid
         UNION ALL
-        -- Recursive case: children of spans we've found (check both tables)
-        SELECT s.* FROM ${sql.identifier(schemaName)}.spans_active s
-        INNER JOIN span_tree st ON s.parent_span_id = st.span_id
-        UNION
-        SELECT s.* FROM ${sql.identifier(schemaName)}.spans_archive s
+        -- Recursive case: children of spans we've found
+        SELECT s.* FROM ${sql.identifier(schemaName)}.spans s
         INNER JOIN span_tree st ON s.parent_span_id = st.span_id
       )
       SELECT
@@ -1940,18 +2095,12 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Internal method to delete all spans for a job.
    */
   protected async _deleteSpans(options: DeleteSpansOptions): Promise<number> {
-    // Delete from both tables to be safe
-    const activeResult = await this.db
-      .delete(this.tables.spansActiveTable)
-      .where(eq(this.tables.spansActiveTable.job_id, options.jobId))
-      .returning({ id: this.tables.spansActiveTable.id })
+    const result = await this.db
+      .delete(this.tables.spansTable)
+      .where(eq(this.tables.spansTable.job_id, options.jobId))
+      .returning({ id: this.tables.spansTable.id })
 
-    const archiveResult = await this.db
-      .delete(this.tables.spansArchiveTable)
-      .where(eq(this.tables.spansArchiveTable.job_id, options.jobId))
-      .returning({ id: this.tables.spansArchiveTable.id })
-
-    return activeResult.length + archiveResult.length
+    return result.length
   }
 
   /**
@@ -1963,8 +2112,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Note: Step queries are handled separately by _getStepSpansRecursive using
    * a recursive CTE to traverse the span hierarchy.
    */
-  protected _buildSpansWhereClause(jobId?: string, _stepId?: string, filters?: GetSpansOptions['filters'], isActive: boolean = true) {
-    const spansTable = isActive ? this.tables.spansActiveTable : this.tables.spansArchiveTable
+  protected _buildSpansWhereClause(jobId?: string, _stepId?: string, filters?: GetSpansOptions['filters']) {
+    const spansTable = this.tables.spansTable
 
     // Build condition for finding spans by trace_id (includes external spans)
     let traceCondition: ReturnType<typeof eq> | undefined
@@ -2141,23 +2290,142 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   // ============================================================================
   // Archive Methods (Stub implementations - to be filled in)
   // ============================================================================
+  // Archive Methods
+  // ============================================================================
 
-  protected async _pruneArchive(_options: any): Promise<number> {
-    return 0
+  /**
+   * Parse olderThan option into a Date threshold.
+   * Supports: string (e.g. "7d", "1h"), Date, or number (timestamp ms).
+   */
+  private _parseOlderThan(olderThan: string | Date | number): Date {
+    if (olderThan instanceof Date) {
+      return olderThan
+    }
+
+    if (typeof olderThan === 'number') {
+      return new Date(olderThan)
+    }
+
+    // Parse duration string like "7d", "1h", "30m", "10s", "500ms"
+    const match = olderThan.match(/^(\d+)\s*(ms|d|h|m|s)$/i)
+    if (!match) {
+      throw new Error(
+        `Invalid olderThan format: ${olderThan}. Expected: "7d", "1h", "30m", "10s", "500ms", Date, or number`,
+      )
+    }
+
+    const value = parseInt(match[1]!, 10)
+    const unit = match[2]!.toLowerCase()
+    const now = Date.now()
+
+    const multipliers: Record<string, number> = {
+      d: 24 * 60 * 60 * 1000,
+      h: 60 * 60 * 1000,
+      m: 60 * 1000,
+      s: 1000,
+      ms: 1,
+    }
+
+    const ms = value * (multipliers[unit] ?? 0)
+    return new Date(now - ms)
+  }
+
+  protected async _pruneArchive(options: PruneArchiveOptions): Promise<number> {
+    const threshold = this._parseOlderThan(options.olderThan)
+    const batchSize = options.batchSize ?? 1000
+    const maxBatches = options.maxBatches ?? 100
+    const schemaName = this.schema
+
+    let totalDeleted = 0
+
+    for (let batch = 0; batch < maxBatches; batch++) {
+      const result = this._map(
+        await this.db.execute<{ id: string }>(sql`
+          WITH ids_to_delete AS (
+            SELECT id FROM ${sql.identifier(schemaName)}.jobs_archive
+            WHERE finished_at < ${threshold.toISOString()}
+            LIMIT ${batchSize}
+          ),
+          deleted_spans AS (
+            DELETE FROM ${sql.identifier(schemaName)}.spans s
+            USING ids_to_delete d
+            WHERE s.job_id = d.id
+          )
+          DELETE FROM ${sql.identifier(schemaName)}.jobs_archive j
+          USING ids_to_delete d
+          WHERE j.id = d.id
+          RETURNING j.id
+        `),
+      )
+
+      if (!result || result.length === 0) {
+        break
+      }
+
+      totalDeleted += result.length
+    }
+
+    // Clean up orphan spans (spans whose job no longer exists in active or archive)
+    if (totalDeleted > 0) {
+      await this.db.execute(sql`
+        DELETE FROM ${sql.identifier(schemaName)}.spans s
+        WHERE s.job_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_active ja WHERE ja.id = s.job_id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_archive ja WHERE ja.id = s.job_id
+          )
+      `)
+    }
+
+    return totalDeleted
   }
 
   protected async _truncateArchive(): Promise<void> {
-    // TODO: Implement
+    const schemaName = this.schema
+    await this.db.execute(sql`TRUNCATE TABLE ${sql.identifier(schemaName)}.jobs_archive CASCADE`)
+    // Note: We do NOT truncate spans here because spans may belong to active jobs.
+    // Spans for archived jobs become orphans until cleaned up by prune operations.
   }
 
-  protected async _getArchiveStats(): Promise<any> {
+  protected async _getArchiveStats(): Promise<ArchiveStats> {
+    const schemaName = this.schema
+
+    const [jobsResult, stepsResult, spansResult, oldestResult] = await Promise.all([
+      this.db
+        .execute<{ count: number }>(sql`
+        SELECT COUNT(*)::int as count FROM ${sql.identifier(schemaName)}.jobs_archive
+      `)
+        .then((r) => this._map(r)),
+      this.db
+        .execute<{ count: number }>(sql`
+        SELECT COUNT(*)::int as count FROM ${sql.identifier(schemaName)}.job_steps_archive
+      `)
+        .then((r) => this._map(r)),
+      this.db
+        .execute<{ count: number }>(sql`
+        SELECT COUNT(*)::int as count FROM ${sql.identifier(schemaName)}.spans
+      `)
+        .then((r) => this._map(r)),
+      this.db
+        .execute<{ finished_at: Date | null }>(sql`
+        SELECT finished_at FROM ${sql.identifier(schemaName)}.jobs_archive
+        ORDER BY finished_at ASC
+        LIMIT 1
+      `)
+        .then((r) => this._map(r)),
+    ])
+
+    const oldestDate = oldestResult[0]?.finished_at ? new Date(oldestResult[0].finished_at) : null
+
     return {
-      jobsCount: 0,
-      stepsCount: 0,
-      spansCount: 0,
-      oldestJobDate: null,
+      jobsCount: Number(jobsResult[0]?.count ?? 0),
+      stepsCount: Number(stepsResult[0]?.count ?? 0),
+      spansCount: Number(spansResult[0]?.count ?? 0),
+      oldestJobDate: oldestDate,
       totalSizeBytes: null,
-      lastPrunedAt: null,
+      lastPrunedAt: this.lastPrunedAt,
     }
   }
 }

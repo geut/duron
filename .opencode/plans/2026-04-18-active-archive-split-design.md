@@ -810,4 +810,202 @@ Use snapshot-based batching with TRUNCATE table rotation (like pgque/PgQ).
 
 ---
 
+## 16. Job & Step State Transitions
+
+### 16.1 Overview
+
+Jobs and steps move between **active** and **archive** tables based on their lifecycle. The active table contains only non-terminal work (`created`, `active` status). The archive contains only terminal work (`completed`, `failed`, `cancelled`).
+
+### 16.2 Job State Transitions
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           JOB LIFECYCLE                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+CREATE
+  └─► jobs_active (status: created)
+        │
+        ▼
+  ACTIVATE (worker picks up job)
+  └─► jobs_active (status: active, started_at=now, expires_at=now+timeout)
+        │
+        ├──────────────────────────────────────────┬───────────────────────────┐
+        │                                          │                           │
+        ▼                                          ▼                           ▼
+  COMPLETE                              FAIL                              CANCEL
+  (job handler                        (exception or                       (user or
+   returns)                            timeout)                            system)
+        │                                          │                           │
+        ▼                                          ▼                           ▼
+  jobs_archive                        jobs_archive                        jobs_archive
+  (status: completed)                 (status: failed)                    (status: cancelled)
+        │                                          │                           │
+        │                                          │                           │
+        └──────────────────┬───────────────────────┘                           │
+                           │                                                   │
+                           ▼                                                   │
+                     TIME TRAVEL (restore from archive if needed)              │
+                           │                                                   │
+                           ▼                                                   │
+                     jobs_active (status: created)                              │
+                           │                                                   │
+                           ▼                                                   │
+                     RE-EXECUTE from target step                                │
+                           │                                                   │
+                           ▼                                                   │
+                     jobs_active → jobs_archive (terminal again)                │
+                                                                                │
+                           ▼                                                    │
+                     PRUNE (delete old archived jobs) ◄─────────────────────────┘
+                           │
+                           ▼
+                     PERMANENTLY DELETED (jobs_archive + steps + spans)
+```
+
+### 16.3 Step State Transitions
+
+Steps follow the same active/archive pattern but have additional complexity during time travel.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          STEP LIFECYCLE                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+CREATE (with job)
+  └─► job_steps_active (status: active)
+        │
+        ▼
+  COMPLETE / FAIL / CANCEL
+        │
+        ▼
+  job_steps_archive (preserves final status)
+        │
+        ▼
+  TIME TRAVEL (if archived, restored to active first)
+        │
+        ├─► Target step ───────┐
+        │   (reset to active)   │
+        │                       │
+        ├─► Ancestor steps ────┤
+        │   (reset to active)   │
+        │                       │
+        ├─► Parallel branches ─┤
+        │   (keep completed,    │
+        │    shift timestamps)  │
+        │                       │
+        └─► Other steps ───────┘
+            (DELETED permanently)
+```
+
+### 16.4 Time Travel Step Logic
+
+When `timeTravelJob(jobId, stepId)` is called:
+
+**Phase 1: Archive Restore (if job is in archive)**
+1. INSERT job row into `jobs_active` (from `jobs_archive`)
+2. INSERT all step rows into `job_steps_active` (from `job_steps_archive`)
+3. DELETE job from `jobs_archive` (cascade deletes steps from `job_steps_archive`)
+4. Spans remain in the single `spans` table (no FK, no movement)
+
+*Note: This is a MOVE, not a copy. The job is removed from archive and placed into active.*
+
+**Phase 2: CTE Transformation (single atomic query)**
+
+The CTE performs these operations in order:
+
+| Operation | Steps Affected | New Status | Table | Notes |
+|-----------|---------------|------------|-------|-------|
+| **Validate** | Job | — | active | Must be terminal (completed/failed/cancelled) |
+| **Find ancestors** | Target's parent chain | — | active | Recursive CTE up to root |
+| **Find parallel branches** | Sibling steps with `parallel=true` | — | active | Completed steps at same nesting level |
+| **Shift timestamps** | Kept completed steps | completed | active | `started_at`/`finished_at` shifted to "now" |
+| **Delete** | Non-parallel, non-ancestor, non-target | — | active | Permanently removed |
+| **Reset** | Target step | active | active | Clear output, error, finished_at, set started_at=now |
+| **Reset** | Ancestor steps | active | active | Same clearing as target |
+| **Reset** | Job | created | active | Clear output, error, started_at, finished_at, client_id, expires_at |
+
+**Step categories after time travel:**
+
+| Category | Status | Preserved Data | Example |
+|----------|--------|---------------|---------|
+| **Target** | `active` | None (reset) | The step you're time-traveling to |
+| **Ancestors** | `active` | None (reset) | Parent steps leading to target |
+| **Parallel branches** | `completed` | Output, error, all data | Side branches that ran concurrently |
+| **Pre-target linear** | `completed` | Output, error, all data | Steps before target in same branch |
+| **Post-target** | — | — | **Deleted permanently** |
+
+### 16.5 Spans Lifecycle
+
+Spans use a **single table** (`spans`) with **no FK constraints**. This is intentional — spans are append-only telemetry data that should not block job operations.
+
+**Spans are created during job execution:**
+- OpenTelemetry spans are exported via `LocalSpanExporter`
+- Each span has `duron.job.id` and `duron.step.id` attributes (extracted from OTel attributes)
+- Spans are inserted into the single `spans` table
+- External spans (e.g., from AI SDK) that share the same `trace_id` are also stored
+
+**Spans are NOT deleted when a job completes/fails/cancels:**
+- Complete → spans stay in `spans` table
+- Fail → spans stay in `spans` table
+- Cancel → spans stay in `spans` table
+- Time Travel → spans stay in `spans` table (no movement)
+- Retry → spans stay in `spans` table (new job gets new spans)
+
+**Spans are deleted during:**
+1. **Prune (batch)** — `DELETE FROM spans WHERE job_id IN (pruned jobs)` (explicit cleanup in prune CTE)
+2. **Prune (orphan cleanup)** — `DELETE FROM spans WHERE job_id NOT IN (jobs_active) AND job_id NOT IN (jobs_archive)` (catches spans from deleted jobs)
+3. **Manual deleteSpans API** — `DELETE FROM spans WHERE job_id = ?` (programmatic cleanup)
+
+**Spans are NOT deleted during truncate** because truncate only clears archive tables, and spans may belong to active jobs.
+
+**Querying spans:**
+- By job: Query spans table directly (uses `job_id` index)
+- By step: Recursive CTE traverses span hierarchy via `parent_span_id`
+- By trace: Query spans table directly (uses `trace_id` index)
+
+**Important:** Because spans have no FK constraints, they can reference jobs/steps that no longer exist. Querying spans for a deleted job returns no results (the `job_id` lookup finds nothing), but the spans themselves remain until pruned.
+
+### 16.6 Status Values by Table
+
+**Active Tables:**
+| Table | Possible Statuses |
+|-------|------------------|
+| `jobs_active` | `created`, `active` |
+| `job_steps_active` | `active`, `completed`, `failed`, `cancelled` |
+
+**Archive Tables:**
+| Table | Possible Statuses |
+|-------|------------------|
+| `jobs_archive` | `completed`, `failed`, `cancelled` |
+| `job_steps_archive` | `active`, `completed`, `failed`, `cancelled` |
+
+*Note: `job_steps_archive` can have `active` status because steps are archived as-is at job termination time. A job may have active steps if it was cancelled or failed mid-execution.*
+
+### 16.6 Movement Between Tables
+
+| Operation | Job Movement | Step Movement | Span Movement |
+|-----------|-------------|---------------|---------------|
+| **Create** | INSERT `jobs_active` | INSERT `job_steps_active` | INSERT `spans` |
+| **Activate** | UPDATE `jobs_active` | — | — |
+| **Complete** | MOVE active→archive | MOVE active→archive | DELETE from `spans` (where job_id=?) |
+| **Fail** | MOVE active→archive | MOVE active→archive | DELETE from `spans` (where job_id=?) |
+| **Cancel** | MOVE active→archive | MOVE active→archive (after setting status=cancelled) | DELETE from `spans` (where job_id=?) |
+| **Retry** | MOVE archive→active | MOVE archive→active | No movement (spans stay in `spans`) |
+| **Time Travel** | If in archive: MOVE archive→active, then TRANSFORM active | If in archive: MOVE archive→active, then TRANSFORM active | No movement (spans stay in `spans`) |
+| **Prune** | DELETE `jobs_archive` (cascade steps) | DELETE `job_steps_archive` (cascade) | DELETE `spans` (explicit in prune CTE) |
+| **Truncate** | TRUNCATE `jobs_archive` CASCADE | TRUNCATE `job_steps_archive` CASCADE | No operation (spans may belong to active jobs) |
+
+### 16.7 Critical Invariants
+
+1. **A job exists in exactly one table at a time** (active XOR archive, not both)
+2. **Archive jobs are always terminal** (status IN completed, failed, cancelled)
+3. **Active jobs are always non-terminal** (status IN created, active)
+4. **Steps follow their parent job** — when a job moves, all its steps move with it
+5. **Time travel is the only way to go from archive → active**
+6. **Spans have no FK constraints** — they are cleaned up explicitly during prune/truncate
+7. **Prune uses batching with `USING` joins** — single query per batch deletes jobs, steps (cascade), and spans
+
+---
+
 *End of Design Document*

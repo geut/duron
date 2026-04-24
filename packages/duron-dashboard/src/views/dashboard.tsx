@@ -1,6 +1,6 @@
 'use client'
 
-import { LogOut, MoreVertical, Plus, Trash2 } from 'lucide-react'
+import { Activity, Archive, LogOut, MoreVertical, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { CreateJobDialog } from '@/components/create-job-dialog'
@@ -19,9 +19,11 @@ import { ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { useAuth } from '@/contexts/auth-context'
 import { useLayout } from '@/contexts/layout-context'
 import { useIsMobile } from '@/hooks/use-is-mobile'
+import { useJobFilter } from '@/hooks/use-job-filter'
 import { useJobParams } from '@/hooks/use-job-params'
 import { useDeleteJobs } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { ArchivePage } from './archive-page'
 import { JobDetails } from './job-details'
 import { JobsTable } from './jobs-table'
 import { StepList } from './step-list'
@@ -38,6 +40,8 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   const [createJobDialogOpen, setCreateJobDialogOpen] = useState(false)
   const [jobDetailsVisible, setJobDetailsVisible] = useState(false)
+  const [archivePageVisible, setArchivePageVisible] = useState(false)
+  const { filter: jobFilter, setFilter: setJobFilter } = useJobFilter()
   const isMobile = useIsMobile()
   const { logout } = useAuth()
   const { config, setDesktopHorizontalSizes, setDesktopVerticalSizes, setMobileVerticalSizes } = useLayout()
@@ -166,6 +170,10 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
                   <Plus className="h-4 w-4 mr-2" />
                   Create Job
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setArchivePageVisible(true)}>
+                  <Archive className="h-4 w-4 mr-2" />
+                  Archive
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={handleDeleteFilteredJobs}
                   disabled={deleteJobsMutation.isPending}
@@ -192,6 +200,34 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
         </div>
         <div className="hidden sm:flex items-center gap-2 order-2 sm:order-3">
           {showThemeToggle && <ThemeToggle />}
+          <div className="flex items-center rounded-md border p-1 gap-1">
+            <Button
+              variant={jobFilter === 'live' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setJobFilter('live')}
+            >
+              <Activity className="h-3 w-3 mr-1" />
+              Live
+            </Button>
+            <Button
+              variant={jobFilter === 'archive' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setJobFilter('archive')}
+            >
+              <Archive className="h-3 w-3 mr-1" />
+              Archive
+            </Button>
+            <Button
+              variant={jobFilter === 'all' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setJobFilter('all')}
+            >
+              All
+            </Button>
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild={true}>
               <Button variant="outline" size="sm">
@@ -203,6 +239,10 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
               <DropdownMenuItem onClick={() => setCreateJobDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Job
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setArchivePageVisible(true)}>
+                <Archive className="h-4 w-4 mr-2" />
+                Archive
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleDeleteFilteredJobs}
@@ -226,9 +266,24 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
         </div>
       </header>
       <div className="flex-1 overflow-hidden">
+        {/* Archive Page */}
+        {archivePageVisible && (
+          <div className="h-full relative">
+            <Button
+              variant="outline"
+              size="sm"
+              className="absolute top-4 right-4 z-10"
+              onClick={() => setArchivePageVisible(false)}
+            >
+              Close
+            </Button>
+            <ArchivePage />
+          </div>
+        )}
+
         {/* Desktop Layout with Resizable Panels */}
         {/* Layout: [Jobs Table (top)] / [Job Details | Steps (bottom)] */}
-        {!isMobile && (
+        {!archivePageVisible && !isMobile && (
           <ResizablePanelGroup
             direction="vertical"
             className="h-full"
@@ -292,7 +347,7 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
         )}
 
         {/* Mobile: Vertical Resizable Layout */}
-        {isMobile && (
+        {!archivePageVisible && isMobile && (
           <ResizablePanelGroup
             direction="vertical"
             className="h-full"

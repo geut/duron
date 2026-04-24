@@ -669,6 +669,76 @@ export function createServer<P extends string>({ client, prefix, login, spansEna
       },
     )
     .get(
+      '/archive/stats',
+      async () => {
+        return client.getArchiveStats()
+      },
+      {
+        response: {
+          200: z.object({
+            jobsCount: z.number(),
+            stepsCount: z.number(),
+            spansCount: z.number(),
+            oldestJobDate: z.date().nullable(),
+            totalSizeBytes: z.number().nullable(),
+            lastPrunedAt: z.date().nullable(),
+          }),
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+        auth: true,
+      },
+    )
+    .post(
+      '/archive/prune',
+      async ({ body }) => {
+        const deleted = await client.pruneArchive(body)
+        return { deletedJobs: deleted }
+      },
+      {
+        body: z.object({
+          olderThan: z.union([z.string(), z.coerce.date(), z.number()]),
+          batchSize: z.number().optional(),
+          maxBatches: z.number().optional(),
+        }),
+        response: {
+          200: z.object({
+            deletedJobs: z.number(),
+          }),
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+        auth: true,
+      },
+    )
+    .post(
+      '/archive/truncate',
+      async ({ body }) => {
+        const { confirm } = body
+        if (!confirm) {
+          throw new Error('Confirmation required. Set confirm: true to truncate all archive data.')
+        }
+        await client.truncateArchive()
+        return { success: true }
+      },
+      {
+        body: z.object({
+          confirm: z.boolean(),
+        }),
+        response: {
+          200: z.object({
+            success: z.boolean(),
+          }),
+          400: ErrorResponseSchema,
+          500: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+        auth: true,
+      },
+    )
+    .get(
       '/config',
       async () => {
         return {

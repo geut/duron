@@ -11,6 +11,7 @@ import type { Action, ConcurrencyHandlerContext } from './action.js'
 import { ActionManager } from './action-manager.js'
 import type {
   Adapter,
+  ArchiveStats,
   GetActionsResult,
   GetJobStepsOptions,
   GetJobStepsResult,
@@ -20,6 +21,7 @@ import type {
   GetSpansResult,
   Job,
   JobStep,
+  PruneArchiveOptions,
 } from './adapters/adapter.js'
 import type { JobStatusResult, JobStepStatusResult } from './adapters/schemas.js'
 import { JOB_STATUS_CANCELLED, JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, type JobStatus } from './constants.js'
@@ -1070,6 +1072,42 @@ export class Client<
         mockInput,
       }
     })
+  }
+
+  // ============================================================================
+  // Archive Methods
+  // ============================================================================
+
+  /**
+   * Get archive statistics including counts and oldest job date.
+   *
+   * @returns Promise resolving to archive statistics
+   */
+  async getArchiveStats(): Promise<ArchiveStats> {
+    await this.start()
+    return this.#database.getArchiveStats()
+  }
+
+  /**
+   * Prune archived jobs older than the specified threshold.
+   *
+   * @param options - Prune options including olderThan, batchSize, maxBatches
+   * @returns Promise resolving to number of deleted jobs
+   */
+  async pruneArchive(options: PruneArchiveOptions): Promise<number> {
+    await this.start()
+    return this.#database.pruneArchive(options)
+  }
+
+  /**
+   * Truncate all archive data (jobs, steps, spans).
+   * This is a destructive operation - use with caution.
+   *
+   * @returns Promise resolving when complete
+   */
+  async truncateArchive(): Promise<void> {
+    await this.start()
+    return this.#database.truncateArchive()
   }
 
   // ============================================================================

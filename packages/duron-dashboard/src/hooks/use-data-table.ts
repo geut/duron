@@ -237,6 +237,23 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
 
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(initialColumnFilters)
 
+  // Watch for external URL changes (e.g. from quick filter toggles)
+  const [externalStatusFilter] = useQueryState('status', parseAsArrayOf(parseAsString).withDefault([]))
+
+  React.useEffect(() => {
+    if (enableAdvancedFilter) return
+
+    setColumnFilters((prev) => {
+      const withoutStatus = prev.filter((f) => f.id !== 'status')
+
+      if (externalStatusFilter.length > 0) {
+        return [...withoutStatus, { id: 'status', value: externalStatusFilter }]
+      }
+
+      return withoutStatus
+    })
+  }, [externalStatusFilter, enableAdvancedFilter])
+
   const onColumnFiltersChange = React.useCallback(
     (updaterOrValue: Updater<ColumnFiltersState>) => {
       if (enableAdvancedFilter) return

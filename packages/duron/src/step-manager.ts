@@ -75,6 +75,10 @@ function injectParentSpan(ctx: Context, parentSpan: Span | null): Context {
  * to the current job/step trace hierarchy.
  */
 function createContextAwareTracer(tracer: Tracer, parentSpan: Span | null): Tracer {
+  // Extract duron.job.id and duron.step.id from parent span attributes for propagation
+  const parentJobId = parentSpan ? (parentSpan as any).attributes?.['duron.job.id'] : undefined
+  const parentStepId = parentSpan ? (parentSpan as any).attributes?.['duron.step.id'] : undefined
+
   return {
     startSpan(name: string, options?: SpanOptions, ctx?: Context): Span {
       // Always inject our parent span into the context, regardless of what context is passed.
@@ -83,7 +87,13 @@ function createContextAwareTracer(tracer: Tracer, parentSpan: Span | null): Trac
       // would otherwise create orphan spans.
       const baseContext = ctx ?? context.active()
       const effectiveContext = injectParentSpan(baseContext, parentSpan)
-      return tracer.startSpan(name, options, effectiveContext)
+      // Propagate duron.job.id and duron.step.id so spans can be queried by job
+      const attributes = {
+        ...(parentJobId ? { 'duron.job.id': parentJobId } : {}),
+        ...(parentStepId ? { 'duron.step.id': parentStepId } : {}),
+        ...options?.attributes,
+      }
+      return tracer.startSpan(name, { ...options, attributes }, effectiveContext)
     },
     // startActiveSpan has multiple overloads, we need to handle them all
     startActiveSpan<F extends (span: Span) => unknown>(
@@ -123,6 +133,10 @@ function createContextAwareTracer(tracer: Tracer, parentSpan: Span | null): Trac
  * Create a TelemetryContext that wraps an OTel span.
  */
 function createTelemetryContext(span: Span | null, tracer: Tracer): TelemetryContext {
+  // Extract duron.job.id and duron.step.id from parent span attributes for propagation
+  const parentJobId = span ? (span as any).attributes?.['duron.job.id'] : undefined
+  const parentStepId = span ? (span as any).attributes?.['duron.step.id'] : undefined
+
   return {
     getActiveSpan(): Span | undefined {
       return span ?? undefined
@@ -133,8 +147,14 @@ function createTelemetryContext(span: Span | null, tracer: Tracer): TelemetryCon
     },
     startSpan(name: string, options?: { attributes?: Record<string, any> }): Span {
       // Create a child span linked to the current span (job or step)
+      // Propagate duron.job.id and duron.step.id from parent so spans can be queried by job
+      const attributes = {
+        ...(parentJobId ? { 'duron.job.id': parentJobId } : {}),
+        ...(parentStepId ? { 'duron.step.id': parentStepId } : {}),
+        ...options?.attributes,
+      }
       const parentContext = span ? trace.setSpan(context.active(), span) : context.active()
-      return tracer.startSpan(name, { attributes: options?.attributes }, parentContext)
+      return tracer.startSpan(name, { attributes }, parentContext)
     },
     recordMetric(name: string, value: number, attributes?: Record<string, any>): void {
       if (span) {

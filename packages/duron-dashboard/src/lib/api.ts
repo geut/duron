@@ -448,8 +448,9 @@ export function useActionsMetadata() {
 export function useRunAction() {
   const apiRequest = useApiRequest()
   const queryClient = useQueryClient()
+
   return useMutation({
-    mutationFn: async ({ actionName, input }: { actionName: string; input: any }) => {
+    mutationFn: async ({ actionName, input }: { actionName: string; input: Record<string, unknown> }) => {
       return apiRequest<{ success: boolean; jobId: string }>(`/actions/${actionName}/run`, {
         method: 'POST',
         body: JSON.stringify(input),
@@ -458,6 +459,61 @@ export function useRunAction() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
       queryClient.invalidateQueries({ queryKey: ['actions'] })
+    },
+  })
+}
+
+// Archive hooks
+export interface ArchiveStatsResponse {
+  jobsCount: number
+  stepsCount: number
+  spansCount: number
+  oldestJobDate: string | null
+  totalSizeBytes: number | null
+  lastPrunedAt: string | null
+}
+
+export function useArchiveStats() {
+  const apiRequest = useApiRequest()
+
+  return useQuery<ArchiveStatsResponse>({
+    queryKey: ['archive', 'stats'],
+    queryFn: () => apiRequest<ArchiveStatsResponse>('/archive/stats'),
+  })
+}
+
+export function usePruneArchive() {
+  const apiRequest = useApiRequest()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (options: { olderThan: string; batchSize?: number; maxBatches?: number }) => {
+      return apiRequest<{ deletedJobs: number }>('/archive/prune', {
+        method: 'POST',
+        body: JSON.stringify(options),
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['archive', 'stats'] })
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+  })
+}
+
+export function useTruncateArchive() {
+  const apiRequest = useApiRequest()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      return apiRequest<{ success: boolean }>('/archive/truncate', {
+        method: 'POST',
+        body: JSON.stringify({ confirm: true }),
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['archive', 'stats'] })
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
     },
   })
 }

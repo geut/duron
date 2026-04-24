@@ -14,6 +14,7 @@ import {
   type StepStatus,
 } from '../constants.js'
 import type {
+  ArchiveStats,
   CancelJobOptions,
   CancelJobStepOptions,
   CompleteJobOptions,
@@ -41,12 +42,12 @@ import type {
   JobStep,
   JobStepStatusResult,
   PruneArchiveOptions,
-  ArchiveStats,
   RecoverJobsOptions,
   RetryJobOptions,
   TimeTravelJobOptions,
 } from './schemas.js'
 import {
+  ArchiveStatsSchema,
   BooleanResultSchema,
   CancelJobOptionsSchema,
   CancelJobStepOptionsSchema,
@@ -74,7 +75,6 @@ import {
   JobSchema,
   JobStatusResultSchema,
   JobStepSchema,
-  ArchiveStatsSchema,
   JobStepStatusResultSchema,
   JobsArrayResultSchema,
   NumberResultSchema,

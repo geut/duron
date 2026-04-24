@@ -8,7 +8,8 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "duron": "workspace:*"
   },
   "peerDependencies": {
     "typescript": "^5"

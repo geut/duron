@@ -136,15 +136,15 @@ export default function createSchema(schemaName: string) {
     ],
   )
 
-  const spansActiveTable = schema.table(
-    'spans_active',
+  const spansTable = schema.table(
+    'spans',
     {
       id: bigserial('id', { mode: 'number' }).primaryKey(),
       trace_id: text('trace_id').notNull(),
       span_id: text('span_id').notNull(),
       parent_span_id: text('parent_span_id'),
-      job_id: uuid('job_id').references(() => jobsActiveTable.id, { onDelete: 'cascade' }),
-      step_id: uuid('step_id').references(() => jobStepsActiveTable.id, { onDelete: 'cascade' }),
+      job_id: uuid('job_id'),
+      step_id: uuid('step_id'),
       name: text('name').notNull(),
       kind: integer('kind').notNull().default(0),
       start_time_unix_nano: bigint('start_time_unix_nano', { mode: 'bigint' }).notNull(),
@@ -159,22 +159,22 @@ export default function createSchema(schemaName: string) {
     },
     (table) => [
       // Single column indexes
-      index('idx_spans_active_trace_id').on(table.trace_id),
-      index('idx_spans_active_span_id').on(table.span_id),
-      index('idx_spans_active_job_id').on(table.job_id),
-      index('idx_spans_active_step_id').on(table.step_id),
-      index('idx_spans_active_name').on(table.name),
-      index('idx_spans_active_kind').on(table.kind),
-      index('idx_spans_active_status_code').on(table.status_code),
+      index('idx_spans_trace_id').on(table.trace_id),
+      index('idx_spans_span_id').on(table.span_id),
+      index('idx_spans_job_id').on(table.job_id),
+      index('idx_spans_step_id').on(table.step_id),
+      index('idx_spans_name').on(table.name),
+      index('idx_spans_kind').on(table.kind),
+      index('idx_spans_status_code').on(table.status_code),
       // Composite indexes
-      index('idx_spans_active_job_step').on(table.job_id, table.step_id),
-      index('idx_spans_active_trace_parent').on(table.trace_id, table.parent_span_id),
+      index('idx_spans_job_step').on(table.job_id, table.step_id),
+      index('idx_spans_trace_parent').on(table.trace_id, table.parent_span_id),
       // GIN indexes
-      index('idx_spans_active_attributes').using('gin', table.attributes),
-      index('idx_spans_active_events').using('gin', table.events),
+      index('idx_spans_attributes').using('gin', table.attributes),
+      index('idx_spans_events').using('gin', table.events),
       // Constraints
-      check('spans_active_kind_check', sql`${table.kind} IN (0, 1, 2, 3, 4)`),
-      check('spans_active_status_code_check', sql`${table.status_code} IN (0, 1, 2)`),
+      check('spans_kind_check', sql`${table.kind} IN (0, 1, 2, 3, 4)`),
+      check('spans_status_code_check', sql`${table.status_code} IN (0, 1, 2)`),
     ],
   )
 
@@ -202,9 +202,7 @@ export default function createSchema(schemaName: string) {
       concurrency_limit: integer('concurrency_limit').notNull(),
       concurrency_step_limit: integer('concurrency_step_limit').notNull(),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-      updated_at: timestamp('updated_at', { withTimezone: true })
-        .notNull()
-        .defaultNow(),
+      updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     },
     (table) => [
       // Lookup indexes
@@ -227,7 +225,9 @@ export default function createSchema(schemaName: string) {
     'job_steps_archive',
     {
       id: uuid('id').primaryKey(),
-      job_id: uuid('job_id').notNull(),
+      job_id: uuid('job_id')
+        .notNull()
+        .references(() => jobsArchiveTable.id, { onDelete: 'cascade' }),
       parent_step_id: uuid('parent_step_id'),
       parallel: boolean('branch').notNull().default(false),
       name: text('name').notNull(),
@@ -246,9 +246,7 @@ export default function createSchema(schemaName: string) {
         .notNull()
         .default({}),
       created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-      updated_at: timestamp('updated_at', { withTimezone: true })
-        .notNull()
-        .defaultNow(),
+      updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
       // Denormalized for easier time-based pruning
       job_finished_at: timestamp('job_finished_at', { withTimezone: true }),
     },
@@ -264,45 +262,12 @@ export default function createSchema(schemaName: string) {
     ],
   )
 
-  const spansArchiveTable = schema.table(
-    'spans_archive',
-    {
-      id: bigserial('id', { mode: 'number' }).primaryKey(),
-      trace_id: text('trace_id').notNull(),
-      span_id: text('span_id').notNull(),
-      parent_span_id: text('parent_span_id'),
-      job_id: uuid('job_id'),
-      step_id: uuid('step_id'),
-      name: text('name').notNull(),
-      kind: integer('kind').notNull().default(0),
-      start_time_unix_nano: bigint('start_time_unix_nano', { mode: 'bigint' }).notNull(),
-      end_time_unix_nano: bigint('end_time_unix_nano', { mode: 'bigint' }),
-      status_code: integer('status_code').notNull().default(0),
-      status_message: text('status_message'),
-      attributes: jsonb('attributes').$type<Record<string, any>>().notNull().default({}),
-      events: jsonb('events')
-        .$type<Array<{ name: string; timeUnixNano: string; attributes?: Record<string, any> }>>()
-        .notNull()
-        .default([]),
-    },
-    (table) => [
-      // Minimal indexes
-      index('idx_spans_archive_trace_id').on(table.trace_id),
-      index('idx_spans_archive_job_id').on(table.job_id),
-      index('idx_spans_archive_step_id').on(table.step_id),
-      // Constraints
-      check('spans_archive_kind_check', sql`${table.kind} IN (0, 1, 2, 3, 4)`),
-      check('spans_archive_status_code_check', sql`${table.status_code} IN (0, 1, 2)`),
-    ],
-  )
-
   return {
     schema,
     jobsActiveTable,
     jobsArchiveTable,
     jobStepsActiveTable,
     jobStepsArchiveTable,
-    spansActiveTable,
-    spansArchiveTable,
+    spansTable,
   }
 }

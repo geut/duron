@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "47ec47b1-f323-4e7e-a4bc-605f703aa384",
+  "id": "dd03307a-a6a5-4223-aa91-fbf5ad99469c",
   "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
@@ -10,13 +10,25 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "job_steps",
+      "name": "job_steps_active",
       "entityType": "tables",
       "schema": "duron"
     },
     {
       "isRlsEnabled": false,
-      "name": "jobs",
+      "name": "job_steps_archive",
+      "entityType": "tables",
+      "schema": "duron"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "jobs_active",
+      "entityType": "tables",
+      "schema": "duron"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "jobs_archive",
       "entityType": "tables",
       "schema": "duron"
     },
@@ -37,7 +49,7 @@
       "name": "id",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "uuid",
@@ -50,7 +62,7 @@
       "name": "job_id",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "uuid",
@@ -63,7 +75,7 @@
       "name": "parent_step_id",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "boolean",
@@ -76,7 +88,7 @@
       "name": "branch",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "text",
@@ -89,7 +101,7 @@
       "name": "name",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "text",
@@ -102,7 +114,7 @@
       "name": "status",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "jsonb",
@@ -115,7 +127,7 @@
       "name": "output",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "jsonb",
@@ -128,7 +140,7 @@
       "name": "error",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "timestamp with time zone",
@@ -141,7 +153,7 @@
       "name": "started_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "timestamp with time zone",
@@ -154,7 +166,7 @@
       "name": "finished_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "integer",
@@ -167,7 +179,7 @@
       "name": "timeout_ms",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "timestamp with time zone",
@@ -180,7 +192,7 @@
       "name": "expires_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "integer",
@@ -193,7 +205,7 @@
       "name": "retries_limit",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "integer",
@@ -206,7 +218,7 @@
       "name": "retries_count",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "integer",
@@ -219,7 +231,7 @@
       "name": "delayed_ms",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "jsonb",
@@ -232,7 +244,7 @@
       "name": "history_failed_attempts",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "timestamp with time zone",
@@ -245,7 +257,7 @@
       "name": "created_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "timestamp with time zone",
@@ -258,72 +270,59 @@
       "name": "updated_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "gen_random_uuid()",
+      "default": null,
       "generated": null,
       "identity": null,
       "name": "id",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
-      "type": "text",
+      "type": "uuid",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "action_name",
+      "name": "job_id",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "group_key",
-      "entityType": "columns",
-      "schema": "duron",
-      "table": "jobs"
-    },
-    {
-      "type": "text",
+      "type": "uuid",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "description",
+      "name": "parent_step_id",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
-      "type": "text",
+      "type": "boolean",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "'created'",
+      "default": "false",
       "generated": null,
       "identity": null,
-      "name": "status",
+      "name": "branch",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
       "type": "text",
@@ -333,23 +332,23 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "checksum",
+      "name": "name",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
-      "type": "jsonb",
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "'{}'",
+      "default": "'active'",
       "generated": null,
       "identity": null,
-      "name": "input",
+      "name": "status",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
       "type": "jsonb",
@@ -362,7 +361,7 @@
       "name": "output",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
       "type": "jsonb",
@@ -375,46 +374,20 @@
       "name": "error",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
-      "type": "integer",
+      "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "timeout_ms",
-      "entityType": "columns",
-      "schema": "duron",
-      "table": "jobs"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "expires_at",
-      "entityType": "columns",
-      "schema": "duron",
-      "table": "jobs"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
+      "default": "now()",
       "generated": null,
       "identity": null,
       "name": "started_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
       "type": "timestamp with time zone",
@@ -427,46 +400,85 @@
       "name": "finished_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
-      "type": "text",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "timeout_ms",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "job_steps_archive"
+    },
+    {
+      "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "client_id",
+      "name": "expires_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": null,
+      "default": "0",
       "generated": null,
       "identity": null,
-      "name": "concurrency_limit",
+      "name": "retries_limit",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "retries_count",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "job_steps_archive"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "concurrency_step_limit",
+      "name": "delayed_ms",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "history_failed_attempts",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "job_steps_archive"
     },
     {
       "type": "timestamp with time zone",
@@ -479,7 +491,7 @@
       "name": "created_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
     },
     {
       "type": "timestamp with time zone",
@@ -492,7 +504,488 @@
       "name": "updated_at",
       "entityType": "columns",
       "schema": "duron",
-      "table": "jobs"
+      "table": "job_steps_archive"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "job_finished_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "job_steps_archive"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "action_name",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "group_key",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'created'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "checksum",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "input",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "output",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "error",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "timeout_ms",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "finished_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "client_id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "concurrency_limit",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "concurrency_step_limit",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_active"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "action_name",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "group_key",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "checksum",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "input",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "output",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "error",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "timeout_ms",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "finished_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "client_id",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "concurrency_limit",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "concurrency_step_limit",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "duron",
+      "table": "jobs_archive"
     },
     {
       "type": "bigserial",
@@ -692,10 +1185,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_job_steps_job_id",
+      "name": "idx_job_steps_active_job_id",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "nameExplicit": true,
@@ -713,10 +1206,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_job_steps_status",
+      "name": "idx_job_steps_active_status",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "nameExplicit": true,
@@ -734,10 +1227,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_job_steps_name",
+      "name": "idx_job_steps_active_name",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "nameExplicit": true,
@@ -755,10 +1248,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_job_steps_expires_at",
+      "name": "idx_job_steps_active_expires_at",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "nameExplicit": true,
@@ -776,10 +1269,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_job_steps_parent_step_id",
+      "name": "idx_job_steps_active_parent_step_id",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "nameExplicit": true,
@@ -804,10 +1297,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_job_steps_job_status",
+      "name": "idx_job_steps_active_job_status",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "nameExplicit": true,
@@ -832,10 +1325,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_job_steps_job_name",
+      "name": "idx_job_steps_active_job_name",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "nameExplicit": true,
@@ -853,10 +1346,73 @@
       "with": "",
       "method": "gin",
       "concurrently": false,
-      "name": "idx_job_steps_output_fts",
+      "name": "idx_job_steps_active_output_fts",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_job_steps_archive_job_id",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "job_steps_archive"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_finished_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_job_steps_archive_job_finished_at",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "job_steps_archive"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_job_steps_archive_name",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "job_steps_archive"
     },
     {
       "nameExplicit": true,
@@ -874,10 +1430,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_action_name",
+      "name": "idx_jobs_active_action_name",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -895,10 +1451,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_status",
+      "name": "idx_jobs_active_status",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -916,10 +1472,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_group_key",
+      "name": "idx_jobs_active_group_key",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -937,10 +1493,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_description",
+      "name": "idx_jobs_active_description",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -958,31 +1514,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_started_at",
+      "name": "idx_jobs_active_started_at",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "finished_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_jobs_finished_at",
-      "entityType": "indexes",
-      "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -1000,10 +1535,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_expires_at",
+      "name": "idx_jobs_active_expires_at",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -1021,10 +1556,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_client_id",
+      "name": "idx_jobs_active_client_id",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -1042,10 +1577,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_checksum",
+      "name": "idx_jobs_active_checksum",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -1063,10 +1598,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_concurrency_limit",
+      "name": "idx_jobs_active_concurrency_limit",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -1084,10 +1619,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_concurrency_step_limit",
+      "name": "idx_jobs_active_concurrency_step_limit",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -1112,10 +1647,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_action_status",
+      "name": "idx_jobs_active_action_status",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -1140,10 +1675,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "idx_jobs_action_group",
+      "name": "idx_jobs_active_action_group",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -1161,10 +1696,10 @@
       "with": "",
       "method": "gin",
       "concurrently": false,
-      "name": "idx_jobs_input_fts",
+      "name": "idx_jobs_active_input_fts",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
     },
     {
       "nameExplicit": true,
@@ -1182,10 +1717,143 @@
       "with": "",
       "method": "gin",
       "concurrently": false,
-      "name": "idx_jobs_output_fts",
+      "name": "idx_jobs_active_output_fts",
       "entityType": "indexes",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "group_key",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_jobs_archive_group_key",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "action_name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_jobs_archive_action_name",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "finished_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_jobs_archive_finished_at",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "action_name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "group_key",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_jobs_archive_action_group",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "to_tsvector('english', \"input\"::text)",
+          "isExpression": true,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "gin",
+      "concurrently": false,
+      "name": "idx_jobs_archive_input_fts",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "jobs_archive"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "to_tsvector('english', \"output\"::text)",
+          "isExpression": true,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "gin",
+      "concurrently": false,
+      "name": "idx_jobs_archive_output_fts",
+      "entityType": "indexes",
+      "schema": "duron",
+      "table": "jobs_archive"
     },
     {
       "nameExplicit": true,
@@ -1436,55 +2104,58 @@
       "nameExplicit": false,
       "columns": ["job_id"],
       "schemaTo": "duron",
-      "tableTo": "jobs",
+      "tableTo": "jobs_active",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "job_steps_job_id_jobs_id_fkey",
+      "name": "job_steps_active_job_id_jobs_active_id_fkey",
       "entityType": "fks",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "nameExplicit": false,
       "columns": ["job_id"],
       "schemaTo": "duron",
-      "tableTo": "jobs",
+      "tableTo": "jobs_archive",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "spans_job_id_jobs_id_fkey",
+      "name": "job_steps_archive_job_id_jobs_archive_id_fkey",
       "entityType": "fks",
       "schema": "duron",
-      "table": "spans"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["step_id"],
-      "schemaTo": "duron",
-      "tableTo": "job_steps",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "spans_step_id_job_steps_id_fkey",
-      "entityType": "fks",
-      "schema": "duron",
-      "table": "spans"
+      "table": "job_steps_archive"
     },
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "job_steps_pkey",
+      "name": "job_steps_active_pkey",
       "schema": "duron",
-      "table": "job_steps",
+      "table": "job_steps_active",
       "entityType": "pks"
     },
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "jobs_pkey",
+      "name": "job_steps_archive_pkey",
       "schema": "duron",
-      "table": "jobs",
+      "table": "job_steps_archive",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "jobs_active_pkey",
+      "schema": "duron",
+      "table": "jobs_active",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "jobs_archive_pkey",
+      "schema": "duron",
+      "table": "jobs_archive",
       "entityType": "pks"
     },
     {
@@ -1499,24 +2170,38 @@
       "nameExplicit": true,
       "columns": ["job_id", "name", "parent_step_id"],
       "nullsNotDistinct": true,
-      "name": "unique_job_step_name_parent",
+      "name": "unique_job_step_active_name_parent",
       "entityType": "uniques",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
     },
     {
       "value": "\"status\" IN ('active','completed','failed','cancelled')",
-      "name": "job_steps_status_check",
+      "name": "job_steps_active_status_check",
       "entityType": "checks",
       "schema": "duron",
-      "table": "job_steps"
+      "table": "job_steps_active"
+    },
+    {
+      "value": "\"status\" IN ('active','completed','failed','cancelled')",
+      "name": "job_steps_archive_status_check",
+      "entityType": "checks",
+      "schema": "duron",
+      "table": "job_steps_archive"
     },
     {
       "value": "\"status\" IN ('created','active','completed','failed','cancelled')",
-      "name": "jobs_status_check",
+      "name": "jobs_active_status_check",
       "entityType": "checks",
       "schema": "duron",
-      "table": "jobs"
+      "table": "jobs_active"
+    },
+    {
+      "value": "\"status\" IN ('created','active','completed','failed','cancelled')",
+      "name": "jobs_archive_status_check",
+      "entityType": "checks",
+      "schema": "duron",
+      "table": "jobs_archive"
     },
     {
       "value": "\"kind\" IN (0, 1, 2, 3, 4)",

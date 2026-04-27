@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-import { Client } from 'duron'
-import { defineAction } from 'duron/action'
-import { JOB_STATUS_COMPLETED } from 'duron/constants'
+import { defineAction } from '../src/action.js'
+import { Client } from '../src/client.js'
+import { JOB_STATUS_COMPLETED } from '../src/constants.js'
 import { z } from 'zod'
 
-import { pgliteFactory } from '../node_modules/duron/test/adapters.js'
+import { pgliteFactory } from './adapters.js'
 
 // Test version of processOrder without AI dependency
 const testProcessOrder = defineAction()({

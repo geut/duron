@@ -102,6 +102,12 @@ Workflow `.github/workflows/test.yml` runs: `bun install` → `typecheck` → `l
 - Create feature branches from `main` for all changes
 - Do **not** use git worktrees
 - Commit directly to the feature branch
+- **Before every commit, run verification locally:**
+  ```bash
+  bun run typecheck   # TypeScript check across all packages
+  bun run lint        # Lint check
+  bun test            # Full test suite (not just packages/duron)
+  ```
 
 ## Telemetry
 

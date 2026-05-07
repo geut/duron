@@ -58,7 +58,7 @@ const client = duron({
     processOrder,
   },
   multiProcessMode: true, // Enable multi-process mode
-  processTimeout: 5 * 1000, // 5 seconds
+  processTimeout: 500, // 0.5 seconds (default)
   recoverJobsOnStart: true, // Recover stuck jobs on startup
 })
 
@@ -207,7 +207,7 @@ const client = duron({
   logger: 'debug',
   recoverJobsOnStart: true,
   multiProcessMode: true,
-  processTimeout: 5 * 1000, // 5 seconds
+  processTimeout: 500, // 0.5 seconds (default)
 })
 
 await client.start()
@@ -257,12 +257,12 @@ id: `worker-${Math.random()}`
 
 Set `processTimeout` based on your deployment strategy:
 
-- **Short timeout (1-2 minutes)**: For fast deployments and quick recovery
-- **Medium timeout (5 minutes)**: Default, good for most use cases
-- **Long timeout (10+ minutes)**: For slow deployments or maintenance windows
+- **Very short timeout (500ms)**: Default, good for most use cases with fast ping responses
+- **Short timeout (1-2 seconds)**: For fast deployments and quick recovery
+- **Medium timeout (5+ seconds)**: For slow deployments or high-latency networks
 
 ```ts
-processTimeout: 5 * 1000, // 5 seconds (default)
+processTimeout: 500, // 0.5 seconds (default)
 ```
 
 ### Resource Management

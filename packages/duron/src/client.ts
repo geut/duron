@@ -269,7 +269,7 @@ const BaseOptionsSchema = z.object({
   migrateOnStart: z.boolean().default(true),
   recoverJobsOnStart: z.boolean().default(true),
   multiProcessMode: z.boolean().default(false),
-  processTimeout: z.number().default(5 * 1000),
+  processTimeout: z.number().default(500),
   recoverJobsInterval: z.number().default(60_000),
 })
 
@@ -736,17 +736,18 @@ export class Client<
       return []
     }
 
-    // Run recovery if it hasn't been run in the configured interval
+    // Run recovery periodically only in multi-process mode.
+    // In single-process mode, recovery on startup is sufficient.
     const now = Date.now()
     if (
-      this.#options.recoverJobsOnStart &&
+      this.#options.multiProcessMode &&
       this.#options.recoverJobsInterval > 0 &&
       now - this.#lastRecoveryAt > this.#options.recoverJobsInterval
     ) {
       this.#lastRecoveryAt = now
       await this.#database.recoverJobs({
         checksums: Object.values(this.#actions).map((action) => action.checksum),
-        multiProcessMode: this.#options.multiProcessMode,
+        multiProcessMode: true,
         processTimeout: this.#options.processTimeout,
       })
     }

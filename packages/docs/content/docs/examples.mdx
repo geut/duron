@@ -413,7 +413,7 @@ const client = duron({
     processOrder,
   },
   multiProcessMode: true,
-  processTimeout: 5 * 1000, // 5 seconds
+  processTimeout: 500, // 0.5 seconds (default)
 })
 
 await client.start()

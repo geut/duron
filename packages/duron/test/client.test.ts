@@ -936,7 +936,18 @@ function runClientTests(adapterFactory: AdapterFactory) {
         await concurrencyClient.stop()
       })
 
-      it('should allow new jobs when active job has expired', async () => {
+      it('should recover expired orphan jobs from dead processes and allow new jobs to proceed', async () => {
+        // This test simulates a multi-process scenario where:
+        // 1. Instance A processes a job and then crashes
+        // 2. The job remains active in the database (orphan job)
+        // 3. Instance B (with multiProcessMode enabled) detects the orphan
+        //    via periodic recovery in fetch()
+        // 4. The expired orphan is archived as failed, freeing up the
+        //    concurrency slot for new jobs
+        //
+        // We simulate the crashed instance by setting the job's client_id
+        // to a fake process ID that won't respond to pings.
+
         const actionWithConcurrency = defineAction()({
           name: 'expired-concurrency-action',
           input: z.object({
@@ -962,6 +973,9 @@ function runClientTests(adapterFactory: AdapterFactory) {
             expiredConcurrencyAction: actionWithConcurrency,
           },
           syncPattern: false,
+          multiProcessMode: true,
+          recoverJobsInterval: 1,
+          processTimeout: 500,
           logger: 'error',
         })
 
@@ -981,10 +995,9 @@ function runClientTests(adapterFactory: AdapterFactory) {
         expect(job1.status).toBe(JOB_STATUS_ACTIVE)
 
         // Manually expire the job by setting expires_at to the past
-        // Access the raw db to update expires_at
         const adapter = databaseInstance.adapter as any
         await adapter.db.execute(
-          `UPDATE jobs_active SET expires_at = NOW() - INTERVAL '1 minute' WHERE id = '${jobId1}'`,
+          `UPDATE jobs_active SET expires_at = NOW() - INTERVAL '1 minute', client_id = 'concurrency-client-2' WHERE id = '${jobId1}'`,
         )
 
         // Create another job for the same group
@@ -993,7 +1006,6 @@ function runClientTests(adapterFactory: AdapterFactory) {
         // Fetch again - should get the new job because the first one is expired
         const fetchedJobs2 = await concurrencyClient.fetch({ batchSize: 10 })
 
-        // Should fetch the second job since the first one is expired
         expect(fetchedJobs2.length).toBe(1)
         expect(fetchedJobs2[0]!.id).toBe(jobId2)
 

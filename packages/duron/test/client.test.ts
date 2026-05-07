@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
 import {
+  JOB_STATUS_ACTIVE,
   JOB_STATUS_CANCELLED,
   JOB_STATUS_COMPLETED,
   JOB_STATUS_CREATED,
@@ -931,6 +932,81 @@ function runClientTests(adapterFactory: AdapterFactory) {
         // Should only fetch 2 jobs due to concurrency limit
         const group1Jobs = fetchedJobs.filter((job) => job.groupKey === 'group-1')
         expect(group1Jobs.length).toEqual(2)
+
+        await concurrencyClient.stop()
+      })
+
+      it('should allow new jobs when active job has expired', async () => {
+        const actionWithConcurrency = defineAction()({
+          name: 'expired-concurrency-action',
+          input: z.object({
+            group: z.string(),
+          }),
+          output: z.object({ result: z.string() }),
+          groups: {
+            groupKey: async (ctx) => ctx.input.group,
+            concurrency: async () => 1,
+          },
+          handler: async (ctx) => {
+            await new Promise((resolve) => setTimeout(resolve, 100))
+            return { result: ctx.input.group }
+          },
+        })
+
+        const databaseInstance = await adapterFactory.create()
+
+        const concurrencyClient = new Client({
+          id: 'concurrency-client',
+          database: databaseInstance.adapter,
+          actions: {
+            expiredConcurrencyAction: actionWithConcurrency,
+          },
+          syncPattern: false,
+          logger: 'error',
+        })
+
+        await concurrencyClient.start()
+
+        // Create a job
+        const jobId1 = await concurrencyClient.runAction('expiredConcurrencyAction', { group: 'group-1' })
+
+        // Fetch it to make it active
+        const fetchedJobs1 = await concurrencyClient.fetch({ batchSize: 10 })
+        expect(fetchedJobs1.length).toBe(1)
+        expect(fetchedJobs1[0]!.id).toBe(jobId1)
+
+        // Verify it's active
+        const job1 = await concurrencyClient.getJobById(jobId1)
+        expectToBeDefined(job1)
+        expect(job1.status).toBe(JOB_STATUS_ACTIVE)
+
+        // Manually expire the job by setting expires_at to the past
+        // Access the raw db to update expires_at
+        const adapter = databaseInstance.adapter as any
+        await adapter.db.execute(
+          `UPDATE jobs_active SET expires_at = NOW() - INTERVAL '1 minute' WHERE id = '${jobId1}'`,
+        )
+
+        // Create another job for the same group
+        const jobId2 = await concurrencyClient.runAction('expiredConcurrencyAction', { group: 'group-1' })
+
+        // Fetch again - should get the new job because the first one is expired
+        const fetchedJobs2 = await concurrencyClient.fetch({ batchSize: 10 })
+
+        // Should fetch the second job since the first one is expired
+        expect(fetchedJobs2.length).toBe(1)
+        expect(fetchedJobs2[0]!.id).toBe(jobId2)
+
+        // Manually trigger recovery to archive the expired job
+        await databaseInstance.adapter.recoverJobs({
+          checksums: [actionWithConcurrency.checksum],
+        })
+
+        // Verify the first job was archived as failed
+        const expiredJob = await concurrencyClient.getJobById(jobId1)
+        expectToBeDefined(expiredJob)
+        expect(expiredJob.status).toBe(JOB_STATUS_FAILED)
+        expect(expiredJob.error).toBeTruthy()
 
         await concurrencyClient.stop()
       })

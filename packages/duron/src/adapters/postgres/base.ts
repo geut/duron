@@ -916,7 +916,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           FROM ${this.tables.jobsActiveTable}
           WHERE action_name = nj.action_name
             AND group_key = nj.job_group_key
-            AND status = ${JOB_STATUS_ACTIVE}) as current_active
+            AND status = ${JOB_STATUS_ACTIVE}
+            AND (expires_at IS NULL OR expires_at > now())) as current_active
         FROM next_job nj
         INNER JOIN eligible_groups eg
           ON nj.job_group_key = eg.group_key
@@ -1000,6 +1001,61 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       }
     }
 
+    let recoveredCount = 0
+
+    // Archive expired active jobs from unresponsive clients
+    const expiredJobs = this._map(
+      await this.db.execute<{ id: string }>(sql`
+        WITH locked_expired_jobs AS (
+          SELECT j.*
+          FROM ${this.tables.jobsActiveTable} j
+          WHERE j.status = ${JOB_STATUS_ACTIVE}
+            AND j.expires_at IS NOT NULL
+            AND j.expires_at <= now()
+            AND j.client_id IN ${unresponsiveClientIds}
+          FOR UPDATE OF j SKIP LOCKED
+        ),
+        archived_jobs AS (
+          INSERT INTO ${this.tables.jobsArchiveTable} (
+            id, action_name, group_key, description, checksum, input, output, error,
+            status, timeout_ms, expires_at, started_at, finished_at, client_id,
+            concurrency_limit, concurrency_step_limit, created_at, updated_at
+          )
+          SELECT
+            id, action_name, group_key, description, checksum, input, output,
+            jsonb_build_object('message', 'Job expired after exceeding timeout'),
+            ${JOB_STATUS_FAILED},
+            timeout_ms, expires_at, started_at, now(), client_id,
+            concurrency_limit, concurrency_step_limit, created_at, now()
+          FROM locked_expired_jobs
+          RETURNING id, checksum
+        ),
+        archived_steps AS (
+          INSERT INTO ${this.tables.jobStepsArchiveTable} (
+            id, job_id, parent_step_id, branch, name, status, output, error,
+            started_at, finished_at, timeout_ms, expires_at, retries_limit,
+            retries_count, delayed_ms, history_failed_attempts, created_at,
+            updated_at, job_finished_at
+          )
+          SELECT
+            id, job_id, parent_step_id, branch, name, status, output, error,
+            started_at, finished_at, timeout_ms, expires_at, retries_limit,
+            retries_count, delayed_ms, history_failed_attempts, created_at,
+            updated_at, now()
+          FROM ${this.tables.jobStepsActiveTable}
+          WHERE job_id IN (SELECT id FROM archived_jobs)
+        ),
+        deleted_jobs AS (
+          DELETE FROM ${this.tables.jobsActiveTable} j
+          WHERE j.id IN (SELECT id FROM archived_jobs)
+          RETURNING id
+        )
+        SELECT id FROM deleted_jobs
+      `),
+    )
+
+    recoveredCount += expiredJobs.length
+
     if (unresponsiveClientIds.length > 0) {
       const result = this._map(
         await this.db.execute<{ id: string }>(sql`
@@ -1008,6 +1064,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           FROM ${this.tables.jobsActiveTable} j
           WHERE j.status = ${JOB_STATUS_ACTIVE}
             AND j.client_id IN ${unresponsiveClientIds}
+            AND (j.expires_at IS NULL OR j.expires_at > now())
           FOR UPDATE OF j SKIP LOCKED
         ),
         updated_jobs AS (
@@ -1034,10 +1091,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       `),
       )
 
-      return result.length
+      recoveredCount += result.length
     }
 
-    return 0
+    return recoveredCount
   }
 
   // ============================================================================

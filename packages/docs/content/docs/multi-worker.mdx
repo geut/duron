@@ -226,10 +226,13 @@ process.on('SIGINT', async () => {
 
 When `multiProcessMode: true` is enabled, Duron uses a ping-based mechanism to check if other processes are alive before recovering their jobs:
 
-1. **On startup**: Each worker checks for stuck jobs (jobs marked as active but owned by other processes)
-2. **Ping check**: Before recovering jobs, workers ping the owning process to verify it's still running
-3. **Timeout**: If a process doesn't respond within `processTimeout`, its jobs are recovered
-4. **Recovery**: Stuck jobs are reset to `created` status and can be picked up by any worker
+1. **Periodic recovery**: Recovery runs automatically based on `recoverJobsInterval` (default: every 60 seconds)
+2. **On startup**: Each worker checks for stuck jobs (jobs marked as active but owned by other processes)
+3. **Ping check**: Before recovering jobs, workers ping the owning process to verify it's still running
+4. **Timeout**: If a process doesn't respond within `processTimeout`, its jobs are recovered
+5. **Recovery behavior**:
+   - **Expired jobs** (exceeded timeout): Archived as failed with error information
+   - **Stuck jobs** (not expired): Reset to `created` status and can be picked up by any worker
 
 This prevents jobs from being incorrectly recovered when a process is temporarily unavailable (e.g., during a restart).
 

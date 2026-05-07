@@ -248,6 +248,15 @@ export interface BaseOptionsInput {
    * @default 5000
    */
   processTimeout?: number
+
+  /**
+   * Interval in milliseconds between job recovery runs.
+   * Recovery checks for expired or stuck jobs and handles them appropriately.
+   * Set to `0` to disable periodic recovery (only runs on startup).
+   *
+   * @default 60000
+   */
+  recoverJobsInterval?: number
 }
 
 const BaseOptionsSchema = z.object({
@@ -261,6 +270,7 @@ const BaseOptionsSchema = z.object({
   recoverJobsOnStart: z.boolean().default(true),
   multiProcessMode: z.boolean().default(false),
   processTimeout: z.number().default(5 * 1000),
+  recoverJobsInterval: z.number().default(60_000),
 })
 
 // Compile-time check: ensure BaseOptionsInput is assignable to the Zod schema's input type
@@ -358,6 +368,7 @@ export class Client<
   #starting: Promise<boolean> | null = null
   #stopping: Promise<boolean> | null = null
   #pullInterval: NodeJS.Timeout | null = null
+  #lastRecoveryAt: number = 0
   #actionManagers = new Map<string, ActionManager<Action<any, any, any>>>()
   #mockInputSchemas = new Map<string, any>()
   #pendingJobWaits = new Map<
@@ -723,6 +734,21 @@ export class Client<
 
     if (!this.#actions) {
       return []
+    }
+
+    // Run recovery if it hasn't been run in the configured interval
+    const now = Date.now()
+    if (
+      this.#options.recoverJobsOnStart &&
+      this.#options.recoverJobsInterval > 0 &&
+      now - this.#lastRecoveryAt > this.#options.recoverJobsInterval
+    ) {
+      this.#lastRecoveryAt = now
+      await this.#database.recoverJobs({
+        checksums: Object.values(this.#actions).map((action) => action.checksum),
+        multiProcessMode: this.#options.multiProcessMode,
+        processTimeout: this.#options.processTimeout,
+      })
     }
 
     // Fetch jobs from each action's queue

@@ -148,6 +148,20 @@ const client = duron({
 }
 ```
 
+### `recoverJobsInterval`
+
+**Optional.** Interval in milliseconds between periodic job recovery runs. Defaults to `60000` (1 minute). Set to `0` to disable periodic recovery (only runs on startup).
+
+Recovery checks for:
+- **Expired jobs**: Jobs that exceeded their timeout are archived as failed
+- **Stuck jobs**: Jobs from unresponsive processes are reset to `created` status
+
+```ts
+{
+  recoverJobsInterval: 30_000, // Run recovery every 30 seconds
+}
+```
+
 ### `multiProcessMode`
 
 **Optional.** Enable multi-process mode for job recovery. Defaults to `false`.

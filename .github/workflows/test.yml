@@ -17,5 +17,7 @@ jobs:
         run: bun run typecheck
       - name: Run lint
         run: bun run lint
+      - name: Run format check
+        run: bun run fmt:check
       - name: Run tests
         run: bun test

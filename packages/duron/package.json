@@ -1,6 +1,12 @@
 {
   "name": "duron",
   "version": "0.3.0-beta.18",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "src",
+    "migrations"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -62,11 +68,6 @@
       "default": "./dist/telemetry/index.js"
     }
   },
-  "files": [
-    "dist",
-    "src",
-    "migrations"
-  ],
   "scripts": {
     "build": "tsc --project tsconfig.node.json",
     "dev": "tsc --watch --project tsconfig.node.json",
@@ -74,15 +75,6 @@
     "test": "bun test --concurrent",
     "generate:postgres": "bunx --bun drizzle-kit generate --config ./src/adapters/postgres/drizzle.config.ts",
     "typecheck": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "@electric-sql/pglite": "^0.3.14",
-    "@types/bun": "latest",
-    "@types/node": "^24.0.15",
-    "drizzle-kit": "^1.0.0-beta.11-05230d9",
-    "drizzle-orm": "^1.0.0-beta.11-05230d9",
-    "postgres": "^3.4.7",
-    "typescript": "^5.6.3"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
@@ -102,5 +94,13 @@
     "zocker": "^3.0.0",
     "zod": "^4.1.12"
   },
-  "license": "MIT"
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "@types/bun": "latest",
+    "@types/node": "^24.0.15",
+    "drizzle-kit": "^1.0.0-rc.4",
+    "drizzle-orm": "^1.0.0-rc.4",
+    "postgres": "^3.4.7",
+    "typescript": "^7"
+  }
 }

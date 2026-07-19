@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import"],
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "import/no-unassigned-import": ["error", { "allow": ["./app.css", "**/*.css"] }]
+  },
+  "ignorePatterns": ["dist", "build", "node_modules", ".wrangler", "**/*.gen.ts", "**/env.d.ts"]
+}

@@ -12,6 +12,7 @@ import {
   JOB_STATUS_FAILED,
   STEP_STATUS_CANCELLED,
 } from '../src/constants.js'
+
 import { type Adapter, type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.js'
 import { expectRejection, expectToBeDefined } from './asserts.js'
 
@@ -982,7 +983,9 @@ function runClientTests(adapterFactory: AdapterFactory) {
         await concurrencyClient.start()
 
         // Create a job
-        const jobId1 = await concurrencyClient.runAction('expiredConcurrencyAction', { group: 'group-1' })
+        const jobId1 = await concurrencyClient.runAction('expiredConcurrencyAction', {
+          group: 'group-1',
+        })
 
         // Fetch it to make it active
         const fetchedJobs1 = await concurrencyClient.fetch({ batchSize: 10 })
@@ -1001,7 +1004,9 @@ function runClientTests(adapterFactory: AdapterFactory) {
         )
 
         // Create another job for the same group
-        const jobId2 = await concurrencyClient.runAction('expiredConcurrencyAction', { group: 'group-1' })
+        const jobId2 = await concurrencyClient.runAction('expiredConcurrencyAction', {
+          group: 'group-1',
+        })
 
         // Fetch again - should get the new job because the first one is expired
         const fetchedJobs2 = await concurrencyClient.fetch({ batchSize: 10 })
@@ -1198,7 +1203,7 @@ function runClientTests(adapterFactory: AdapterFactory) {
 }
 
 runClientTests(postgresFactory)
-// biome-ignore lint/complexity/useLiteralKeys: type safety
+// oxlint-disable-next-line useLiteralKeys
 if (process.env['POSTGRES_TEST'] === 'true') {
   runClientTests(pgliteFactory)
 }

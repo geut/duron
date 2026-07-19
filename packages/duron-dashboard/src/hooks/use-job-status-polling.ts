@@ -44,7 +44,7 @@ export function useJobStatusPolling(jobId: string | null, enabled: boolean = tru
         previousUpdatedAtRef.current = statusResult.updatedAt
       } catch (error) {
         // Silently handle errors - don't spam console
-        // biome-ignore lint/suspicious/noConsole: Debug logging is acceptable here
+        // oxlint-disable-next-line no-console
         console.debug('Job status polling error:', error)
       }
     }
@@ -61,7 +61,7 @@ export function useJobStatusPolling(jobId: string | null, enabled: boolean = tru
   }, [enabled, jobId, queryClient, apiRequest, pollingInterval])
 
   // Reset previous updatedAt when jobId changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: This is intentional
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     previousUpdatedAtRef.current = null
   }, [jobId])

@@ -2,6 +2,7 @@
 
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { useJob } from '@/lib/api'
+
 import { JsonView } from '../components/json-view'
 
 interface JobIOProps {
@@ -24,7 +25,9 @@ export function JobIO({ jobId }: JobIOProps) {
   }
 
   if (!job) {
-    return <div className="h-full flex items-center justify-center text-destructive">Job not found</div>
+    return (
+      <div className="h-full flex items-center justify-center text-destructive">Job not found</div>
+    )
   }
 
   return (
@@ -37,7 +40,9 @@ export function JobIO({ jobId }: JobIOProps) {
           </div>
         )}
 
-        {!job.input && <div className="text-sm text-muted-foreground italic">No input available</div>}
+        {!job.input && (
+          <div className="text-sm text-muted-foreground italic">No input available</div>
+        )}
 
         {job.output && (
           <div>
@@ -46,7 +51,9 @@ export function JobIO({ jobId }: JobIOProps) {
           </div>
         )}
 
-        {!job.output && <div className="text-sm text-muted-foreground italic">No output available</div>}
+        {!job.output && (
+          <div className="text-sm text-muted-foreground italic">No output available</div>
+        )}
       </div>
       <ScrollBar orientation="horizontal" />
     </ScrollArea>

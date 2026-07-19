@@ -1,6 +1,6 @@
 import { loader } from 'fumadocs-core/source'
-import * as icons from 'lucide-static'
 import { docs } from 'fumadocs-mdx:collections/server'
+import * as icons from 'lucide-static'
 
 export const source = loader({
   source: docs.toFumadocsSource(),
@@ -10,7 +10,7 @@ export const source = loader({
       return
     }
 
-    // biome-ignore lint/performance/noDynamicNamespaceImportAccess: defined by fumadocs-core
+    // oxlint-disable-next-line import/namespace
     if (icon in icons) return icons[icon as keyof typeof icons]
   },
 })

@@ -35,13 +35,19 @@ function validateRetries(retries: number) {
   }
 }
 
-function validateNumberOption(name: string, value: number, { min = 0, allowInfinity = false } = {}) {
+function validateNumberOption(
+  name: string,
+  value: number,
+  { min = 0, allowInfinity = false } = {},
+) {
   if (value === undefined) {
     return
   }
 
   if (typeof value !== 'number' || Number.isNaN(value)) {
-    throw new TypeError(`Expected \`${name}\` to be a number${allowInfinity ? ' or Infinity' : ''}.`)
+    throw new TypeError(
+      `Expected \`${name}\` to be a number${allowInfinity ? ' or Infinity' : ''}.`,
+    )
   }
 
   if (!allowInfinity && !Number.isFinite(value)) {
@@ -85,7 +91,9 @@ async function onAttemptFailure({
   options: RetryOptions
 }) {
   const normalizedError =
-    error instanceof Error ? error : new TypeError(`Non-error was thrown: "${error}". You should only throw errors.`)
+    error instanceof Error
+      ? error
+      : new TypeError(`Non-error was thrown: "${error}". You should only throw errors.`)
 
   const retriesLeft = Number.isFinite(options.retries)
     ? Math.max(0, options.retries - retriesConsumed)
@@ -169,7 +177,10 @@ export default async function pRetry<TResult>(
   validateNumberOption('factor', options.factor as number, { min: 0, allowInfinity: false })
   validateNumberOption('minTimeout', options.minTimeout as number, { min: 0, allowInfinity: false })
   validateNumberOption('maxTimeout', options.maxTimeout as number, { min: 0, allowInfinity: true })
-  validateNumberOption('maxRetryTime', options.maxRetryTime as number, { min: 0, allowInfinity: true })
+  validateNumberOption('maxRetryTime', options.maxRetryTime as number, {
+    min: 0,
+    allowInfinity: true,
+  })
 
   // Treat non-positive factor as 1 to avoid zero backoff or negative behavior
   if (!(options.factor > 0)) {

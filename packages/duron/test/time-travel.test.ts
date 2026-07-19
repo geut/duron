@@ -12,7 +12,13 @@ import {
   STEP_STATUS_ACTIVE,
   STEP_STATUS_COMPLETED,
 } from '../src/constants.js'
-import { type AdapterFactory, type AdapterInstance, pgliteFactory, postgresFactory } from './adapters.js'
+
+import {
+  type AdapterFactory,
+  type AdapterInstance,
+  pgliteFactory,
+  postgresFactory,
+} from './adapters.js'
 import { expectToBeDefined } from './asserts.js'
 
 // =============================================================================
@@ -640,7 +646,7 @@ function runTests(name: string, factory: AdapterFactory) {
 // =============================================================================
 
 runTests('pglite', pgliteFactory)
-// biome-ignore lint/complexity/useLiteralKeys: type safety
+// oxlint-disable-next-line useLiteralKeys
 if (process.env['POSTGRES_TEST'] === 'true') {
   runTests('postgres', postgresFactory)
 }

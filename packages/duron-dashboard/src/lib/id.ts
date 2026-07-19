@@ -16,7 +16,10 @@ export function generateId(
   const prefix = typeof prefixOrOptions === 'object' ? undefined : prefixOrOptions
 
   const { length = 12, separator = '_' } = finalOptions
-  const id = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', length)()
+  const id = customAlphabet(
+    '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+    length,
+  )()
 
   return prefix && prefix in prefixes ? `${prefixes[prefix]}${separator}${id}` : id
 }

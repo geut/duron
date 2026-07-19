@@ -2,13 +2,15 @@ import { join } from 'node:path'
 
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
+import { defineRelations } from 'drizzle-orm/relations'
 
 import { type AdapterOptions, PostgresBaseAdapter } from './base.js'
 import type createSchema from './schema.js'
 
-type Schema = ReturnType<typeof createSchema>
+// Only the table entries (exclude the `schema` PgSchema object)
+export type DrizzleSchema = Omit<ReturnType<typeof createSchema>, 'schema'>
 
-export type DB = ReturnType<typeof drizzle<Schema>>
+export type DB = ReturnType<typeof drizzle<ReturnType<typeof defineRelations<DrizzleSchema>>>>
 
 /**
  * PGLite adapter implementation for Duron.
@@ -60,10 +62,12 @@ export class PGLiteAdapter extends PostgresBaseAdapter<DB, string | undefined> {
     if (typeof this.connection === 'string' && !this.connection.startsWith('postgres://')) {
       connection = this.connection
     }
+    const { schema: _schema, ...tables } = this.tables
+    const relations = defineRelations(tables)
     if (connection === ':memory:') {
-      this.db = drizzle() as unknown as DB
+      this.db = drizzle({ relations }) as unknown as DB
     } else {
-      this.db = drizzle(connection) as unknown as DB
+      this.db = drizzle({ connection, relations }) as unknown as DB
     }
   }
 
@@ -89,9 +93,12 @@ export class PGLiteAdapter extends PostgresBaseAdapter<DB, string | undefined> {
     event: string,
     callback: (payload: string) => void,
   ): Promise<{ unlisten: () => void }> {
-    const unlisten = await this.db?.$client.listen(`"${this.schema}.${event}"`, (payload: string) => {
-      callback(payload)
-    })
+    const unlisten = await this.db?.$client.listen(
+      `"${this.schema}.${event}"`,
+      (payload: string) => {
+        callback(payload)
+      },
+    )
 
     return {
       unlisten,

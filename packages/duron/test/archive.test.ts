@@ -7,6 +7,7 @@ import {
   JOB_STATUS_CREATED,
   JOB_STATUS_FAILED,
 } from '../src/constants.js'
+
 import { type Adapter, type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.js'
 import { expectToBeDefined } from './asserts.js'
 

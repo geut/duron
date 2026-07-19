@@ -5,7 +5,7 @@ export function formatDate(date: Date | string | number | undefined) {
 
   try {
     return format(new Date(date), 'yyyy-MM-dd HH:mm:ss')
-  } catch (_err) {
+  } catch {
     return ''
   }
 }

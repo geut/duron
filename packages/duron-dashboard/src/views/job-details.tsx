@@ -4,13 +4,19 @@ import { Activity, MoreVertical, Play, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { useSpans } from '@/contexts/spans-context'
 import { useJobStatusPolling } from '@/hooks/use-job-status-polling'
 import { useCancelJob, useDeleteJob, useJob, useRetryJob } from '@/lib/api'
 import { calculateDurationMs, formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
+
 import { BadgeStatus } from '../components/badge-status'
 import { JsonView } from '../components/json-view'
 import { JobSpansModal } from '../components/spans-panel'
@@ -66,7 +72,9 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
 
   if (!jobId) {
     return (
-      <div className="h-full flex items-center justify-center text-muted-foreground">Select a job to view details</div>
+      <div className="h-full flex items-center justify-center text-muted-foreground">
+        Select a job to view details
+      </div>
     )
   }
 
@@ -75,7 +83,9 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
   }
 
   if (!job) {
-    return <div className="h-full flex items-center justify-center text-destructive">Job not found</div>
+    return (
+      <div className="h-full flex items-center justify-center text-destructive">Job not found</div>
+    )
   }
 
   const handleCancel = async () => {
@@ -113,12 +123,19 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
           {/* Action buttons dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild={true}>
-              <Button variant="outline" size="sm" disabled={retryMutation.isPending || cancelMutation.isPending}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={retryMutation.isPending || cancelMutation.isPending}
+              >
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleRetry} disabled={retryMutation.isPending || cancelMutation.isPending}>
+              <DropdownMenuItem
+                onClick={handleRetry}
+                disabled={retryMutation.isPending || cancelMutation.isPending}
+              >
                 <Play className="h-4 w-4 mr-2" />
                 Retry
               </DropdownMenuItem>
@@ -159,7 +176,13 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
           </DropdownMenu>
           {/* Close button */}
           {onClose && (
-            <Button variant="ghost" size="sm" onClick={onClose} className="h-6 w-6 p-0" title="Hide Job Details">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="h-6 w-6 p-0"
+              title="Hide Job Details"
+            >
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -171,7 +194,8 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
         <div className="p-4 space-y-4">
           <div className="space-y-2 text-sm">
             <div>
-              <span className="font-medium">ID:</span> <span className="font-mono text-xs break-all">{job.id}</span>
+              <span className="font-medium">ID:</span>{' '}
+              <span className="font-mono text-xs break-all">{job.id}</span>
             </div>
             <div>
               <span className="font-medium">Action:</span> {job.actionName}
@@ -251,7 +275,9 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
               </div>
             )}
 
-            {!job.input && <div className="text-sm text-muted-foreground italic">No input available</div>}
+            {!job.input && (
+              <div className="text-sm text-muted-foreground italic">No input available</div>
+            )}
 
             {job.error && (
               <div>
@@ -267,14 +293,18 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
               </div>
             )}
 
-            {!job.output && <div className="text-sm text-muted-foreground italic">No output available</div>}
+            {!job.output && (
+              <div className="text-sm text-muted-foreground italic">No output available</div>
+            )}
           </div>
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
 
       {/* Spans Modal */}
-      {spansEnabled && <JobSpansModal jobId={job.id} open={showSpans} onClose={() => setShowSpans(false)} />}
+      {spansEnabled && (
+        <JobSpansModal jobId={job.id} open={showSpans} onClose={() => setShowSpans(false)} />
+      )}
     </div>
   )
 }

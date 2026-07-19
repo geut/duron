@@ -8,7 +8,10 @@ export type RetryOptions = z.infer<typeof RetryOptionsSchema>
 
 export type StepOptions = z.infer<typeof StepOptionsSchema>
 
-export interface ActionHandlerContext<TInput extends z.ZodObject, TVariables = Record<string, unknown>> {
+export interface ActionHandlerContext<
+  TInput extends z.ZodObject,
+  TVariables = Record<string, unknown>,
+> {
   input: z.infer<TInput>
   jobId: string
   groupKey: string
@@ -112,8 +115,10 @@ export interface StepHandlerContext {
  * Extended context for step definition handlers.
  * Includes all StepHandlerContext properties plus action-level context.
  */
-export interface StepDefinitionHandlerContext<TInput extends z.ZodObject, TVariables = Record<string, unknown>>
-  extends StepHandlerContext {
+export interface StepDefinitionHandlerContext<
+  TInput extends z.ZodObject,
+  TVariables = Record<string, unknown>,
+> extends StepHandlerContext {
   /**
    * The validated input for this step.
    */
@@ -139,7 +144,11 @@ export interface StepDefinitionHandlerContext<TInput extends z.ZodObject, TVaria
  * A reusable step definition created with createStep().
  * Can be executed within an action handler using ctx.run().
  */
-export interface StepDefinition<TInput extends z.ZodObject, TResult, TVariables = Record<string, unknown>> {
+export interface StepDefinition<
+  TInput extends z.ZodObject,
+  TResult,
+  TVariables = Record<string, unknown>,
+> {
   /**
    * The name of the step.
    * Can be a static string or a function that generates the name from the context.
@@ -189,7 +198,10 @@ export interface StepDefinition<TInput extends z.ZodObject, TResult, TVariables 
   __stepDefinition: true
 }
 
-export interface ConcurrencyHandlerContext<TInput extends z.ZodObject, TVariables = Record<string, unknown>> {
+export interface ConcurrencyHandlerContext<
+  TInput extends z.ZodObject,
+  TVariables = Record<string, unknown>,
+> {
   input: z.infer<TInput>
   var: TVariables
 }
@@ -293,7 +305,10 @@ export interface StepsConfigInput {
  * Group configuration for concurrency control.
  * Allows grouping jobs by key and controlling concurrency per group.
  */
-export interface GroupsConfigInput<TInput extends z.ZodObject, TVariables = Record<string, unknown>> {
+export interface GroupsConfigInput<
+  TInput extends z.ZodObject,
+  TVariables = Record<string, unknown>,
+> {
   /**
    * Function to determine the group key for a job.
    * Jobs with the same group key will respect the group concurrency limit.
@@ -472,15 +487,24 @@ type _EnsureActionDefinitionCompatible<
   TInput extends z.ZodObject,
   TOutput extends z.ZodObject,
   TVariables,
-> = ActionDefinitionInput<TInput, TOutput, TVariables> extends z.input<
-  ReturnType<typeof createActionDefinitionSchema<TInput, TOutput, TVariables>>
->
-  ? true
-  : 'ERROR: ActionDefinitionInput does not match Zod schema input type'
+> =
+  ActionDefinitionInput<TInput, TOutput, TVariables> extends z.input<
+    ReturnType<typeof createActionDefinitionSchema<TInput, TOutput, TVariables>>
+  >
+    ? true
+    : 'ERROR: ActionDefinitionInput does not match Zod schema input type'
 
 // This will cause a compile error if the types diverge
-declare const _actionDefCheck: _EnsureActionDefinitionCompatible<z.ZodObject<any>, z.ZodObject<any>, any>
-const _checkActionDef: _EnsureActionDefinitionCompatible<z.ZodObject<any>, z.ZodObject<any>, any> = true
+declare const _actionDefCheck: _EnsureActionDefinitionCompatible<
+  z.ZodObject<any>,
+  z.ZodObject<any>,
+  any
+>
+const _checkActionDef: _EnsureActionDefinitionCompatible<
+  z.ZodObject<any>,
+  z.ZodObject<any>,
+  any
+> = true
 
 export type Action<
   TInput extends z.ZodObject,
@@ -525,14 +549,18 @@ export function createActionDefinitionSchema<
       groups: z
         .object({
           groupKey: z
-            .custom<(ctx: ConcurrencyHandlerContext<TInput, TVariables>) => Promise<string>>((val) => {
-              return !val || val instanceof Function
-            })
+            .custom<(ctx: ConcurrencyHandlerContext<TInput, TVariables>) => Promise<string>>(
+              (val) => {
+                return !val || typeof val === 'function'
+              },
+            )
             .optional(),
           concurrency: z
-            .custom<(ctx: ConcurrencyHandlerContext<TInput, TVariables>) => Promise<number>>((val) => {
-              return !val || val instanceof Function
-            })
+            .custom<(ctx: ConcurrencyHandlerContext<TInput, TVariables>) => Promise<number>>(
+              (val) => {
+                return !val || typeof val === 'function'
+              },
+            )
             .optional(),
         })
         .optional(),
@@ -551,11 +579,13 @@ export function createActionDefinitionSchema<
       expire: z.number().default(15 * 60 * 1000),
       description: z
         .custom<(ctx: ConcurrencyHandlerContext<TInput, TVariables>) => Promise<string>>((val) => {
-          return !val || val instanceof Function
+          return !val || typeof val === 'function'
         })
         .optional(),
-      handler: z.custom<(ctx: ActionHandlerContext<TInput, TVariables>) => Promise<z.infer<TOutput>>>((val) => {
-        return val instanceof Function
+      handler: z.custom<
+        (ctx: ActionHandlerContext<TInput, TVariables>) => Promise<z.infer<TOutput>>
+      >((val) => {
+        return typeof val === 'function'
       }),
     })
     .transform((def) => {
@@ -580,10 +610,11 @@ export const defineAction = <TVariables = Record<string, unknown>>() => {
 /**
  * Input type for createStep() - the definition object before transformation.
  */
-export type StepDefinitionInput<TInput extends z.ZodObject, TResult, TVariables = Record<string, unknown>> = Omit<
-  StepDefinition<TInput, TResult, TVariables>,
-  '__stepDefinition'
->
+export type StepDefinitionInput<
+  TInput extends z.ZodObject,
+  TResult,
+  TVariables = Record<string, unknown>,
+> = Omit<StepDefinition<TInput, TResult, TVariables>, '__stepDefinition'>
 
 /**
  * Creates a reusable step definition that can be executed within action handlers.

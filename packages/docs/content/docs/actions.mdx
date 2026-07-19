@@ -418,10 +418,13 @@ const processOrder = defineAction<{ db: Database }>()({
     })
 
     const order = await ctx.step('createOrder', async ({ signal }) => {
-      return await db.orders.create({
-        orderId: ctx.input.orderId,
-        userId: ctx.input.userId,
-      }, { signal })
+      return await db.orders.create(
+        {
+          orderId: ctx.input.orderId,
+          userId: ctx.input.userId,
+        },
+        { signal },
+      )
     })
 
     return {

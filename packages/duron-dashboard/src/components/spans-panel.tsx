@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { type Span, useJobSpans, useStepSpans } from '@/hooks/use-job-spans'
 import { formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
+
 import { JsonView } from './json-view'
 
 const SpanKindLabels: Record<number, string> = {
@@ -61,7 +62,13 @@ function SpanItem({ span }: SpanItemProps) {
             {SpanKindLabels[span.kind] ?? 'UNKNOWN'}
           </Badge>
           <Badge
-            variant={span.statusCode === 2 ? 'destructive' : span.statusCode === 1 ? 'default' : 'secondary'}
+            variant={
+              span.statusCode === 2
+                ? 'destructive'
+                : span.statusCode === 1
+                  ? 'default'
+                  : 'secondary'
+            }
             className="text-xs shrink-0"
           >
             {SpanStatusLabels[span.statusCode] ?? 'UNKNOWN'}
@@ -90,7 +97,9 @@ function SpanItem({ span }: SpanItemProps) {
       </div>
 
       {span.statusMessage && (
-        <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">{span.statusMessage}</div>
+        <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
+          {span.statusMessage}
+        </div>
       )}
 
       {span.attributes && Object.keys(span.attributes).length > 0 && (
@@ -312,7 +321,11 @@ function SpansModal({ open, onClose, title, spans, total, isLoading, error }: Sp
               <div className="text-xs text-primary font-medium mb-1">Query Result</div>
               <div className="text-sm font-mono">
                 {typeof jsonataResult.primitiveValue === 'object' ? (
-                  <JsonView value={jsonataResult.primitiveValue} title="Query Result" height="150px" />
+                  <JsonView
+                    value={jsonataResult.primitiveValue}
+                    title="Query Result"
+                    height="150px"
+                  />
                 ) : (
                   String(jsonataResult.primitiveValue)
                 )}

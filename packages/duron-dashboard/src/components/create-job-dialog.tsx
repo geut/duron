@@ -4,8 +4,16 @@ import { Play } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { useActionsMetadata, useRunAction } from '@/lib/api'
+
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Textarea } from './ui/textarea'
@@ -98,7 +106,9 @@ export function CreateJobDialog({ open, onOpenChange, onJobCreated }: CreateJobD
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Create and Run Action Job</DialogTitle>
-          <DialogDescription>Select an action and provide input data to create a new job.</DialogDescription>
+          <DialogDescription>
+            Select an action and provide input data to create a new job.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4">
@@ -132,10 +142,17 @@ export function CreateJobDialog({ open, onOpenChange, onJobCreated }: CreateJobD
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={runAction.isPending}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={runAction.isPending}
+          >
             Cancel
           </Button>
-          <Button onClick={handleRun} disabled={!selectedAction || runAction.isPending || !!jsonError}>
+          <Button
+            onClick={handleRun}
+            disabled={!selectedAction || runAction.isPending || !!jsonError}
+          >
             <Play className="h-4 w-4 mr-2" />
             {runAction.isPending ? 'Running...' : 'Run Action'}
           </Button>

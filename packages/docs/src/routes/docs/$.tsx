@@ -2,11 +2,11 @@ import { createFileRoute, notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { staticFunctionMiddleware } from '@tanstack/start-static-server-functions'
 import type * as PageTree from 'fumadocs-core/page-tree'
+import browserCollections from 'fumadocs-mdx:collections/browser'
 import { DocsLayout } from 'fumadocs-ui/layouts/docs'
 import defaultMdxComponents from 'fumadocs-ui/mdx'
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/page'
 import { useMemo } from 'react'
-import browserCollections from 'fumadocs-mdx:collections/browser'
 
 import { baseOptions } from '@/lib/layout.shared'
 import { source } from '@/lib/source'
@@ -66,32 +66,32 @@ function Page() {
   )
 }
 
-function transformPageTree(root: PageTree.Root): PageTree.Root {
-  function mapNode<T extends PageTree.Node>(item: T): T {
-    if (typeof item.icon === 'string') {
-      item = {
-        ...item,
-        icon: (
-          <span
-            dangerouslySetInnerHTML={{
-              __html: item.icon,
-            }}
-          />
-        ),
-      }
+function mapNode<T extends PageTree.Node>(item: T): T {
+  if (typeof item.icon === 'string') {
+    item = {
+      ...item,
+      icon: (
+        <span
+          dangerouslySetInnerHTML={{
+            __html: item.icon,
+          }}
+        />
+      ),
     }
-
-    if (item.type === 'folder') {
-      return {
-        ...item,
-        index: item.index ? mapNode(item.index) : undefined,
-        children: item.children.map(mapNode),
-      }
-    }
-
-    return item
   }
 
+  if (item.type === 'folder') {
+    return {
+      ...item,
+      index: item.index ? mapNode(item.index) : undefined,
+      children: item.children.map(mapNode),
+    }
+  }
+
+  return item
+}
+
+function transformPageTree(root: PageTree.Root): PageTree.Root {
   return {
     ...root,
     children: root.children.map(mapNode),

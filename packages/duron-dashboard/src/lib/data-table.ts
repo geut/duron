@@ -52,7 +52,9 @@ export function getDefaultFilterOperator(filterVariant: FilterVariant) {
   return operators[0]?.value ?? (filterVariant === 'text' ? 'iLike' : 'eq')
 }
 
-export function getValidFilters<TData>(filters: ExtendedColumnFilter<TData>[]): ExtendedColumnFilter<TData>[] {
+export function getValidFilters<TData>(
+  filters: ExtendedColumnFilter<TData>[],
+): ExtendedColumnFilter<TData>[] {
   return filters.filter(
     (filter) =>
       filter.operator === 'isEmpty' ||

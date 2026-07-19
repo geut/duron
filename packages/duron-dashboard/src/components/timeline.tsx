@@ -110,7 +110,7 @@ export function Timeline({ job, steps, selectedStepId, onStepSelect }: TimelineP
     })
 
     // Sort steps by startedAt for initial ordering
-    const sortedSteps = [...steps].sort((a, b) => {
+    const sortedSteps = [...steps].toSorted((a, b) => {
       const aStart = a.startedAt ? new Date(a.startedAt).getTime() : 0
       const bStart = b.startedAt ? new Date(b.startedAt).getTime() : 0
       return aStart - bStart
@@ -178,7 +178,9 @@ export function Timeline({ job, steps, selectedStepId, onStepSelect }: TimelineP
   // Update durations for active items
   const [_, setNow] = useState(Date.now())
   useEffect(() => {
-    const hasActiveItems = timelineItems.some((item) => item.startedAt && !item.finishedAt && item.status === 'active')
+    const hasActiveItems = timelineItems.some(
+      (item) => item.startedAt && !item.finishedAt && item.status === 'active',
+    )
     if (!hasActiveItems) {
       return
     }
@@ -192,7 +194,9 @@ export function Timeline({ job, steps, selectedStepId, onStepSelect }: TimelineP
 
   if (timelineItems.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">No timeline data available</div>
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        No timeline data available
+      </div>
     )
   }
 
@@ -237,7 +241,10 @@ export function Timeline({ job, steps, selectedStepId, onStepSelect }: TimelineP
             const isClickable = item.type === 'step' && onStepSelect
 
             const content = (
-              <div key={`content-${item.id}`} className="flex items-center w-full px-6 py-3 min-w-0 gap-4">
+              <div
+                key={`content-${item.id}`}
+                className="flex items-center w-full px-6 py-3 min-w-0 gap-4"
+              >
                 {/* Left side: Tree structure with icons and labels - fixed width */}
                 <div
                   className="flex items-center gap-3 min-w-0 flex-[0_0_300px]"
@@ -250,7 +257,9 @@ export function Timeline({ job, steps, selectedStepId, onStepSelect }: TimelineP
                   )}
                   <Tooltip>
                     <TooltipTrigger asChild={true}>
-                      <span className="text-sm font-medium text-foreground truncate block min-w-0">{item.name}</span>
+                      <span className="text-sm font-medium text-foreground truncate block min-w-0">
+                        {item.name}
+                      </span>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>{item.name}</p>

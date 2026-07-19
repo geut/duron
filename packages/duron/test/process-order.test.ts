@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
 import { JOB_STATUS_COMPLETED } from '../src/constants.js'
+
 import { pgliteFactory } from './adapters.js'
 
 // Test version of processOrder without AI dependency
@@ -68,7 +69,11 @@ const testProcessOrder = defineAction()({
     const validation = await ctx.step('validate-order', async ({ step: nestedStep }) => {
       const inventoryCheck = await nestedStep('check-inventory', async () => {
         const allInStock = items.every((item) => item.quantity <= 10)
-        addTimeline('check-inventory', allInStock ? 'success' : 'failed', `Checked ${items.length} items`)
+        addTimeline(
+          'check-inventory',
+          allInStock ? 'success' : 'failed',
+          `Checked ${items.length} items`,
+        )
         return { allInStock, checkedItems: items.length }
       })
 
@@ -110,7 +115,11 @@ const testProcessOrder = defineAction()({
           const fraudCheck = await authStep('fraud-check', async () => {
             await new Promise((resolve) => setTimeout(resolve, 50))
             const isSafe = totalAmount < 10000
-            addTimeline('fraud-check', isSafe ? 'success' : 'failed', `Amount: $${totalAmount.toFixed(2)}`)
+            addTimeline(
+              'fraud-check',
+              isSafe ? 'success' : 'failed',
+              `Amount: $${totalAmount.toFixed(2)}`,
+            )
             return { isSafe, riskScore: isSafe ? 0.1 : 0.9 }
           })
 
@@ -192,12 +201,16 @@ const testProcessOrder = defineAction()({
         }),
       ])
 
-      addTimeline('send-notifications', 'success', `Email: ${emailResult.sent}, SMS: ${smsResult.sent}`)
+      addTimeline(
+        'send-notifications',
+        'success',
+        `Email: ${emailResult.sent}, SMS: ${smsResult.sent}`,
+      )
       return { email: emailResult, sms: smsResult }
     })
 
     // Step 5: Post-Order Processing (Promise.all of steps)
-    await ctx.step('post-order-processing', async (ctx) => {
+    await ctx.step('post-order-processing', async (_innerCtx) => {
       await Promise.all([
         ctx.step(
           'analytics-tracking',
@@ -210,7 +223,11 @@ const testProcessOrder = defineAction()({
 
             const recommendations = await analyticsStep('update-recommendations', async () => {
               await new Promise((resolve) => setTimeout(resolve, 50))
-              addTimeline('update-recommendations', 'success', `Updated for ${items.length} products`)
+              addTimeline(
+                'update-recommendations',
+                'success',
+                `Updated for ${items.length} products`,
+              )
               return { updated: true, productsAnalyzed: items.length }
             })
 
@@ -237,7 +254,11 @@ const testProcessOrder = defineAction()({
               return { tier: newTier, upgraded: totalAmount > 500 }
             })
 
-            addTimeline('loyalty-update', 'success', `${points.earnedPoints} points, tier: ${tier.tier}`)
+            addTimeline(
+              'loyalty-update',
+              'success',
+              `${points.earnedPoints} points, tier: ${tier.tier}`,
+            )
             return { points, tier }
           },
           { parallel: true },

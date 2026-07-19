@@ -33,13 +33,18 @@ export default function Login() {
           <div className="flex justify-center mb-6">
             <Logo className="h-32" />
           </div>
-          <h3 className="text-center text-lg font-semibold text-foreground dark:text-foreground">Welcome Back</h3>
+          <h3 className="text-center text-lg font-semibold text-foreground dark:text-foreground">
+            Welcome Back
+          </h3>
           <p className="text-center text-sm text-muted-foreground dark:text-muted-foreground">
             Enter your credentials to access your account.
           </p>
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
-              <Label htmlFor="email-login-03" className="text-sm font-medium text-foreground dark:text-foreground">
+              <Label
+                htmlFor="email-login-03"
+                className="text-sm font-medium text-foreground dark:text-foreground"
+              >
                 Email
               </Label>
               <Input
@@ -55,7 +60,10 @@ export default function Login() {
               />
             </div>
             <div>
-              <Label htmlFor="password-login-03" className="text-sm font-medium text-foreground dark:text-foreground">
+              <Label
+                htmlFor="password-login-03"
+                className="text-sm font-medium text-foreground dark:text-foreground"
+              >
                 Password
               </Label>
               <Input
@@ -72,10 +80,16 @@ export default function Login() {
             </div>
             {loginMutation.isError && (
               <div className="text-sm text-destructive">
-                {loginMutation.error instanceof Error ? loginMutation.error.message : 'Login failed'}
+                {loginMutation.error instanceof Error
+                  ? loginMutation.error.message
+                  : 'Login failed'}
               </div>
             )}
-            <Button type="submit" className="mt-4 w-full py-2 font-medium" disabled={loginMutation.isPending}>
+            <Button
+              type="submit"
+              className="mt-4 w-full py-2 font-medium"
+              disabled={loginMutation.isPending}
+            >
               {loginMutation.isPending ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>

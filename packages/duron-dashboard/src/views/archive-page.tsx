@@ -56,7 +56,11 @@ export function ArchivePage() {
               <Clock className="h-4 w-4 mr-2" />
               Prune Old Jobs
             </Button>
-            <Button variant="destructive" onClick={handleTruncate} disabled={truncateMutation.isPending}>
+            <Button
+              variant="destructive"
+              onClick={handleTruncate}
+              disabled={truncateMutation.isPending}
+            >
               <Trash2 className="h-4 w-4 mr-2" />
               Truncate All
             </Button>

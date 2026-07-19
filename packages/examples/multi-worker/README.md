@@ -51,6 +51,7 @@ bun multi-worker/parent.ts
 ## Graceful Shutdown
 
 The example handles graceful shutdown:
+
 - On `SIGINT` (Ctrl+C), all workers are terminated
 - The parent process waits for all workers to exit
 - The client is properly stopped

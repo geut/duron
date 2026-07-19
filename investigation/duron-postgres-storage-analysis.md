@@ -202,31 +202,31 @@ autovacuum) DOES apply. At low throughput this is invisible. At high sustained t
 ),
 moved_steps AS (
 DELETE FROM job_steps_active WHERE job_id = $1 RETURNING *
-),
-inserted_job AS (
-INSERT INTO jobs_archive
-SELECT * FROM moved_job
-RETURNING finished_at
-)
-INSERT INTO job_steps_archive
-SELECT ms.*, ij.finished_at AS job_finished_at
-FROM moved_steps ms, inserted_job ij;
-getJob(id) — Query jobs_active first. On miss, query jobs_archive . Cache the “likely
-location” if calling repeatedly on the same ID is common.
-getJobs(filters) — Route based on filters:
-If status IN ('created', 'active') only, query jobs_active only
-If status IN ('completed', 'failed', 'cancelled') only, query jobs_archive only
-If mixed or no status filter, UNION ALL between the two
-Time-range filters on finished_at should bias to archive
-Dashboard queries — May need two endpoints: “live jobs” and “historical jobs”. Avoid the
-UNION ALL when possible.
-New public method
-await queue.pruneArchive({
-olderThan: '30d', batchSize: 10000, maxBatches: 100, // or Date, or ms
-// optional, default reasonable
-// optional safety limit
-})
-Internally: loops DELETE FROM jobs_archive WHERE finished_at < $threshold LIMIT
+   ),
+   inserted_job AS (
+   INSERT INTO jobs_archive
+   SELECT * FROM moved_job
+   RETURNING finished_at
+   )
+   INSERT INTO job_steps_archive
+   SELECT ms.*, ij.finished_at AS job_finished_at
+   FROM moved_steps ms, inserted_job ij;
+   getJob(id) — Query jobs_active first. On miss, query jobs_archive . Cache the “likely
+   location” if calling repeatedly on the same ID is common.
+   getJobs(filters) — Route based on filters:
+   If status IN ('created', 'active') only, query jobs_active only
+   If status IN ('completed', 'failed', 'cancelled') only, query jobs_archive only
+   If mixed or no status filter, UNION ALL between the two
+   Time-range filters on finished_at should bias to archive
+   Dashboard queries — May need two endpoints: “live jobs” and “historical jobs”. Avoid the
+   UNION ALL when possible.
+   New public method
+   await queue.pruneArchive({
+   olderThan: '30d', batchSize: 10000, maxBatches: 100, // or Date, or ms
+   // optional, default reasonable
+   // optional safety limit
+   })
+   Internally: loops DELETE FROM jobs_archive WHERE finished_at < $threshold LIMIT
 $batchSize RETURNING id and then deletes corresponding steps. Returns count of deleted
    jobs.
    Alternative nuclear option:

@@ -26,7 +26,12 @@ interface AppContentProps {
   className?: string
 }
 
-function AppContent({ enableLogin = true, showLogo = true, showThemeToggle = true, className }: AppContentProps) {
+function AppContent({
+  enableLogin = true,
+  showLogo = true,
+  showThemeToggle = true,
+  className,
+}: AppContentProps) {
   const { isAuthenticated } = useAuth()
 
   if (enableLogin && !isAuthenticated) {

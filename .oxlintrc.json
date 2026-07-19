@@ -11,7 +11,16 @@
     "suspicious": "warn"
   },
   "rules": {
-    "import/no-unassigned-import": ["error", { "allow": ["./app.css", "**/*.css"] }]
+    "import/no-unassigned-import": ["error", { "allow": ["./app.css", "**/*.css"] }],
+    "no-underscore-dangle": "off"
   },
+  "overrides": [
+    {
+      "files": ["packages/duron-dashboard/src/components/ui/**/*.tsx"],
+      "rules": {
+        "no-shadow": "off"
+      }
+    }
+  ],
   "ignorePatterns": ["dist", "build", "node_modules", ".wrangler", "**/*.gen.ts", "**/env.d.ts"]
 }

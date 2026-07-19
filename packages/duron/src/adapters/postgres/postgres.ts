@@ -2,12 +2,14 @@ import { join } from 'node:path'
 
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
+import { defineRelations } from 'drizzle-orm/relations'
 import type { Options as PostgresOptions } from 'postgres'
 
 import { type AdapterOptions, PostgresBaseAdapter } from './base.js'
 import type createSchema from './schema.js'
 
-type Schema = ReturnType<typeof createSchema>
+// Only the table entries (exclude the `schema` PgSchema object)
+export type DrizzleSchema = Omit<ReturnType<typeof createSchema>, 'schema'>
 
 // Re-export types for backward compatibility
 export type { Job, JobStep } from '../adapter.js'
@@ -16,7 +18,7 @@ const noop = () => {
   // do nothing
 }
 
-export type DB = ReturnType<typeof drizzle<Schema>>
+export type DB = ReturnType<typeof drizzle<ReturnType<typeof defineRelations<DrizzleSchema>>>>
 
 /**
  * PostgreSQL adapter implementation for Duron.
@@ -36,6 +38,8 @@ export class PostgresAdapter extends PostgresBaseAdapter<DB, PostgresOptions<any
           }
         : this.connection
 
+    const { schema: _schema, ...tables } = this.tables
+    const relations = defineRelations(tables)
     this.db = drizzle({
       connection: {
         ...postgresConnection,
@@ -44,7 +48,7 @@ export class PostgresAdapter extends PostgresBaseAdapter<DB, PostgresOptions<any
           this.logger?.trace({ connection, query, parameters, paramTypes }, `PostgresAdapter query`)
         },
       },
-      schema: this.tables,
+      relations,
     })
   }
 
@@ -94,9 +98,11 @@ export class PostgresAdapter extends PostgresBaseAdapter<DB, PostgresOptions<any
    */
   protected override async _notify(event: string, data: any): Promise<void> {
     this.logger?.debug({ event, data }, `[PostgresAdapter] Notify ${event}`)
-    await this.db.$client.notify(`${this.schema}.${event}`, JSON.stringify(data)).catch((err: Error) => {
-      this.logger?.error({ err, data }, `[PostgresAdapter] Failed to notify ${event}`)
-    })
+    await this.db.$client
+      .notify(`${this.schema}.${event}`, JSON.stringify(data))
+      .catch((err: Error) => {
+        this.logger?.error({ err, data }, `[PostgresAdapter] Failed to notify ${event}`)
+      })
   }
 
   /**

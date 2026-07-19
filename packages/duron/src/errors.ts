@@ -103,9 +103,12 @@ export class StepAlreadyExecutedError extends DuronError {
    * @param actionName - The name of the action containing the step
    */
   constructor(stepName: string, jobId: string, actionName: string) {
-    super(`Step "${stepName}" has already been executed for job "${jobId}" and action "${actionName}"`, {
-      metadata: { stepName, jobId, actionName },
-    })
+    super(
+      `Step "${stepName}" has already been executed for job "${jobId}" and action "${actionName}"`,
+      {
+        metadata: { stepName, jobId, actionName },
+      },
+    )
   }
 }
 

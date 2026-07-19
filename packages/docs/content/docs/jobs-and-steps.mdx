@@ -67,9 +67,7 @@ const result = await client.getJobs({
     status: ['active', 'completed'],
     actionName: ['sendEmail'],
   },
-  sort: [
-    { field: 'createdAt', order: 'desc' },
-  ],
+  sort: [{ field: 'createdAt', order: 'desc' }],
 })
 ```
 
@@ -208,23 +206,35 @@ All child steps **must** be awaited before the parent step returns. If a parent 
 ```ts
 // ❌ Bad: Unawaited child steps
 await ctx.step('parent', async ({ step }) => {
-  step('child1', async () => { /* ... */ }) // Not awaited!
-  step('child2', async () => { /* ... */ }) // Not awaited!
+  step('child1', async () => {
+    /* ... */
+  }) // Not awaited!
+  step('child2', async () => {
+    /* ... */
+  }) // Not awaited!
   return { done: true } // Throws UnhandledChildStepsError
 })
 
 // ✅ Good: All children awaited
 await ctx.step('parent', async ({ step }) => {
-  await step('child1', async () => { /* ... */ })
-  await step('child2', async () => { /* ... */ })
+  await step('child1', async () => {
+    /* ... */
+  })
+  await step('child2', async () => {
+    /* ... */
+  })
   return { done: true }
 })
 
 // ✅ Good: Parallel execution with Promise.all
 await ctx.step('parent', async ({ step }) => {
   const [result1, result2] = await Promise.all([
-    step('child1', async () => { /* ... */ }),
-    step('child2', async () => { /* ... */ }),
+    step('child1', async () => {
+      /* ... */
+    }),
+    step('child2', async () => {
+      /* ... */
+    }),
   ])
   return { result1, result2 }
 })
@@ -311,7 +321,7 @@ You can override step options at call time:
 const result = await ctx.run(
   sendEmailStep,
   { to: 'user@example.com', subject: 'Hello', body: 'World' },
-  { expire: 30000, retry: { limit: 5 } }
+  { expire: 30000, retry: { limit: 5 } },
 )
 ```
 
@@ -436,7 +446,7 @@ await ctx.step(
       minTimeout: 1000,
       maxTimeout: 10000,
     },
-  }
+  },
 )
 ```
 
@@ -477,7 +487,7 @@ await ctx.step(
   async ({ signal }) => {
     return await sendNotification({ signal })
   },
-  { parallel: true }
+  { parallel: true },
 )
 ```
 

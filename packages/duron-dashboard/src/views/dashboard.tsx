@@ -23,6 +23,7 @@ import { useJobFilter } from '@/hooks/use-job-filter'
 import { useJobParams } from '@/hooks/use-job-params'
 import { useDeleteJobs } from '@/lib/api'
 import { cn } from '@/lib/utils'
+
 import { ArchivePage } from './archive-page'
 import { JobDetails } from './job-details'
 import { JobsTable } from './jobs-table'
@@ -35,7 +36,12 @@ interface DashboardProps {
   className?: string
 }
 
-export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle = true, className }: DashboardProps) {
+export function Dashboard({
+  showLogo = true,
+  enableLogin = true,
+  showThemeToggle = true,
+  className,
+}: DashboardProps) {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   const [createJobDialogOpen, setCreateJobDialogOpen] = useState(false)
@@ -44,7 +50,8 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
   const { filter: jobFilter, setFilter: setJobFilter } = useJobFilter()
   const isMobile = useIsMobile()
   const { logout } = useAuth()
-  const { config, setDesktopHorizontalSizes, setDesktopVerticalSizes, setMobileVerticalSizes } = useLayout()
+  const { config, setDesktopHorizontalSizes, setDesktopVerticalSizes, setMobileVerticalSizes } =
+    useLayout()
 
   const handleJobSelect = useCallback((jobId: string | null) => {
     setSelectedJobId(jobId)
@@ -294,7 +301,11 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
             onLayoutChanged={handleDesktopVerticalLayoutChange}
           >
             {/* Top Row: Jobs Table (full width) */}
-            <ResizablePanel id="jobs-panel" defaultSize={selectedJobId ? desktopVerticalLayout.jobs : 100} minSize={20}>
+            <ResizablePanel
+              id="jobs-panel"
+              defaultSize={selectedJobId ? desktopVerticalLayout.jobs : 100}
+              minSize={20}
+            >
               <div className="h-full">
                 <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
               </div>
@@ -302,7 +313,11 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
 
             {/* Bottom Row: Job Details | Steps */}
             {selectedJobId && (
-              <ResizablePanel id="bottom-panel" defaultSize={desktopVerticalLayout.bottom} minSize={15}>
+              <ResizablePanel
+                id="bottom-panel"
+                defaultSize={desktopVerticalLayout.bottom}
+                minSize={15}
+              >
                 <ResizablePanelGroup
                   direction="horizontal"
                   className="h-full border-t-2"
@@ -314,9 +329,16 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
                 >
                   {/* Job Details Section */}
                   {jobDetailsVisible && (
-                    <ResizablePanel id="details-panel" defaultSize={desktopHorizontalLayout.details} minSize={15}>
+                    <ResizablePanel
+                      id="details-panel"
+                      defaultSize={desktopHorizontalLayout.details}
+                      minSize={15}
+                    >
                       <div className="h-full border-r-2">
-                        <JobDetails jobId={selectedJobId} onClose={() => setJobDetailsVisible(false)} />
+                        <JobDetails
+                          jobId={selectedJobId}
+                          onClose={() => setJobDetailsVisible(false)}
+                        />
                       </div>
                     </ResizablePanel>
                   )}
@@ -359,7 +381,11 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
             onLayoutChanged={handleMobileVerticalLayoutChange}
           >
             {/* Jobs Section */}
-            <ResizablePanel id="mobile-jobs-panel" defaultSize={selectedJobId ? mobileLayout.jobs : 100} minSize={15}>
+            <ResizablePanel
+              id="mobile-jobs-panel"
+              defaultSize={selectedJobId ? mobileLayout.jobs : 100}
+              minSize={15}
+            >
               <JobsTable onJobSelect={handleJobSelect} selectedJobId={selectedJobId} />
             </ResizablePanel>
 
@@ -388,7 +414,11 @@ export function Dashboard({ showLogo = true, enableLogin = true, showThemeToggle
                     <h2 className="font-medium">Steps</h2>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    <StepList jobId={selectedJobId} selectedStepId={selectedStepId} onStepSelect={setSelectedStepId} />
+                    <StepList
+                      jobId={selectedJobId}
+                      selectedStepId={selectedStepId}
+                      onStepSelect={setSelectedStepId}
+                    />
                   </div>
                 </div>
               </ResizablePanel>

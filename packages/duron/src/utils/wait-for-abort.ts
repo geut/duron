@@ -1,4 +1,4 @@
-/** biome-ignore-all lint/suspicious/noConfusingVoidType: do not care */
+/* oxlint-disable no-confusing-void-type */
 
 export default function waitForAbort(signal: AbortSignal) {
   let done = false

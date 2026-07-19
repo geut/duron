@@ -8,8 +8,9 @@
   "type": "module",
   "scripts": {
     "lint": "oxlint",
-    "fmt": "oxfmt --write .",
-    "fmt:check": "oxfmt --check .",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
     "test": "bun run --filter duron test",
     "dev": "bun --filter '*' dev",
     "dev:duron": "bun run --filter duron dev",

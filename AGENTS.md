@@ -10,13 +10,13 @@
 
 Bun workspaces: `docs/*` and `packages/*`.
 
-| Package | Role | Key Entrypoints |
-|---------|------|-----------------|
-| `packages/duron` | Core library | `duron`, `duron/client`, `duron/action`, `duron/server`, `duron/adapters/postgres`, `duron/adapters/pglite` |
-| `packages/duron-dashboard` | React dashboard | `duron-dashboard`, `duron-dashboard/get-html` |
-| `packages/docs` | Fumadocs docs site | Uses Vite for SSR |
-| `packages/examples` | Example apps | `basic/start.ts`, `multi-worker/parent.ts` |
-| `packages/shared-actions` | Shared actions for examples | — |
+| Package                    | Role                        | Key Entrypoints                                                                                             |
+| -------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `packages/duron`           | Core library                | `duron`, `duron/client`, `duron/action`, `duron/server`, `duron/adapters/postgres`, `duron/adapters/pglite` |
+| `packages/duron-dashboard` | React dashboard             | `duron-dashboard`, `duron-dashboard/get-html`                                                               |
+| `packages/docs`            | Fumadocs docs site          | Uses Vite for SSR                                                                                           |
+| `packages/examples`        | Example apps                | `basic/start.ts`, `multi-worker/parent.ts`                                                                  |
+| `packages/shared-actions`  | Shared actions for examples | —                                                                                                           |
 
 ## Developer Commands
 
@@ -35,8 +35,10 @@ bun run dev:examples:basic # basic example
 
 # Verification (CI runs in this order)
 bun run typecheck   # tsc --noEmit across packages
-bun run lint        # biome check
-bun run lint:fix    # biome check --write
+bun run lint        # oxlint check
+bun run lint:fix    # oxlint fix
+bun run fmt:check   # oxfmt check
+bun run fmt         # oxfmt fix
 bun test            # runs packages/duron tests with --concurrent
 
 # Build
@@ -62,15 +64,14 @@ bun run build:docs  # docs only
 - Core tests run with `--concurrent` via `bun test` in `packages/duron/package.json`
 - Test setup (`test/setup.ts`) auto-creates a Docker container `duron-postgres-test` on port 5440 for PostgreSQL tests. Docker must be running.
 
-## Lint / Format (Biome)
+## Lint / Format (Oxlint/Oxfmt)
 
-- Config: `biome.jsonc`, extends `biome-standard-mate`
+- Config: `.oxlintrc.json` (oxlint), `.oxfmtrc.json` (oxfmt)
 - Rules worth knowing:
   - `noConsole` → warn (use logger instead)
   - `noNonNullAssertion` → off
-  - `noVoid` → off
-  - Line width: 120
-  - Single quotes, semicolons
+  - Line width: 100
+  - Single quotes, no semicolons
   - Organize imports automatically
 
 ## Build Details
@@ -87,11 +88,11 @@ bun run build:docs  # docs only
 
 ## Env Variables
 
-| Variable | Purpose |
-|----------|---------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Dashboard auth |
-| `OPENAI_API_KEY` | AI examples |
+| Variable         | Purpose                      |
+| ---------------- | ---------------------------- |
+| `DATABASE_URL`   | PostgreSQL connection string |
+| `JWT_SECRET`     | Dashboard auth               |
+| `OPENAI_API_KEY` | AI examples                  |
 
 ## CI
 
@@ -112,18 +113,19 @@ Workflow `.github/workflows/test.yml` runs: `bun install` → `typecheck` → `l
 ## Telemetry
 
 Configured on the Duron client:
+
 - `telemetry: { local: true }` → store spans in DB
 - `telemetry: { traceExporter }` → export to OTel backends
 - No config → disabled
 
 ## Key Files
 
-| Path | Description |
-|------|-------------|
-| `packages/duron/src/client.ts` | Job queue client |
-| `packages/duron/src/action.ts` | Action definitions |
-| `packages/duron/src/server.ts` | REST API server |
-| `packages/duron/src/step-manager.ts` | Step execution & nested steps |
-| `packages/duron/src/adapters/adapter.ts` | Base adapter |
-| `packages/duron/src/telemetry/` | Telemetry adapters |
-| `packages/duron-dashboard/src/DuronDashboard.tsx` | Dashboard root |
+| Path                                              | Description                   |
+| ------------------------------------------------- | ----------------------------- |
+| `packages/duron/src/client.ts`                    | Job queue client              |
+| `packages/duron/src/action.ts`                    | Action definitions            |
+| `packages/duron/src/server.ts`                    | REST API server               |
+| `packages/duron/src/step-manager.ts`              | Step execution & nested steps |
+| `packages/duron/src/adapters/adapter.ts`          | Base adapter                  |
+| `packages/duron/src/telemetry/`                   | Telemetry adapters            |
+| `packages/duron-dashboard/src/DuronDashboard.tsx` | Dashboard root                |

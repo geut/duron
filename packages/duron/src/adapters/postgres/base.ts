@@ -1,5 +1,20 @@
-import { and, asc, between, desc, eq, gt, gte, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  between,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm'
 import type { PgAsyncDatabase, PgColumn } from 'drizzle-orm/pg-core'
+import type { AnyRelations } from 'drizzle-orm/relations'
 
 import {
   JOB_STATUS_ACTIVE,
@@ -47,14 +62,18 @@ import {
   type SpanSort,
   type TimeTravelJobOptions,
 } from '../adapter.js'
+
 import createSchema from './schema.js'
 
-type Schema = ReturnType<typeof createSchema>
+export type Schema = ReturnType<typeof createSchema>
+
+// Only the table entries from Schema (exclude the `schema` PgSchema object)
+export type DrizzleSchema = Omit<Schema, 'schema'>
 
 // Re-export types for backward compatibility
 export type { Job, JobStep } from '../adapter.js'
 
-type DrizzleDatabase = PgAsyncDatabase<any, Schema>
+type DrizzleDatabase = PgAsyncDatabase<any, AnyRelations>
 
 export interface PruneSchedulerConfig {
   olderThan: string | Date | number
@@ -619,7 +638,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         }
 
         // Delete archived job and steps (cascade via FK on steps)
-        await tx.delete(this.tables.jobsArchiveTable).where(eq(this.tables.jobsArchiveTable.id, jobId))
+        await tx
+          .delete(this.tables.jobsArchiveTable)
+          .where(eq(this.tables.jobsArchiveTable.id, jobId))
       }
 
       const result = this._map(
@@ -802,12 +823,19 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected async _deleteJob({ jobId }: DeleteJobOptions): Promise<boolean> {
     const result = await this.db
       .delete(this.tables.jobsActiveTable)
-      .where(and(eq(this.tables.jobsActiveTable.id, jobId), ne(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE)))
+      .where(
+        and(
+          eq(this.tables.jobsActiveTable.id, jobId),
+          ne(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
+        ),
+      )
       .returning({ id: this.tables.jobsActiveTable.id })
 
     // Also delete associated steps
     if (result.length > 0) {
-      await this.db.delete(this.tables.jobStepsActiveTable).where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
+      await this.db
+        .delete(this.tables.jobStepsActiveTable)
+        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
     }
 
     return result.length > 0
@@ -989,7 +1017,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           }
         })
 
-        await Promise.all(result.map((row) => this._notify(`ping-${row.clientId}`, { fromClientId: this.id })))
+        await Promise.all(
+          result.map((row) => this._notify(`ping-${row.clientId}`, { fromClientId: this.id })),
+        )
 
         let waitForSeconds = processTimeout / 1_000
         while (pongCount.size < result.length && waitForSeconds > 0) {
@@ -997,7 +1027,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           waitForSeconds--
         }
 
-        unresponsiveClientIds.push(...result.filter((row) => !pongCount.has(row.clientId)).map((row) => row.clientId))
+        unresponsiveClientIds.push(
+          ...result.filter((row) => !pongCount.has(row.clientId)).map((row) => row.clientId),
+        )
       }
     }
 
@@ -1238,7 +1270,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           eq(this.tables.jobStepsActiveTable.id, stepId),
           eq(this.tables.jobStepsActiveTable.status, STEP_STATUS_ACTIVE),
           eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
-          or(isNull(this.tables.jobsActiveTable.expires_at), gt(this.tables.jobsActiveTable.expires_at, sql`now()`)),
+          or(
+            isNull(this.tables.jobsActiveTable.expires_at),
+            gt(this.tables.jobsActiveTable.expires_at, sql`now()`),
+          ),
         ),
       )
       .returning({ id: this.tables.jobStepsActiveTable.id })
@@ -1414,7 +1449,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       .limit(1)
 
     const isActive = jobInActive.length > 0
-    const jobStepsTable = isActive ? this.tables.jobStepsActiveTable : this.tables.jobStepsArchiveTable
+    const jobStepsTable = isActive
+      ? this.tables.jobStepsActiveTable
+      : this.tables.jobStepsArchiveTable
 
     const fuzzySearch = search?.trim()
 
@@ -1473,10 +1510,16 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     // Build WHERE clause parts using postgres template literals
     return and(
       filters.status
-        ? inArray(jobsTable.status, Array.isArray(filters.status) ? filters.status : [filters.status])
+        ? inArray(
+            jobsTable.status,
+            Array.isArray(filters.status) ? filters.status : [filters.status],
+          )
         : undefined,
       filters.actionName
-        ? inArray(jobsTable.action_name, Array.isArray(filters.actionName) ? filters.actionName : [filters.actionName])
+        ? inArray(
+            jobsTable.action_name,
+            Array.isArray(filters.actionName) ? filters.actionName : [filters.actionName],
+          )
         : undefined,
       filters.groupKey && Array.isArray(filters.groupKey)
         ? sql`j.group_key LIKE ANY(ARRAY[${sql.raw(filters.groupKey.map((key) => `'${key}'`).join(','))}]::text[])`
@@ -1485,7 +1528,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         ? ilike(jobsTable.group_key, `%${filters.groupKey}%`)
         : undefined,
       filters.clientId
-        ? inArray(jobsTable.client_id, Array.isArray(filters.clientId) ? filters.clientId : [filters.clientId])
+        ? inArray(
+            jobsTable.client_id,
+            Array.isArray(filters.clientId) ? filters.clientId : [filters.clientId],
+          )
         : undefined,
       filters.description ? ilike(jobsTable.description, `%${filters.description}%`) : undefined,
       filters.createdAt && Array.isArray(filters.createdAt)
@@ -1554,7 +1600,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
 
     return and(
       filters.status
-        ? inArray(archiveTable.status, Array.isArray(filters.status) ? filters.status : [filters.status])
+        ? inArray(
+            archiveTable.status,
+            Array.isArray(filters.status) ? filters.status : [filters.status],
+          )
         : undefined,
       filters.actionName
         ? inArray(
@@ -1569,7 +1618,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         ? ilike(archiveTable.group_key, `%${filters.groupKey}%`)
         : undefined,
       filters.clientId
-        ? inArray(archiveTable.client_id, Array.isArray(filters.clientId) ? filters.clientId : [filters.clientId])
+        ? inArray(
+            archiveTable.client_id,
+            Array.isArray(filters.clientId) ? filters.clientId : [filters.clientId],
+          )
         : undefined,
       filters.description ? ilike(archiveTable.description, `%${filters.description}%`) : undefined,
       filters.createdAt && Array.isArray(filters.createdAt)
@@ -1580,7 +1632,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           )
         : undefined,
       filters.createdAt && !Array.isArray(filters.createdAt)
-        ? gte(sql`date_trunc('second', ${archiveTable.created_at})`, filters.createdAt.toISOString())
+        ? gte(
+            sql`date_trunc('second', ${archiveTable.created_at})`,
+            filters.createdAt.toISOString(),
+          )
         : undefined,
       filters.startedAt && Array.isArray(filters.startedAt)
         ? between(
@@ -1590,7 +1645,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           )
         : undefined,
       filters.startedAt && !Array.isArray(filters.startedAt)
-        ? gte(sql`date_trunc('second', ${archiveTable.started_at})`, filters.startedAt.toISOString())
+        ? gte(
+            sql`date_trunc('second', ${archiveTable.started_at})`,
+            filters.startedAt.toISOString(),
+          )
         : undefined,
       filters.finishedAt && Array.isArray(filters.finishedAt)
         ? between(
@@ -1600,7 +1658,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           )
         : undefined,
       filters.finishedAt && !Array.isArray(filters.finishedAt)
-        ? gte(sql`date_trunc('second', ${archiveTable.finished_at})`, filters.finishedAt.toISOString())
+        ? gte(
+            sql`date_trunc('second', ${archiveTable.finished_at})`,
+            filters.finishedAt.toISOString(),
+          )
         : undefined,
       filters.updatedAfter
         ? sql`date_trunc('milliseconds', ${archiveTable.updated_at}) > ${filters.updatedAfter.toISOString()}::timestamptz`
@@ -1640,8 +1701,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     const statusFilter = filters.status
     const statuses = Array.isArray(statusFilter) ? statusFilter : statusFilter ? [statusFilter] : []
 
-    const queryActive = statuses.length === 0 || statuses.some((s) => (activeStatuses as string[]).includes(s))
-    const queryArchive = statuses.length === 0 || statuses.some((s) => (archiveStatuses as string[]).includes(s))
+    const queryActive =
+      statuses.length === 0 || statuses.some((s) => (activeStatuses as string[]).includes(s))
+    const queryArchive =
+      statuses.length === 0 || statuses.some((s) => (archiveStatuses as string[]).includes(s))
 
     // Query active table
     let activeJobs: any[] = []
@@ -2132,11 +2195,15 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       // Convert id to number (bigserial comes as string from raw SQL)
       id: typeof row.id === 'string' ? Number.parseInt(row.id, 10) : row.id,
       // Convert kind and statusCode to proper types
-      kind: (typeof row.kind === 'string' ? Number.parseInt(row.kind, 10) : row.kind) as 0 | 1 | 2 | 3 | 4,
-      statusCode: (typeof row.statusCode === 'string' ? Number.parseInt(row.statusCode, 10) : row.statusCode) as
+      kind: (typeof row.kind === 'string' ? Number.parseInt(row.kind, 10) : row.kind) as
         | 0
         | 1
-        | 2,
+        | 2
+        | 3
+        | 4,
+      statusCode: (typeof row.statusCode === 'string'
+        ? Number.parseInt(row.statusCode, 10)
+        : row.statusCode) as 0 | 1 | 2,
       // Convert BigInt to string for JSON serialization
       startTimeUnixNano: row.startTimeUnixNano?.toString() ?? null,
       endTimeUnixNano: row.endTimeUnixNano?.toString() ?? null,
@@ -2169,7 +2236,11 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * Note: Step queries are handled separately by _getStepSpansRecursive using
    * a recursive CTE to traverse the span hierarchy.
    */
-  protected _buildSpansWhereClause(jobId?: string, _stepId?: string, filters?: GetSpansOptions['filters']) {
+  protected _buildSpansWhereClause(
+    jobId?: string,
+    _stepId?: string,
+    filters?: GetSpansOptions['filters'],
+  ) {
     const spansTable = this.tables.spansTable
 
     // Build condition for finding spans by trace_id (includes external spans)
@@ -2180,7 +2251,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       // This includes external spans (like from AI SDK) that don't have duron.job.id
       traceCondition = inArray(
         spansTable.trace_id,
-        this.db.select({ traceId: spansTable.trace_id }).from(spansTable).where(eq(spansTable.job_id, jobId)),
+        this.db
+          .select({ traceId: spansTable.trace_id })
+          .from(spansTable)
+          .where(eq(spansTable.job_id, jobId)),
       )
     }
 
@@ -2191,9 +2265,14 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           ? or(...filters.name.map((n) => ilike(spansTable.name, `%${n}%`)))
           : ilike(spansTable.name, `%${filters.name}%`)
         : undefined,
-      filters?.kind ? inArray(spansTable.kind, Array.isArray(filters.kind) ? filters.kind : [filters.kind]) : undefined,
+      filters?.kind
+        ? inArray(spansTable.kind, Array.isArray(filters.kind) ? filters.kind : [filters.kind])
+        : undefined,
       filters?.statusCode
-        ? inArray(spansTable.status_code, Array.isArray(filters.statusCode) ? filters.statusCode : [filters.statusCode])
+        ? inArray(
+            spansTable.status_code,
+            Array.isArray(filters.statusCode) ? filters.statusCode : [filters.statusCode],
+          )
         : undefined,
       filters?.traceId ? eq(spansTable.trace_id, filters.traceId) : undefined,
       ...(filters?.attributesFilter && Object.keys(filters.attributesFilter).length > 0
@@ -2286,7 +2365,9 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         // Combine array conditions with OR (at least one must match)
         if (arrayValueConditions.length > 0) {
           conditions.push(
-            arrayValueConditions.reduce((acc, condition, idx) => (idx === 0 ? condition : sql`${acc} OR ${condition}`)),
+            arrayValueConditions.reduce((acc, condition, idx) =>
+              idx === 0 ? condition : sql`${acc} OR ${condition}`,
+            ),
           )
         }
       } else if (typeof value === 'string') {
@@ -2324,7 +2405,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * @param callback - Callback function to handle notifications
    * @returns Promise resolving to an object with an `unlisten` function
    */
-  protected async _listen(_event: string, _callback: (payload: string) => void): Promise<{ unlisten: () => void }> {
+  protected async _listen(
+    _event: string,
+    _callback: (payload: string) => void,
+  ): Promise<{ unlisten: () => void }> {
     // do nothing
     return {
       unlisten: () => {

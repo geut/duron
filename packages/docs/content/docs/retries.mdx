@@ -107,16 +107,20 @@ handler: async (ctx) => {
   })
 
   // Override retry configuration for this step
-  await ctx.step('riskyOperation', async () => {
-    return await riskyOperation()
-  }, {
-    retry: {
-      limit: 5,
-      factor: 3,
-      minTimeout: 2000,
-      maxTimeout: 30000,
+  await ctx.step(
+    'riskyOperation',
+    async () => {
+      return await riskyOperation()
     },
-  })
+    {
+      retry: {
+        limit: 5,
+        factor: 3,
+        minTimeout: 2000,
+        maxTimeout: 30000,
+      },
+    },
+  )
 }
 ```
 
@@ -127,17 +131,21 @@ handler: async (ctx) => {
 Retries are triggered when a step throws an error. The step will be retried up to `limit` times before failing.
 
 ```ts
-await ctx.step('fetchData', async () => {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error('Failed to fetch') // This will trigger a retry
-  }
-  return response.json()
-}, {
-  retry: {
-    limit: 3,
+await ctx.step(
+  'fetchData',
+  async () => {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('Failed to fetch') // This will trigger a retry
+    }
+    return response.json()
   },
-})
+  {
+    retry: {
+      limit: 3,
+    },
+  },
+)
 ```
 
 ### Retry Delays
@@ -150,6 +158,7 @@ The delay between retries follows exponential backoff:
 - **Attempt N**: `minTimeout * factor^(N-1)` ms (capped at `maxTimeout`)
 
 Example with `minTimeout: 1000`, `factor: 2`:
+
 - Attempt 1: 1000ms
 - Attempt 2: 2000ms
 - Attempt 3: 4000ms
@@ -162,15 +171,19 @@ Some errors should not be retried. Use `NonRetriableError` to skip retries:
 ```ts
 import { NonRetriableError } from 'duron/errors'
 
-await ctx.step('validateInput', async () => {
-  if (!isValid(ctx.input)) {
-    throw new NonRetriableError('Invalid input') // Won't retry
-  }
-}, {
-  retry: {
-    limit: 3,
+await ctx.step(
+  'validateInput',
+  async () => {
+    if (!isValid(ctx.input)) {
+      throw new NonRetriableError('Invalid input') // Won't retry
+    }
   },
-})
+  {
+    retry: {
+      limit: 3,
+    },
+  },
+)
 ```
 
 ## Complete Example
@@ -197,15 +210,19 @@ const sendEmail = defineAction()({
   },
   handler: async (ctx) => {
     // Validate input (don't retry validation errors)
-    await ctx.step('validateInput', async () => {
-      if (!ctx.input.to.includes('@')) {
-        throw new NonRetriableError('Invalid email')
-      }
-    }, {
-      retry: {
-        limit: 0, // Don't retry validation
+    await ctx.step(
+      'validateInput',
+      async () => {
+        if (!ctx.input.to.includes('@')) {
+          throw new NonRetriableError('Invalid email')
+        }
       },
-    })
+      {
+        retry: {
+          limit: 0, // Don't retry validation
+        },
+      },
+    )
 
     // Fetch user (retry on transient failures)
     const user = await ctx.step('fetchUser', async () => {

@@ -18,7 +18,7 @@ const client = duron({
   database: postgresAdapter({
     connection: process.env.DATABASE_URL,
   }),
-  actions: { /* your actions */ },
+  actions: {/* your actions */},
   telemetry: {
     local: true, // Store spans in the database
   },
@@ -27,12 +27,12 @@ const client = duron({
 
 ### Configuration Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `local` | `boolean \| LocalTelemetryOptions` | Enable local span storage in the database |
-| `traceExporter` | `SpanExporter` | Export spans to external systems (OTLP, Jaeger, etc.) |
-| `spanProcessors` | `SpanProcessor[]` | Add custom span processors |
-| `serviceName` | `string` | Service name for OpenTelemetry resource (default: `'duron'`) |
+| Option           | Type                               | Description                                                  |
+| ---------------- | ---------------------------------- | ------------------------------------------------------------ |
+| `local`          | `boolean \| LocalTelemetryOptions` | Enable local span storage in the database                    |
+| `traceExporter`  | `SpanExporter`                     | Export spans to external systems (OTLP, Jaeger, etc.)        |
+| `spanProcessors` | `SpanProcessor[]`                  | Add custom span processors                                   |
+| `serviceName`    | `string`                           | Service name for OpenTelemetry resource (default: `'duron'`) |
 
 ### Local Storage
 
@@ -40,10 +40,16 @@ Store spans in the Duron database for querying via the API or dashboard:
 
 ```ts
 // Simple: enable with defaults
-telemetry: { local: true }
+telemetry: {
+  local: true
+}
 
 // Custom flush delay (default: 5000ms)
-telemetry: { local: { flushDelayMs: 10000 } }
+telemetry: {
+  local: {
+    flushDelayMs: 10000
+  }
+}
 ```
 
 ### External Export
@@ -108,7 +114,7 @@ const processOrder = defineAction()({
       // Record step-specific metrics
       telemetry.recordMetric('items.count', 5)
       telemetry.recordMetric('order.value', 99.99, { currency: 'USD' })
-      
+
       return { success: true }
     })
 
@@ -127,7 +133,7 @@ Use `getTracer()` to create custom spans. The tracer automatically links new spa
 ```ts
 const result = await ctx.step('with-custom-span', async ({ telemetry }) => {
   const tracer = telemetry.getTracer('my-service')
-  
+
   return tracer.startActiveSpan('custom-operation', (span) => {
     try {
       span.setAttribute('custom.input', 'value')
@@ -270,12 +276,13 @@ interface Span {
 
 Duron automatically creates spans for:
 
-| Span Type | Name Format | Attributes |
-|-----------|-------------|------------|
-| Job | `job:{actionName}` | `duron.job.id`, `duron.action.name`, `duron.group.key` |
-| Step | `step:{stepName}` | `duron.job.id`, `duron.step.id`, `duron.step.name`, `duron.step.parent_id` |
+| Span Type | Name Format        | Attributes                                                                 |
+| --------- | ------------------ | -------------------------------------------------------------------------- |
+| Job       | `job:{actionName}` | `duron.job.id`, `duron.action.name`, `duron.group.key`                     |
+| Step      | `step:{stepName}`  | `duron.job.id`, `duron.step.id`, `duron.step.name`, `duron.step.parent_id` |
 
 Spans include:
+
 - Start and end timestamps
 - Duration
 - Status (ok, error)

@@ -43,7 +43,8 @@ const DEBOUNCE_MS = 300
 const THROTTLE_MS = 50
 
 interface UseDataTableProps<TData>
-  extends Omit<
+  extends
+    Omit<
       TableOptions<TData>,
       | 'pageCount'
       | 'getCoreRowModel'
@@ -125,7 +126,9 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [onColumnVisibilityChangeProp],
   )
 
-  const [columnSizing, setColumnSizingState] = React.useState<ColumnSizingState>(initialState?.columnSizing ?? {})
+  const [columnSizing, setColumnSizingState] = React.useState<ColumnSizingState>(
+    initialState?.columnSizing ?? {},
+  )
 
   const setColumnSizing = React.useCallback(
     (updaterOrValue: React.SetStateAction<ColumnSizingState>) => {
@@ -139,10 +142,15 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
     [onColumnSizingChangeProp],
   )
 
-  const [page, setPage] = useQueryState(pageKey, parseAsInteger.withOptions(queryStateOptions).withDefault(1))
+  const [page, setPage] = useQueryState(
+    pageKey,
+    parseAsInteger.withOptions(queryStateOptions).withDefault(1),
+  )
   const [perPage, setPerPage] = useQueryState(
     perPageKey,
-    parseAsInteger.withOptions(queryStateOptions).withDefault(initialState?.pagination?.pageSize ?? 10),
+    parseAsInteger
+      .withOptions(queryStateOptions)
+      .withDefault(initialState?.pagination?.pageSize ?? 10),
   )
 
   const pagination: PaginationState = React.useMemo(() => {
@@ -198,14 +206,19 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   const filterParsers = React.useMemo(() => {
     if (enableAdvancedFilter) return {}
 
-    return filterableColumns.reduce<Record<string, SingleParser<string> | SingleParser<string[]>>>((acc, column) => {
-      if (column.meta?.options) {
-        acc[column.id ?? ''] = parseAsArrayOf(parseAsString, ARRAY_SEPARATOR).withOptions(queryStateOptions)
-      } else {
-        acc[column.id ?? ''] = parseAsString.withOptions(queryStateOptions)
-      }
-      return acc
-    }, {})
+    return filterableColumns.reduce<Record<string, SingleParser<string> | SingleParser<string[]>>>(
+      (acc, column) => {
+        if (column.meta?.options) {
+          acc[column.id ?? ''] = parseAsArrayOf(parseAsString, ARRAY_SEPARATOR).withOptions(
+            queryStateOptions,
+          )
+        } else {
+          acc[column.id ?? ''] = parseAsString.withOptions(queryStateOptions)
+        }
+        return acc
+      },
+      {},
+    )
   }, [filterableColumns, queryStateOptions, enableAdvancedFilter])
 
   const [filterValues, setFilterValues] = useQueryStates(filterParsers)
@@ -238,7 +251,10 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(initialColumnFilters)
 
   // Watch for external URL changes (e.g. from quick filter toggles)
-  const [externalStatusFilter] = useQueryState('status', parseAsArrayOf(parseAsString).withDefault([]))
+  const [externalStatusFilter] = useQueryState(
+    'status',
+    parseAsArrayOf(parseAsString).withDefault([]),
+  )
 
   React.useEffect(() => {
     if (enableAdvancedFilter) return
@@ -261,12 +277,15 @@ export function useDataTable<TData>(props: UseDataTableProps<TData>) {
       setColumnFilters((prev) => {
         const next = typeof updaterOrValue === 'function' ? updaterOrValue(prev) : updaterOrValue
 
-        const filterUpdates = next.reduce<Record<string, string | string[] | null>>((acc, filter) => {
-          if (filterableColumns.find((column) => column.id === filter.id)) {
-            acc[filter.id] = filter.value as string | string[]
-          }
-          return acc
-        }, {})
+        const filterUpdates = next.reduce<Record<string, string | string[] | null>>(
+          (acc, filter) => {
+            if (filterableColumns.find((column) => column.id === filter.id)) {
+              acc[filter.id] = filter.value as string | string[]
+            }
+            return acc
+          },
+          {},
+        )
 
         for (const prevFilter of prev) {
           if (!next.some((filter) => filter.id === prevFilter.id)) {

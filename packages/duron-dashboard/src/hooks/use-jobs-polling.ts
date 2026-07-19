@@ -69,7 +69,7 @@ export function useJobsPolling(enabled: boolean = true) {
         // If no updates found, keep lastUpdatedAt as is to avoid missing updates
       } catch (error) {
         // Silently handle errors - don't spam console
-        // biome-ignore lint/suspicious/noConsole: Debug logging is acceptable here
+        // oxlint-disable-next-line no-console
         console.debug('Polling error:', error)
       }
     }

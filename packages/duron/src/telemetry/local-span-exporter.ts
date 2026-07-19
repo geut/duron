@@ -1,4 +1,7 @@
-import type { SpanKind as OTelSpanKind, SpanStatusCode as OTelSpanStatusCode } from '@opentelemetry/api'
+import type {
+  SpanKind as OTelSpanKind,
+  SpanStatusCode as OTelSpanStatusCode,
+} from '@opentelemetry/api'
 import { type ExportResult, ExportResultCode } from '@opentelemetry/core'
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base'
 
@@ -52,7 +55,10 @@ export class LocalSpanExporter implements SpanExporter {
    */
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
     if (this.#shutdown) {
-      resultCallback({ code: ExportResultCode.FAILED, error: new Error('Exporter has been shutdown') })
+      resultCallback({
+        code: ExportResultCode.FAILED,
+        error: new Error('Exporter has been shutdown'),
+      })
       return
     }
 

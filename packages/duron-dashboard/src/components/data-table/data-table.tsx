@@ -3,7 +3,14 @@ import type * as React from 'react'
 
 import { DataTablePagination } from '@/components/data-table/data-table-pagination'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 
 function ColumnResizer<TData>({ header }: { header: Header<TData, unknown> }) {
@@ -128,7 +135,10 @@ export function DataTable<TData>({
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={table.getAllColumns().length} className="h-24 text-center">
+                      <TableCell
+                        colSpan={table.getAllColumns().length}
+                        className="h-24 text-center"
+                      >
                         No results.
                       </TableCell>
                     </TableRow>
@@ -173,7 +183,9 @@ export function DataTable<TData>({
                         )}
                         style={{ width: header.getSize() }}
                       >
-                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
                         <ColumnResizer header={header} />
                       </TableHead>
                     )
@@ -203,7 +215,10 @@ export function DataTable<TData>({
                                 'sticky right-0 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.1)]',
                                 isSelected ? 'bg-primary/10' : 'bg-background',
                               ],
-                              isPinned === 'left' && ['sticky left-0', isSelected ? 'bg-primary/10' : 'bg-background'],
+                              isPinned === 'left' && [
+                                'sticky left-0',
+                                isSelected ? 'bg-primary/10' : 'bg-background',
+                              ],
                             )}
                             style={{
                               width: cell.column.getSize(),

@@ -70,7 +70,6 @@ duron/
 │   ├── examples/        # Example implementations
 │   ├── shared-actions/  # Shared action definitions for examples
 │   └── assets/          # Logo and images
-├── biome.jsonc          # Linting configuration
 ├── package.json         # Workspace root
 └── docker-compose.yml   # PostgreSQL for development
 ```
@@ -93,6 +92,7 @@ The main library providing:
   - No config = telemetry disabled (default)
 
 **Key Dependencies:**
+
 - `zod` - Schema validation
 - `drizzle-orm` - Database ORM
 - `elysia` - HTTP framework for the server
@@ -112,6 +112,7 @@ A standalone React dashboard for job monitoring with:
 - JWT authentication support
 
 **Key Technologies:**
+
 - React 19
 - Tailwind CSS 4
 - Shadcn/UI components
@@ -122,6 +123,7 @@ A standalone React dashboard for job monitoring with:
 ### `docs` (Documentation)
 
 Documentation site built with:
+
 - Fumadocs
 - TanStack Router
 - Vite (exception: docs use Vite for SSR support)
@@ -242,6 +244,7 @@ const processOrder = defineAction<typeof variables>()({
 ```
 
 **Important:** All child steps MUST be awaited before the parent step returns. If a parent step completes with unawaited children, Duron will:
+
 1. Abort all pending child steps
 2. Wait for them to settle
 3. Throw an `UnhandledChildStepsError`
@@ -261,7 +264,7 @@ const client = duron({
     connection: process.env.DATABASE_URL,
   }),
   actions: { sendEmail },
-  variables: { /* shared context */ },
+  variables: {/* shared context */},
   logger: 'info',
 })
 
@@ -400,16 +403,19 @@ bun test specific.test.ts  # Single file
 
 ## Linting & Formatting
 
-Uses Biome with `biome-standard-mate` configuration:
+Uses Oxlint and Oxfmt:
 
 ```bash
 bun run lint       # Check
 bun run lint:fix   # Auto-fix
+bun run fmt:check  # Format check
+bun run fmt        # Auto-format
 ```
 
 Key rules:
-- Single quotes, semicolons
-- 120 character line width
+
+- Single quotes, no semicolons
+- 100 character line width
 - Organize imports automatically
 - No console warnings (use logger instead)
 
@@ -423,6 +429,7 @@ bun run dev   # Starts on http://localhost:3001
 ```
 
 **Important:**
+
 - Do not modify files in `src/components/ui/` - these are managed by Shadcn UI
 - Use the existing UI components from `src/components/ui/`
 - Follow the established patterns in `src/views/` and `src/components/`
@@ -446,24 +453,25 @@ bun run dev   # Starts on http://localhost:3001
 ### Frontend (dashboard)
 
 Uses Bun's bundler mode with:
+
 - JSX for React
 - Path aliases: `@/*` → `./src/*`
 
 ## Key Files Reference
 
-| Path | Description |
-|------|-------------|
-| `packages/duron/src/index.ts` | Main exports |
-| `packages/duron/src/client.ts` | Job queue client |
-| `packages/duron/src/action.ts` | Action definitions |
-| `packages/duron/src/server.ts` | REST API server |
-| `packages/duron/src/adapters/adapter.ts` | Base adapter class |
-| `packages/duron/src/adapters/postgres/` | PostgreSQL adapter |
-| `packages/duron/src/step-manager.ts` | Step execution and nested step handling |
-| `packages/duron/src/telemetry/` | Telemetry adapters (local, opentelemetry, noop) |
-| `packages/duron-dashboard/src/DuronDashboard.tsx` | Dashboard root |
-| `packages/duron-dashboard/src/views/` | Dashboard pages |
-| `packages/examples/basic/start.ts` | Basic example |
+| Path                                              | Description                                     |
+| ------------------------------------------------- | ----------------------------------------------- |
+| `packages/duron/src/index.ts`                     | Main exports                                    |
+| `packages/duron/src/client.ts`                    | Job queue client                                |
+| `packages/duron/src/action.ts`                    | Action definitions                              |
+| `packages/duron/src/server.ts`                    | REST API server                                 |
+| `packages/duron/src/adapters/adapter.ts`          | Base adapter class                              |
+| `packages/duron/src/adapters/postgres/`           | PostgreSQL adapter                              |
+| `packages/duron/src/step-manager.ts`              | Step execution and nested step handling         |
+| `packages/duron/src/telemetry/`                   | Telemetry adapters (local, opentelemetry, noop) |
+| `packages/duron-dashboard/src/DuronDashboard.tsx` | Dashboard root                                  |
+| `packages/duron-dashboard/src/views/`             | Dashboard pages                                 |
+| `packages/examples/basic/start.ts`                | Basic example                                   |
 
 ## Common Tasks
 
@@ -509,11 +517,11 @@ if (!apiKey) {
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Secret for dashboard authentication |
-| `OPENAI_API_KEY` | For AI-powered examples |
+| Variable         | Description                         |
+| ---------------- | ----------------------------------- |
+| `DATABASE_URL`   | PostgreSQL connection string        |
+| `JWT_SECRET`     | Secret for dashboard authentication |
+| `OPENAI_API_KEY` | For AI-powered examples             |
 
 ## Contributing Guidelines
 

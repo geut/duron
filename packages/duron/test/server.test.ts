@@ -5,7 +5,12 @@ import { z } from 'zod'
 import { defineAction } from '../src/action.js'
 import { ActionStatsSchema, JobSchema, JobStepSchema } from '../src/adapters/schemas.js'
 import { Client } from '../src/client.js'
-import { JOB_STATUS_CANCELLED, JOB_STATUS_COMPLETED, JOB_STATUS_CREATED, JOB_STATUS_FAILED } from '../src/constants.js'
+import {
+  JOB_STATUS_CANCELLED,
+  JOB_STATUS_COMPLETED,
+  JOB_STATUS_CREATED,
+  JOB_STATUS_FAILED,
+} from '../src/constants.js'
 import {
   CancelJobResponseSchema,
   createServer,
@@ -15,6 +20,7 @@ import {
   GetJobsResponseSchema,
   RetryJobResponseSchema,
 } from '../src/server.js'
+
 import { type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.js'
 import { expectToBeDefined } from './asserts.js'
 
@@ -185,10 +191,14 @@ function runServerTests(adapterFactory: AdapterFactory) {
         await client.fetch({ batchSize: 10 })
         await new Promise((resolve) => setTimeout(resolve, 500))
 
-        const response = await server.handle(new Request(`http://localhost/api/jobs/${jobId}/steps`))
+        const response = await server.handle(
+          new Request(`http://localhost/api/jobs/${jobId}/steps`),
+        )
         expect(response.status).toBe(200)
 
-        const result = GetJobStepsResponseParsedSchema.parse(await response.json()) as GetJobStepsResponse
+        const result = GetJobStepsResponseParsedSchema.parse(
+          await response.json(),
+        ) as GetJobStepsResponse
 
         expect(result.steps).toBeInstanceOf(Array)
         expect(result.total).toBeGreaterThan(0)
@@ -204,10 +214,14 @@ function runServerTests(adapterFactory: AdapterFactory) {
         await client.fetch({ batchSize: 10 })
         await new Promise((resolve) => setTimeout(resolve, 500))
 
-        const response = await server.handle(new Request(`http://localhost/api/jobs/${jobId}/steps?search=step-1`))
+        const response = await server.handle(
+          new Request(`http://localhost/api/jobs/${jobId}/steps?search=step-1`),
+        )
         expect(response.status).toBe(200)
 
-        const result = GetJobStepsResponseParsedSchema.parse(await response.json()) as GetJobStepsResponse
+        const result = GetJobStepsResponseParsedSchema.parse(
+          await response.json(),
+        ) as GetJobStepsResponse
 
         expect(result.steps.length).toBeGreaterThan(0)
         expect(result.steps.some((step) => step.name.includes('step-1'))).toBe(true)
@@ -223,7 +237,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
           })
         }
 
-        const response = await server.handle(new Request('http://localhost/api/jobs?page=1&pageSize=2'))
+        const response = await server.handle(
+          new Request('http://localhost/api/jobs?page=1&pageSize=2'),
+        )
         expect(response.status).toBe(200)
 
         const result = GetJobsResponseParsedSchema.parse(await response.json()) as GetJobsResponse
@@ -247,7 +263,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
         await client.fetch({ batchSize: 10 })
         await new Promise((resolve) => setTimeout(resolve, 500))
 
-        const response = await server.handle(new Request(`http://localhost/api/jobs?fStatus=${JOB_STATUS_COMPLETED}`))
+        const response = await server.handle(
+          new Request(`http://localhost/api/jobs?fStatus=${JOB_STATUS_COMPLETED}`),
+        )
         expect(response.status).toBe(200)
 
         const result = GetJobsResponseParsedSchema.parse(await response.json()) as GetJobsResponse
@@ -265,7 +283,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
           shouldFail: false,
         })
 
-        const response = await server.handle(new Request('http://localhost/api/jobs?fActionName=test-action'))
+        const response = await server.handle(
+          new Request('http://localhost/api/jobs?fActionName=test-action'),
+        )
         expect(response.status).toBe(200)
 
         const result = GetJobsResponseParsedSchema.parse(await response.json()) as GetJobsResponse
@@ -287,7 +307,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
         await new Promise((resolve) => setTimeout(resolve, 500))
 
         const response = await server.handle(
-          new Request(`http://localhost/api/jobs?fStatus=${JOB_STATUS_COMPLETED}&fStatus=${JOB_STATUS_CREATED}`),
+          new Request(
+            `http://localhost/api/jobs?fStatus=${JOB_STATUS_COMPLETED}&fStatus=${JOB_STATUS_CREATED}`,
+          ),
         )
         expect(response.status).toBe(200)
 
@@ -304,7 +326,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
         await new Promise((resolve) => setTimeout(resolve, 10))
         await client.runAction('testAction', { message: 'Third' })
 
-        const response = await server.handle(new Request('http://localhost/api/jobs?sort=createdAt:desc'))
+        const response = await server.handle(
+          new Request('http://localhost/api/jobs?sort=createdAt:desc'),
+        )
         expect(response.status).toBe(200)
 
         const result = GetJobsResponseParsedSchema.parse(await response.json()) as GetJobsResponse
@@ -330,7 +354,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
         const afterDate = new Date()
 
         const response = await server.handle(
-          new Request(`http://localhost/api/jobs?fCreatedAt=${beforeDate.toISOString()},${afterDate.toISOString()}`),
+          new Request(
+            `http://localhost/api/jobs?fCreatedAt=${beforeDate.toISOString()},${afterDate.toISOString()}`,
+          ),
         )
         expect(response.status).toBe(200)
 
@@ -350,8 +376,12 @@ function runServerTests(adapterFactory: AdapterFactory) {
         await new Promise((resolve) => setTimeout(resolve, 500))
 
         // Get steps first to find a step ID
-        const stepsResponse = await server.handle(new Request(`http://localhost/api/jobs/${jobId}/steps`))
-        const stepsResult = GetJobStepsResponseParsedSchema.parse(await stepsResponse.json()) as GetJobStepsResponse
+        const stepsResponse = await server.handle(
+          new Request(`http://localhost/api/jobs/${jobId}/steps`),
+        )
+        const stepsResult = GetJobStepsResponseParsedSchema.parse(
+          await stepsResponse.json(),
+        ) as GetJobStepsResponse
 
         expectToBeDefined(stepsResult.steps[0])
 
@@ -444,7 +474,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
         expect(result.newJobId).not.toBe(jobId)
 
         // Verify new job was created
-        const newJobResponse = await server.handle(new Request(`http://localhost/api/jobs/${result.newJobId}`))
+        const newJobResponse = await server.handle(
+          new Request(`http://localhost/api/jobs/${result.newJobId}`),
+        )
         const newJob = JobResponseSchema.parse(await newJobResponse.json()) as JobResponse
 
         expect(newJob.status).toBe(JOB_STATUS_CREATED)
@@ -483,7 +515,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
         const response = await server.handle(new Request('http://localhost/api/actions'))
         expect(response.status).toBe(200)
 
-        const result = GetActionsResponseParsedSchema.parse(await response.json()) as GetActionsResponse
+        const result = GetActionsResponseParsedSchema.parse(
+          await response.json(),
+        ) as GetActionsResponse
 
         expect(result.actions).toBeInstanceOf(Array)
         expect(result.actions.length).toBeGreaterThanOrEqual(2)
@@ -505,7 +539,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
       })
 
       it('should handle invalid query parameters', async () => {
-        const response = await server.handle(new Request('http://localhost/api/jobs?pageSize=10000')) // Exceeds max
+        const response = await server.handle(
+          new Request('http://localhost/api/jobs?pageSize=10000'),
+        ) // Exceeds max
         expect(response.status).toBe(400)
       })
     })
@@ -567,7 +603,9 @@ function runServerTests(adapterFactory: AdapterFactory) {
             method: 'POST',
           }),
         )
-        const retryResult = RetryJobResponseSchema.parse(await retryResponse.json()) as RetryJobResponse
+        const retryResult = RetryJobResponseSchema.parse(
+          await retryResponse.json(),
+        ) as RetryJobResponse
 
         const newJobId = retryResult.newJobId
 
@@ -584,7 +622,7 @@ function runServerTests(adapterFactory: AdapterFactory) {
 }
 
 runServerTests(postgresFactory)
-// biome-ignore lint/complexity/useLiteralKeys: type safety
+// oxlint-disable-next-line useLiteralKeys
 if (process.env['POSTGRES_TEST'] === 'true') {
   runServerTests(pgliteFactory)
 }

@@ -118,7 +118,9 @@ export const GetJobsQuerySchema = z
     if (data.fOutputFilter) filters.outputFilter = data.fOutputFilter
 
     // Parse sort string: "field:asc,field:desc" -> [{ field: 'field', order: 'asc' }, { field: 'field', order: 'desc' }]
-    let sort: Array<{ field: z.infer<typeof JobSortFieldSchema>; order: z.infer<typeof SortOrderSchema> }> | undefined
+    let sort:
+      | Array<{ field: z.infer<typeof JobSortFieldSchema>; order: z.infer<typeof SortOrderSchema> }>
+      | undefined
     if (data.sort) {
       const sortParts = data.sort
         .split(',')
@@ -142,7 +144,12 @@ export const GetJobsQuerySchema = z
           }
         })
         .filter(
-          (s): s is { field: z.infer<typeof JobSortFieldSchema>; order: z.infer<typeof SortOrderSchema> } => s !== null,
+          (
+            s,
+          ): s is {
+            field: z.infer<typeof JobSortFieldSchema>
+            order: z.infer<typeof SortOrderSchema>
+          } => s !== null,
         )
 
       // If no valid sorts were parsed, set to undefined
@@ -199,7 +206,9 @@ export const GetSpansQuerySchema = z
     if (data.fAttributesFilter) filters.attributesFilter = data.fAttributesFilter
 
     // Parse sort string: "field:asc" -> { field: 'field', order: 'asc' }
-    let sort: { field: z.infer<typeof SpanSortFieldSchema>; order: z.infer<typeof SortOrderSchema> } | undefined
+    let sort:
+      | { field: z.infer<typeof SpanSortFieldSchema>; order: z.infer<typeof SortOrderSchema> }
+      | undefined
     if (data.sort) {
       const [field, order] = data.sort.split(':').map((s) => s.trim())
       if (field && order) {
@@ -299,9 +308,17 @@ export interface CreateServerOptions<P extends string> {
  * @param options - Configuration options
  * @returns Elysia server instance
  */
-export function createServer<P extends string>({ client, prefix, login, spansEnabled }: CreateServerOptions<P>) {
+export function createServer<P extends string>({
+  client,
+  prefix,
+  login,
+  spansEnabled,
+}: CreateServerOptions<P>) {
   // Convert string secret to Uint8Array if needed
-  const secretKey = typeof login?.jwtSecret === 'string' ? new TextEncoder().encode(login?.jwtSecret) : login?.jwtSecret
+  const secretKey =
+    typeof login?.jwtSecret === 'string'
+      ? new TextEncoder().encode(login?.jwtSecret)
+      : login?.jwtSecret
 
   const routePrefix = (prefix ?? '/api') as P
 
@@ -534,7 +551,9 @@ export function createServer<P extends string>({ client, prefix, login, spansEna
       async ({ params }) => {
         const newJobId = await client.retryJob(params.id)
         if (!newJobId) {
-          throw new Error(`Could not retry job ${params.id}. The job may not be in a retryable state.`)
+          throw new Error(
+            `Could not retry job ${params.id}. The job may not be in a retryable state.`,
+          )
         }
         return {
           success: true,

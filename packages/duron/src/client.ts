@@ -1,14 +1,18 @@
 import { type Span, type Tracer, trace } from '@opentelemetry/api'
 import { resourceFromAttributes } from '@opentelemetry/resources'
-import { BatchSpanProcessor, type SpanExporter, type SpanProcessor } from '@opentelemetry/sdk-trace-base'
+import {
+  BatchSpanProcessor,
+  type SpanExporter,
+  type SpanProcessor,
+} from '@opentelemetry/sdk-trace-base'
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 import pino, { type Logger } from 'pino'
 import { zocker } from 'zocker'
 import * as z from 'zod'
 
-import type { Action, ConcurrencyHandlerContext } from './action.js'
 import { ActionManager } from './action-manager.js'
+import type { Action, ConcurrencyHandlerContext } from './action.js'
 import type {
   Adapter,
   ArchiveStats,
@@ -24,7 +28,12 @@ import type {
   PruneArchiveOptions,
 } from './adapters/adapter.js'
 import type { JobStatusResult, JobStepStatusResult } from './adapters/schemas.js'
-import { JOB_STATUS_CANCELLED, JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, type JobStatus } from './constants.js'
+import {
+  JOB_STATUS_CANCELLED,
+  JOB_STATUS_COMPLETED,
+  JOB_STATUS_FAILED,
+  type JobStatus,
+} from './constants.js'
 import { LocalSpanExporter } from './telemetry/local-span-exporter.js'
 
 /**
@@ -261,7 +270,9 @@ export interface BaseOptionsInput {
 
 const BaseOptionsSchema = z.object({
   id: z.string().optional(),
-  syncPattern: z.union([z.literal('pull'), z.literal('push'), z.literal('hybrid'), z.literal(false)]).default('hybrid'),
+  syncPattern: z
+    .union([z.literal('pull'), z.literal('push'), z.literal('hybrid'), z.literal(false)])
+    .default('hybrid'),
   pullInterval: z.number().default(5_000),
   batchSize: z.number().default(10),
   actionConcurrencyLimit: z.number().default(100),
@@ -274,9 +285,10 @@ const BaseOptionsSchema = z.object({
 })
 
 // Compile-time check: ensure BaseOptionsInput is assignable to the Zod schema's input type
-type _EnsureBaseOptionsCompatible = BaseOptionsInput extends z.input<typeof BaseOptionsSchema>
-  ? true
-  : 'ERROR: BaseOptionsInput does not match Zod schema input type'
+type _EnsureBaseOptionsCompatible =
+  BaseOptionsInput extends z.input<typeof BaseOptionsSchema>
+    ? true
+    : 'ERROR: BaseOptionsInput does not match Zod schema input type'
 
 declare const _baseOptionsCheck: _EnsureBaseOptionsCompatible
 const _checkOptions: _EnsureBaseOptionsCompatible = true
@@ -457,7 +469,9 @@ export class Client<
     }
   }
 
-  #normalizeLogger(logger?: Logger | 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent'): Logger {
+  #normalizeLogger(
+    logger?: Logger | 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent',
+  ): Logger {
     let pinoInstance: Logger | null = null
     if (!logger) {
       pinoInstance = pino({ level: 'error' })
@@ -591,7 +605,10 @@ export class Client<
       throw new Error(`Failed to create job for action ${String(actionName)}`)
     }
 
-    this.#logger.debug({ jobId, actionName: String(actionName), groupKey }, '[Duron] Action sent/created')
+    this.#logger.debug(
+      { jobId, actionName: String(actionName), groupKey },
+      '[Duron] Action sent/created',
+    )
 
     return jobId
   }
@@ -943,7 +960,11 @@ export class Client<
     // First, check if the job already exists and is in a terminal state
     const existingJobStatus = await this.getJobStatus(jobId)
     if (existingJobStatus) {
-      const terminalStatuses: JobStatus[] = [JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, JOB_STATUS_CANCELLED]
+      const terminalStatuses: JobStatus[] = [
+        JOB_STATUS_COMPLETED,
+        JOB_STATUS_FAILED,
+        JOB_STATUS_CANCELLED,
+      ]
       if (terminalStatuses.includes(existingJobStatus.status)) {
         const job = await this.getJobById(jobId)
         if (!job) {
@@ -1054,10 +1075,12 @@ export class Client<
               .override(z.ZodString, 'string')
               .override(z.ZodBigInt, '4000' as any) // Convert BigInt to string for JSON serialization
               .override(z.ZodNumber, (schema, _ctx) => {
-                const greaterThan = schema.def.checks?.find((check) => check._zod.def.check === 'greater_than')?._zod
-                  .def as unknown as { value: number; inclusive: boolean }
-                const lessThan = schema.def.checks?.find((check) => check._zod.def.check === 'less_than')?._zod
-                  .def as unknown as { value: number; inclusive: boolean }
+                const greaterThan = schema.def.checks?.find(
+                  (check) => check._zod.def.check === 'greater_than',
+                )?._zod.def as unknown as { value: number; inclusive: boolean }
+                const lessThan = schema.def.checks?.find(
+                  (check) => check._zod.def.check === 'less_than',
+                )?._zod.def as unknown as { value: number; inclusive: boolean }
 
                 if (greaterThan && lessThan) {
                   const min = greaterThan.inclusive ? greaterThan.value : greaterThan.value + 1
@@ -1356,8 +1379,14 @@ export class Client<
 
     const action = Object.values(this.#actions).find((a) => a.name === job.actionName)
     if (!action) {
-      const error = { name: 'ActionNotFoundError', message: `Action "${job.actionName}" not found for job ${job.id}` }
-      this.#logger.warn({ jobId: job.id, actionName: job.actionName }, `[Duron] Action not found for job ${job.id}`)
+      const error = {
+        name: 'ActionNotFoundError',
+        message: `Action "${job.actionName}" not found for job ${job.id}`,
+      }
+      this.#logger.warn(
+        { jobId: job.id, actionName: job.actionName },
+        `[Duron] Action not found for job ${job.id}`,
+      )
       this.#database.failJob({ jobId: job.id, error }).catch((dbError) => {
         this.#logger.error({ error: dbError, jobId: job.id }, `[Duron] Error failing job ${job.id}`)
       })

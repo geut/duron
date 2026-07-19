@@ -13,6 +13,7 @@ import {
   STEP_STATUS_FAILED,
   type StepStatus,
 } from '../constants.js'
+
 import type {
   ArchiveStats,
   CancelJobOptions,
@@ -531,7 +532,9 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    *
    * @returns Promise resolving to the step, or `null` if creation failed
    */
-  async createOrRecoverJobStep(options: CreateOrRecoverJobStepOptions): Promise<CreateOrRecoverJobStepResult | null> {
+  async createOrRecoverJobStep(
+    options: CreateOrRecoverJobStepOptions,
+  ): Promise<CreateOrRecoverJobStepResult | null> {
     try {
       await this.start()
       const parsedOptions = CreateOrRecoverJobStepOptionsSchema.parse(options)

@@ -51,7 +51,11 @@ interface DataTableDateFilterProps<TData> {
   multiple?: boolean
 }
 
-export function DataTableDateFilter<TData>({ column, title, multiple }: DataTableDateFilterProps<TData>) {
+export function DataTableDateFilter<TData>({
+  column,
+  title,
+  multiple,
+}: DataTableDateFilterProps<TData>) {
   const columnFilterValue = column.getFilterValue()
 
   const selectedDates = React.useMemo<DateSelection>(() => {
@@ -127,7 +131,10 @@ export function DataTableDateFilter<TData>({ column, title, multiple }: DataTabl
           <span>{title}</span>
           {hasSelectedDates && (
             <>
-              <Separator orientation="vertical" className="mx-0.5 data-[orientation=vertical]:h-4" />
+              <Separator
+                orientation="vertical"
+                className="mx-0.5 data-[orientation=vertical]:h-4"
+              />
               <span>{dateText}</span>
             </>
           )}

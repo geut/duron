@@ -6,7 +6,9 @@ interface PollingContextType {
 
 const DEFAULT_POLLING_INTERVAL = 2000 // 2 seconds
 
-const PollingContext = createContext<PollingContextType>({ pollingInterval: DEFAULT_POLLING_INTERVAL })
+const PollingContext = createContext<PollingContextType>({
+  pollingInterval: DEFAULT_POLLING_INTERVAL,
+})
 
 export interface PollingProviderProps {
   children: ReactNode
@@ -17,7 +19,10 @@ export interface PollingProviderProps {
   pollingInterval?: number
 }
 
-export function PollingProvider({ children, pollingInterval = DEFAULT_POLLING_INTERVAL }: PollingProviderProps) {
+export function PollingProvider({
+  children,
+  pollingInterval = DEFAULT_POLLING_INTERVAL,
+}: PollingProviderProps) {
   return <PollingContext.Provider value={{ pollingInterval }}>{children}</PollingContext.Provider>
 }
 

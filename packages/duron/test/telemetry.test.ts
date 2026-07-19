@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
 import { JOB_STATUS_COMPLETED, JOB_STATUS_FAILED } from '../src/constants.js'
+
 import { type Adapter, pgliteFactory } from './adapters.js'
 
 // Simple action for basic telemetry testing
@@ -525,6 +526,8 @@ describe('Telemetry Tests - No-Op Mode', () => {
     await client.fetch({})
     await client.waitForJob(jobId)
 
-    await expect(client.getSpans({ jobId })).rejects.toThrow('Spans are only available when telemetry.local is enabled')
+    await expect(client.getSpans({ jobId })).rejects.toThrow(
+      'Spans are only available when telemetry.local is enabled',
+    )
   })
 })

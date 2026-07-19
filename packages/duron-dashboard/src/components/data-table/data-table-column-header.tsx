@@ -12,7 +12,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
-interface DataTableColumnHeaderProps<TData, TValue> extends React.ComponentProps<typeof DropdownMenuTrigger> {
+interface DataTableColumnHeaderProps<TData, TValue> extends React.ComponentProps<
+  typeof DropdownMenuTrigger
+> {
   column: Column<TData, TValue>
   label: string
 }
@@ -66,7 +68,10 @@ export function DataTableColumnHeader<TData, TValue>({
               Desc
             </DropdownMenuCheckboxItem>
             {column.getIsSorted() && (
-              <DropdownMenuItem className="pl-2 [&_svg]:text-muted-foreground" onClick={() => column.clearSorting()}>
+              <DropdownMenuItem
+                className="pl-2 [&_svg]:text-muted-foreground"
+                onClick={() => column.clearSorting()}
+              >
                 <X />
                 Reset
               </DropdownMenuItem>

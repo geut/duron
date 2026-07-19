@@ -1,10 +1,9 @@
-import { serve } from 'bun'
-
 import { sendEmail } from '@shared-actions/index'
+import { serve } from 'bun'
 import { duron } from 'duron'
+import { getHTML } from 'duron-dashboard/get-html'
 import { postgresAdapter } from 'duron/adapters/postgres'
 import { createServer } from 'duron/server'
-import { getHTML } from 'duron-dashboard/get-html'
 
 const client = duron({
   database: postgresAdapter({

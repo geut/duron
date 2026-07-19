@@ -6,7 +6,12 @@ import { useCallback, useMemo, useState } from 'react'
 import { useDebounceValue } from 'usehooks-ts'
 
 import { Timeline } from '@/components/timeline'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -15,10 +20,18 @@ import { useStepView } from '@/contexts/layout-context'
 import { useStepsPolling } from '@/hooks/use-steps-polling'
 import { type GetJobStepsResponse, useJob, useJobSteps, useTimeTravelJob } from '@/lib/api'
 import { calculateDurationSeconds, formatDurationSeconds } from '@/lib/duration'
+
 import { BadgeStatus } from '../components/badge-status'
 
 // Colors for nesting level indicators (cycles after 6 levels)
-const NESTING_COLORS = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500', 'bg-cyan-500']
+const NESTING_COLORS = [
+  'bg-blue-500',
+  'bg-green-500',
+  'bg-purple-500',
+  'bg-orange-500',
+  'bg-pink-500',
+  'bg-cyan-500',
+]
 
 /**
  * Get the color class for a given nesting depth
@@ -28,7 +41,10 @@ function getNestingColor(depth: number): string {
 }
 
 // Step type from the API response (without output field)
-type JobStepWithoutOutput = GetJobStepsResponse['steps'][number] & { parentStepId?: string | null; parallel?: boolean }
+type JobStepWithoutOutput = GetJobStepsResponse['steps'][number] & {
+  parentStepId?: string | null
+  parallel?: boolean
+}
 
 import { StepDetailsContent } from './step-details-content'
 
@@ -112,7 +128,8 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
   }, [viewType, setViewType])
 
   // Check if job is in a terminal state (can time travel)
-  const canTimeTravel = job?.status === 'completed' || job?.status === 'failed' || job?.status === 'cancelled'
+  const canTimeTravel =
+    job?.status === 'completed' || job?.status === 'failed' || job?.status === 'cancelled'
 
   const handleTimeTravel = useCallback(
     (stepId: string, e: React.MouseEvent) => {
@@ -137,7 +154,9 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
 
   if (!jobId) {
     return (
-      <div className="h-full flex items-center justify-center text-muted-foreground">Select a job to view steps</div>
+      <div className="h-full flex items-center justify-center text-muted-foreground">
+        Select a job to view steps
+      </div>
     )
   }
 
@@ -180,7 +199,12 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
 
       <div className="flex-1 overflow-hidden">
         {viewType === 'timeline' ? (
-          <Timeline job={job ?? null} steps={steps} selectedStepId={selectedStepId} onStepSelect={onStepSelect} />
+          <Timeline
+            job={job ?? null}
+            steps={steps}
+            selectedStepId={selectedStepId}
+            onStepSelect={onStepSelect}
+          />
         ) : (
           <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]>:first-child]:block!">
             <div className="p-4">
@@ -216,7 +240,9 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                           {/* Nesting level indicator - colored line for current depth */}
                           {depth > 0 && (
                             <div className="relative w-1 shrink-0" aria-hidden="true">
-                              <div className={clsx('w-1 h-full opacity-60', getNestingColor(depth))} />
+                              <div
+                                className={clsx('w-1 h-full opacity-60', getNestingColor(depth))}
+                              />
                             </div>
                           )}
                           <div className={clsx('flex-1 min-w-0', depth > 0 && 'ml-2')}>
@@ -252,7 +278,10 @@ export function StepList({ jobId, selectedStepId, onStepSelect }: StepListProps)
                                           onClick={(e) => handleTimeTravel(step.id, e)}
                                           onKeyDown={(e) => {
                                             if (e.key === 'Enter' || e.key === ' ') {
-                                              handleTimeTravel(step.id, e as unknown as React.MouseEvent)
+                                              handleTimeTravel(
+                                                step.id,
+                                                e as unknown as React.MouseEvent,
+                                              )
                                             }
                                           }}
                                           aria-disabled={timeTravelMutation.isPending}

@@ -1,6 +1,5 @@
-import { serve } from 'bun'
-
 import { getWeather, processOrder, sendEmail, variables } from '@shared-actions/index'
+import { serve } from 'bun'
 import { postgresAdapter } from 'duron/adapters/postgres/postgres'
 import { createServer, duron } from 'duron/index'
 

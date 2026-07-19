@@ -14,7 +14,13 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 
-import { JOB_STATUSES, type JobStatus, STEP_STATUS_ACTIVE, STEP_STATUSES, type StepStatus } from '../../constants.js'
+import {
+  JOB_STATUSES,
+  type JobStatus,
+  STEP_STATUS_ACTIVE,
+  STEP_STATUSES,
+  type StepStatus,
+} from '../../constants.js'
 import type { SerializableError } from '../../errors.js'
 
 export default function createSchema(schemaName: string) {
@@ -70,8 +76,14 @@ export default function createSchema(schemaName: string) {
       index('idx_jobs_active_action_status').on(table.action_name, table.status),
       index('idx_jobs_active_action_group').on(table.action_name, table.group_key),
       // GIN indexes for full-text search
-      index('idx_jobs_active_input_fts').using('gin', sql`to_tsvector('english', ${table.input}::text)`),
-      index('idx_jobs_active_output_fts').using('gin', sql`to_tsvector('english', ${table.output}::text)`),
+      index('idx_jobs_active_input_fts').using(
+        'gin',
+        sql`to_tsvector('english', ${table.input}::text)`,
+      ),
+      index('idx_jobs_active_output_fts').using(
+        'gin',
+        sql`to_tsvector('english', ${table.output}::text)`,
+      ),
       check(
         'jobs_active_status_check',
         sql`${table.status} IN ${sql.raw(`(${JOB_STATUSES.map((s) => `'${s}'`).join(',')})`)}`,
@@ -124,7 +136,10 @@ export default function createSchema(schemaName: string) {
       // Composite indexes
       index('idx_job_steps_active_job_status').on(table.job_id, table.status),
       index('idx_job_steps_active_job_name').on(table.job_id, table.name),
-      index('idx_job_steps_active_output_fts').using('gin', sql`to_tsvector('english', ${table.output}::text)`),
+      index('idx_job_steps_active_output_fts').using(
+        'gin',
+        sql`to_tsvector('english', ${table.output}::text)`,
+      ),
       // Unique constraint
       unique('unique_job_step_active_name_parent')
         .on(table.job_id, table.name, table.parent_step_id)
@@ -212,8 +227,14 @@ export default function createSchema(schemaName: string) {
       // Composite indexes
       index('idx_jobs_archive_action_group').on(table.action_name, table.group_key),
       // GIN indexes for full-text search (dashboard search)
-      index('idx_jobs_archive_input_fts').using('gin', sql`to_tsvector('english', ${table.input}::text)`),
-      index('idx_jobs_archive_output_fts').using('gin', sql`to_tsvector('english', ${table.output}::text)`),
+      index('idx_jobs_archive_input_fts').using(
+        'gin',
+        sql`to_tsvector('english', ${table.input}::text)`,
+      ),
+      index('idx_jobs_archive_output_fts').using(
+        'gin',
+        sql`to_tsvector('english', ${table.output}::text)`,
+      ),
       check(
         'jobs_archive_status_check',
         sql`${table.status} IN ${sql.raw(`(${JOB_STATUSES.map((s) => `'${s}'`).join(',')})`)}`,

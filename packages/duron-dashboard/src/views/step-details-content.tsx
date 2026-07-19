@@ -12,6 +12,7 @@ import { useStepStatusPolling } from '@/hooks/use-step-status-polling'
 import { useStep } from '@/lib/api'
 import { calculateDurationMs, formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
+
 import { BadgeStatus } from '../components/badge-status'
 import { isExpiring } from '../lib/is-expiring'
 
@@ -85,7 +86,9 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
             <span className="font-medium">ID:</span>{' '}
             <Tooltip>
               <TooltipTrigger asChild={true}>
-                <span className="font-mono text-xs cursor-help">{step.id.split('-').pop() || step.id}</span>
+                <span className="font-mono text-xs cursor-help">
+                  {step.id.split('-').pop() || step.id}
+                </span>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="font-mono text-xs">{step.id}</p>
@@ -99,7 +102,9 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
             <span className="font-medium">Job ID:</span>{' '}
             <Tooltip>
               <TooltipTrigger asChild={true}>
-                <span className="font-mono text-xs cursor-help">{step.jobId.split('-').pop() || step.jobId}</span>
+                <span className="font-mono text-xs cursor-help">
+                  {step.jobId.split('-').pop() || step.jobId}
+                </span>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="font-mono text-xs">{step.jobId}</p>
@@ -182,7 +187,9 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
                   title={`Attempt Error (${formatDate(attempt.failedAt)})`}
                   height="100px"
                 />
-                {attempt.delayedMs && <div className="mt-1 text-muted-foreground">Delayed: {attempt.delayedMs}ms</div>}
+                {attempt.delayedMs && (
+                  <div className="mt-1 text-muted-foreground">Delayed: {attempt.delayedMs}ms</div>
+                )}
               </div>
             ))}
           </div>
@@ -200,7 +207,9 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
       )}
 
       {/* Spans Modal */}
-      {spansEnabled && <StepSpansModal stepId={step.id} open={showSpans} onClose={() => setShowSpans(false)} />}
+      {spansEnabled && (
+        <StepSpansModal stepId={step.id} open={showSpans} onClose={() => setShowSpans(false)} />
+      )}
     </div>
   )
 }

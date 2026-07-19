@@ -153,6 +153,7 @@ const client = duron({
 **Optional.** Interval in milliseconds between periodic job recovery runs. Defaults to `60000` (1 minute). Set to `0` to disable periodic recovery (only runs on startup).
 
 Recovery checks for:
+
 - **Expired jobs**: Jobs that exceeded their timeout are archived as failed
 - **Stuck jobs**: Jobs from unresponsive processes are reset to `created` status
 
@@ -206,6 +207,7 @@ Recovery checks for:
 ```
 
 **Options:**
+
 - `local` - Enable local span storage (`boolean | { flushDelayMs?: number }`)
 - `traceExporter` - Export spans to external systems (OTLP, Jaeger, etc.)
 - `spanProcessors` - Add custom span processors
@@ -244,6 +246,7 @@ const jobId = await client.runAction('sendEmail', {
 ```
 
 **Parameters:**
+
 - `actionName` - Name of the action to run
 - `input` - Input data for the action (validated against action's input schema)
 
@@ -260,6 +263,7 @@ const jobs = await client.fetch({
 ```
 
 **Parameters:**
+
 - `options.batchSize` - Number of jobs to fetch (optional)
 
 **Returns:** Promise resolving to array of fetched jobs
@@ -273,6 +277,7 @@ await client.cancelJob(jobId)
 ```
 
 **Parameters:**
+
 - `jobId` - The ID of the job to cancel
 
 **Returns:** Promise resolving to `true` if cancelled, `false` otherwise
@@ -286,6 +291,7 @@ const newJobId = await client.retryJob(jobId)
 ```
 
 **Parameters:**
+
 - `jobId` - The ID of the job to retry
 
 **Returns:** Promise resolving to the new job ID, or `null` if retry failed
@@ -306,6 +312,7 @@ console.log(result.output) // Typed based on action's output schema
 ```
 
 **Parameters:**
+
 - `actionName` - Name of the action to run
 - `input` - Input data for the action (validated against action's input schema)
 - `options.signal` - Optional AbortSignal to cancel the operation. If aborted, the job will be cancelled and the promise will reject.
@@ -317,15 +324,23 @@ console.log(result.output) // Typed based on action's output schema
 
 ```ts
 // With timeout
-const result = await client.runActionAndWait('processOrder', { orderId: '123' }, {
-  timeout: 30000, // 30 seconds
-})
+const result = await client.runActionAndWait(
+  'processOrder',
+  { orderId: '123' },
+  {
+    timeout: 30000, // 30 seconds
+  },
+)
 
 // With abort signal
 const controller = new AbortController()
-const result = await client.runActionAndWait('processOrder', { orderId: '123' }, {
-  signal: controller.signal,
-})
+const result = await client.runActionAndWait(
+  'processOrder',
+  { orderId: '123' },
+  {
+    signal: controller.signal,
+  },
+)
 
 // Cancel the operation
 controller.abort()
@@ -340,6 +355,7 @@ const success = await client.timeTravelJob(jobId, stepId)
 ```
 
 **Parameters:**
+
 - `jobId` - The ID of the job to time travel
 - `stepId` - The ID of the step to restart from
 
@@ -354,6 +370,7 @@ const deleted = await client.deleteJob(jobId)
 ```
 
 **Parameters:**
+
 - `jobId` - The ID of the job to delete
 
 **Returns:** Promise resolving to `true` if deleted, `false` otherwise
@@ -372,6 +389,7 @@ const deletedCount = await client.deleteJobs({
 ```
 
 **Parameters:**
+
 - `options` - Query options including filters (same as `getJobs`)
 
 **Returns:** Promise resolving to the number of jobs deleted
@@ -387,6 +405,7 @@ const job = await client.getJobById(jobId)
 ```
 
 **Parameters:**
+
 - `jobId` - The ID of the job to retrieve
 
 **Returns:** Promise resolving to the job, or `null` if not found
@@ -421,12 +440,14 @@ const result = await client.getJobs({
 ```
 
 **Parameters:**
+
 - `options.page` - Page number (default: 1)
 - `options.pageSize` - Number of items per page (default: 20)
 - `options.filters` - Filter options (see below)
 - `options.sort` - Sort options (see below)
 
 **Filter Options:**
+
 - `status` - Array of job statuses
 - `actionName` - Array of action names
 - `groupKey` - Array of group keys
@@ -441,6 +462,7 @@ const result = await client.getJobs({
 - `outputFilter` - JSONB filter on output data
 
 **Sort Options:**
+
 - `field` - Field to sort by: `'createdAt'`, `'startedAt'`, `'finishedAt'`, `'updatedAt'`, `'status'`, `'actionName'`, `'description'`
 - `order` - Sort order: `'asc'` or `'desc'`
 
@@ -461,6 +483,7 @@ const result = await client.getJobSteps({
 ```
 
 **Parameters:**
+
 - `options.jobId` - The ID of the job
 - `options.page` - Page number (default: 1)
 - `options.pageSize` - Number of items per page (default: 20)
@@ -478,6 +501,7 @@ const step = await client.getJobStepById(stepId)
 ```
 
 **Parameters:**
+
 - `stepId` - The ID of the step to retrieve
 
 **Returns:** Promise resolving to the step, or `null` if not found
@@ -491,6 +515,7 @@ const status = await client.getJobStatus(jobId)
 ```
 
 **Parameters:**
+
 - `jobId` - The ID of the job
 
 **Returns:** Promise resolving to job status result, or `null` if not found
@@ -504,6 +529,7 @@ const status = await client.getJobStepStatus(stepId)
 ```
 
 **Parameters:**
+
 - `stepId` - The ID of the step
 
 **Returns:** Promise resolving to step status result, or `null` if not found
@@ -517,6 +543,7 @@ const job = await client.waitForJob(jobId)
 ```
 
 **Parameters:**
+
 - `jobId` - The ID of the job to wait for
 - `options.timeout` - Optional timeout in milliseconds. If the job status doesn't change within this time, the promise resolves to `null`. Defaults to no timeout (waits indefinitely).
 - `options.signal` - Optional AbortSignal to cancel waiting. If aborted, the promise resolves to `null`.
@@ -541,6 +568,7 @@ controller.abort()
 ```
 
 **Notes:**
+
 - If the job is already in a terminal state (completed, failed, or cancelled), the method returns immediately without waiting.
 - Multiple concurrent `waitForJob` calls for the same job share a single event listener for efficiency.
 - The method automatically cleans up event listeners and timeouts when the promise resolves.
@@ -586,6 +614,7 @@ const result = await client.getSpans({
 ```
 
 **Parameters:**
+
 - `options.jobId` - The ID of the job to get spans for
 - `options.stepId` - The ID of the step to get spans for
 - `options.filters.name` - Filter by span name (string or array)

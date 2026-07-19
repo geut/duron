@@ -1,9 +1,10 @@
+import './index.css'
+
 import { StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 
 import type { DuronDashboardProps } from './DuronDashboard'
 import { DuronDashboard } from './DuronDashboard'
-import './index.css'
 
 export interface InitDuronOptions extends DuronDashboardProps {}
 
@@ -54,9 +55,9 @@ export function initDuron(element: HTMLElement | string, options: InitDuronOptio
   let root: Root | undefined
   if (import.meta.hot) {
     // With hot module reloading, `import.meta.hot.data` is persisted.
-    // biome-ignore lint/suspicious/noAssignInExpressions: all good here
-    const root = (import.meta.hot.data.root ??= createRoot(container))
-    root.render(app)
+    // oxlint-disable-next-line no-cond-assign
+    const hotRoot = (import.meta.hot.data.root ??= createRoot(container))
+    hotRoot.render(app)
   } else {
     // The hot module reloading API is not available in production.
     root = createRoot(container)

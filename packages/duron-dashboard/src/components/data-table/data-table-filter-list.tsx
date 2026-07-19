@@ -9,7 +9,14 @@ import { DataTableRangeFilter } from '@/components/data-table/data-table-range-f
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import {
   Faceted,
   FacetedBadgeList,
@@ -23,8 +30,20 @@ import {
 } from '@/components/ui/faceted'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sortable, SortableContent, SortableItem, SortableItemHandle, SortableOverlay } from '@/components/ui/sortable'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Sortable,
+  SortableContent,
+  SortableItem,
+  SortableItemHandle,
+  SortableOverlay,
+} from '@/components/ui/sortable'
 import { dataTableConfig } from '@/config/data-table'
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { getDefaultFilterOperator, getFilterOperators } from '@/lib/data-table'
@@ -141,7 +160,11 @@ export function DataTableFilterList<TData>({
         return
       }
 
-      if (event.key.toLowerCase() === FILTER_SHORTCUT_KEY && (event.ctrlKey || event.metaKey) && event.shiftKey) {
+      if (
+        event.key.toLowerCase() === FILTER_SHORTCUT_KEY &&
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey
+      ) {
         event.preventDefault()
         setOpen((prev) => !prev)
       }
@@ -188,8 +211,13 @@ export function DataTableFilterList<TData>({
             <h4 id={labelId} className="font-medium leading-none">
               {filters.length > 0 ? 'Filters' : 'No filters applied'}
             </h4>
-            <p id={descriptionId} className={cn('text-muted-foreground text-sm', filters.length > 0 && 'sr-only')}>
-              {filters.length > 0 ? 'Modify filters to refine your rows.' : 'Add filters to refine your rows.'}
+            <p
+              id={descriptionId}
+              className={cn('text-muted-foreground text-sm', filters.length > 0 && 'sr-only')}
+            >
+              {filters.length > 0
+                ? 'Modify filters to refine your rows.'
+                : 'Add filters to refine your rows.'}
             </p>
           </div>
           {filters.length > 0 ? (
@@ -244,7 +272,10 @@ interface DataTableFilterItemProps<TData> {
   joinOperator: JoinOperator
   setJoinOperator: (value: JoinOperator) => void
   columns: Column<TData>[]
-  onFilterUpdate: (filterId: string, updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>) => void
+  onFilterUpdate: (
+    filterId: string,
+    updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>,
+  ) => void
   onFilterRemove: (filterId: string) => void
 }
 
@@ -262,7 +293,7 @@ function DataTableFilterItem<TData>({
   const [showOperatorSelector, setShowOperatorSelector] = React.useState(false)
   const [showValueSelector, setShowValueSelector] = React.useState(false)
 
-  const column = columns.find((column) => column.id === filter.id)
+  const column = columns.find((col) => col.id === filter.id)
 
   const joinOperatorListboxId = `${filterItemId}-join-operator-listbox`
   const fieldListboxId = `${filterItemId}-field-listbox`
@@ -294,12 +325,20 @@ function DataTableFilterItem<TData>({
 
   return (
     <SortableItem value={filter.filterId} asChild={true}>
-      <li id={filterItemId} tabIndex={-1} className="flex items-center gap-2" onKeyDown={onItemKeyDown}>
+      <li
+        id={filterItemId}
+        tabIndex={-1}
+        className="flex items-center gap-2"
+        onKeyDown={onItemKeyDown}
+      >
         <div className="min-w-[72px] text-center">
           {index === 0 ? (
             <span className="text-muted-foreground text-sm">Where</span>
           ) : index === 1 ? (
-            <Select value={joinOperator} onValueChange={(value: JoinOperator) => setJoinOperator(value)}>
+            <Select
+              value={joinOperator}
+              onValueChange={(value: JoinOperator) => setJoinOperator(value)}
+            >
               <SelectTrigger
                 aria-label="Select join operator"
                 aria-controls={joinOperatorListboxId}
@@ -312,9 +351,9 @@ function DataTableFilterItem<TData>({
                 position="popper"
                 className="min-w-(--radix-select-trigger-width) lowercase"
               >
-                {dataTableConfig.joinOperators.map((joinOperator) => (
-                  <SelectItem key={joinOperator} value={joinOperator}>
-                    {joinOperator}
+                {dataTableConfig.joinOperators.map((op) => (
+                  <SelectItem key={op} value={op}>
+                    {op}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -332,7 +371,8 @@ function DataTableFilterItem<TData>({
               className="w-32 justify-between rounded font-normal"
             >
               <span className="truncate">
-                {columns.find((column) => column.id === filter.id)?.columnDef.meta?.label ?? 'Select field'}
+                {columns.find((col) => col.id === filter.id)?.columnDef.meta?.label ??
+                  'Select field'}
               </span>
               <ChevronsUpDown className="opacity-50" />
             </Button>
@@ -343,23 +383,28 @@ function DataTableFilterItem<TData>({
               <CommandList>
                 <CommandEmpty>No fields found.</CommandEmpty>
                 <CommandGroup>
-                  {columns.map((column) => (
+                  {columns.map((col) => (
                     <CommandItem
-                      key={column.id}
-                      value={column.id}
+                      key={col.id}
+                      value={col.id}
                       onSelect={(value) => {
                         onFilterUpdate(filter.filterId, {
                           id: value as Extract<keyof TData, string>,
-                          variant: column.columnDef.meta?.variant ?? 'text',
-                          operator: getDefaultFilterOperator(column.columnDef.meta?.variant ?? 'text'),
+                          variant: col.columnDef.meta?.variant ?? 'text',
+                          operator: getDefaultFilterOperator(col.columnDef.meta?.variant ?? 'text'),
                           value: '',
                         })
 
                         setShowFieldSelector(false)
                       }}
                     >
-                      <span className="truncate">{column.columnDef.meta?.label}</span>
-                      <Check className={cn('ml-auto', column.id === filter.id ? 'opacity-100' : 'opacity-0')} />
+                      <span className="truncate">{col.columnDef.meta?.label}</span>
+                      <Check
+                        className={cn(
+                          'ml-auto',
+                          col.id === filter.id ? 'opacity-100' : 'opacity-0',
+                        )}
+                      />
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -378,7 +423,10 @@ function DataTableFilterItem<TData>({
             })
           }
         >
-          <SelectTrigger aria-controls={operatorListboxId} className="h-8 w-32 rounded lowercase data-size:h-8">
+          <SelectTrigger
+            aria-controls={operatorListboxId}
+            className="h-8 w-32 rounded lowercase data-size:h-8"
+          >
             <div className="truncate">
               <SelectValue placeholder={filter.operator} />
             </div>
@@ -434,7 +482,10 @@ function onFilterInputRender<TData>({
   inputId: string
   column: Column<TData>
   columnMeta?: ColumnMeta<TData, unknown>
-  onFilterUpdate: (filterId: string, updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>) => void
+  onFilterUpdate: (
+    filterId: string,
+    updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>,
+  ) => void
   showValueSelector: boolean
   setShowValueSelector: (value: boolean) => void
 }) {
@@ -454,9 +505,17 @@ function onFilterInputRender<TData>({
     case 'text':
     case 'number':
     case 'range': {
-      if ((filter.variant === 'range' && filter.operator === 'isBetween') || filter.operator === 'isBetween') {
+      if (
+        (filter.variant === 'range' && filter.operator === 'isBetween') ||
+        filter.operator === 'isBetween'
+      ) {
         return (
-          <DataTableRangeFilter filter={filter} column={column} inputId={inputId} onFilterUpdate={onFilterUpdate} />
+          <DataTableRangeFilter
+            filter={filter}
+            column={column}
+            inputId={inputId}
+            onFilterUpdate={onFilterUpdate}
+          />
         )
       }
 
@@ -565,7 +624,9 @@ function onFilterInputRender<TData>({
                   <FacetedItem key={option.value} value={option.value}>
                     {option.icon && <option.icon />}
                     <span>{option.label}</span>
-                    {option.count && <span className="ml-auto font-mono text-xs">{option.count}</span>}
+                    {option.count && (
+                      <span className="ml-auto font-mono text-xs">{option.count}</span>
+                    )}
                   </FacetedItem>
                 ))}
               </FacetedGroup>
@@ -628,7 +689,12 @@ function onFilterInputRender<TData>({
                 }
                 onSelect={(date) => {
                   onFilterUpdate(filter.filterId, {
-                    value: date ? [(date.from?.getTime() ?? '').toString(), (date.to?.getTime() ?? '').toString()] : [],
+                    value: date
+                      ? [
+                          (date.from?.getTime() ?? '').toString(),
+                          (date.to?.getTime() ?? '').toString(),
+                        ]
+                      : [],
                   })
                 }}
               />

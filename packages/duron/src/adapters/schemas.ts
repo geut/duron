@@ -74,7 +74,11 @@ export const JobStepSchema = z.object({
   delayedMs: z.coerce.number().nullable().default(null),
   historyFailedAttempts: z.record(
     z.string(),
-    z.object({ failedAt: DateSchema, error: SerializableErrorSchema, delayedMs: z.coerce.number() }),
+    z.object({
+      failedAt: DateSchema,
+      error: SerializableErrorSchema,
+      delayedMs: z.coerce.number(),
+    }),
   ),
   createdAt: DateSchema,
   updatedAt: DateSchema,
@@ -275,7 +279,10 @@ export const JobIdResultSchema = z.union([z.string(), z.null()])
 export const BooleanResultSchema = z.boolean()
 export const NumberResultSchema = z.number()
 export const JobsArrayResultSchema = z.array(JobSchema)
-export const CreateOrRecoverJobStepResultNullableSchema = z.union([CreateOrRecoverJobStepResultSchema, z.null()])
+export const CreateOrRecoverJobStepResultNullableSchema = z.union([
+  CreateOrRecoverJobStepResultSchema,
+  z.null(),
+])
 
 export const GetJobsResultSchema = z.object({
   jobs: z.array(JobSchema),
@@ -324,7 +331,13 @@ export const JobStepStatusResultSchema = z.object({
  * 3 = PRODUCER - Producer of async message
  * 4 = CONSUMER - Consumer of async message
  */
-export const SpanKindSchema = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
+export const SpanKindSchema = z.union([
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+])
 
 /**
  * SpanStatusCode values (OpenTelemetry standard):

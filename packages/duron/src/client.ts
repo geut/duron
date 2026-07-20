@@ -393,6 +393,9 @@ export class Client<
     }>
   >()
   #jobStatusListenerSetup = false
+  #pushListenerSetup = false
+  #jobStatusListener: ((event: { jobId: string; status: JobStatus | 'retried'; clientId: string }) => Promise<void>) | null = null
+  #pushListener: (() => void) | null = null
 
   // ============================================================================
   // Constructor
@@ -1250,6 +1253,18 @@ export class Client<
         this.#pullInterval = null
       }
 
+      // Remove event listeners BEFORE stopping database to prevent use-after-close
+      if (this.#jobStatusListener) {
+        this.#database.off('job-status-changed', this.#jobStatusListener)
+        this.#jobStatusListener = null
+        this.#jobStatusListenerSetup = false
+      }
+      if (this.#pushListener) {
+        this.#database.off('job-available', this.#pushListener)
+        this.#pushListener = null
+        this.#pushListenerSetup = false
+      }
+
       // Clean up all pending job waits
       for (const waits of this.#pendingJobWaits.values()) {
         for (const wait of waits) {
@@ -1304,47 +1319,46 @@ export class Client<
 
     this.#jobStatusListenerSetup = true
 
-    this.#database.on(
-      'job-status-changed',
-      async (event: { jobId: string; status: JobStatus | 'retried'; clientId: string }) => {
-        const pendingWaits = this.#pendingJobWaits.get(event.jobId)
-        if (!pendingWaits || pendingWaits.size === 0) {
-          return
-        }
+    this.#jobStatusListener = async (event: { jobId: string; status: JobStatus | 'retried'; clientId: string }) => {
+      const pendingWaits = this.#pendingJobWaits.get(event.jobId)
+      if (!pendingWaits || pendingWaits.size === 0) {
+        return
+      }
 
-        // Fetch the job once for all pending waits
-        const job = await this.getJobById(event.jobId)
+      // Fetch the job once for all pending waits
+      const job = await this.getJobById(event.jobId)
 
-        // Transform to JobResult
-        const result: JobResult | null = job
-          ? {
-              id: job.id,
-              actionName: job.actionName,
-              status: job.status,
-              groupKey: job.groupKey,
-              description: job.description,
-              input: job.input,
-              output: job.output,
-              error: job.error,
-            }
-          : null
-
-        // Resolve all pending waits for this job
-        const waitsToResolve = Array.from(pendingWaits)
-        this.#pendingJobWaits.delete(event.jobId)
-
-        for (const wait of waitsToResolve) {
-          // Clean up timeout and abort signal
-          if (wait.timeoutId) {
-            clearTimeout(wait.timeoutId)
+      // Transform to JobResult
+      const result: JobResult | null = job
+        ? {
+            id: job.id,
+            actionName: job.actionName,
+            status: job.status,
+            groupKey: job.groupKey,
+            description: job.description,
+            input: job.input,
+            output: job.output,
+            error: job.error,
           }
-          if (wait.signal && wait.abortHandler) {
-            wait.signal.removeEventListener('abort', wait.abortHandler)
-          }
-          wait.resolve(result)
+        : null
+
+      // Resolve all pending waits for this job
+      const waitsToResolve = Array.from(pendingWaits)
+      this.#pendingJobWaits.delete(event.jobId)
+
+      for (const wait of waitsToResolve) {
+        // Clean up timeout and abort signal
+        if (wait.timeoutId) {
+          clearTimeout(wait.timeoutId)
         }
-      },
-    )
+        if (wait.signal && wait.abortHandler) {
+          wait.signal.removeEventListener('abort', wait.abortHandler)
+        }
+        wait.resolve(result)
+      }
+    }
+
+    this.#database.on('job-status-changed', this.#jobStatusListener)
   }
 
   /**
@@ -1465,12 +1479,20 @@ export class Client<
    * Listens for 'job-available' events and fetches jobs when notified.
    */
   #setupPushListener() {
-    this.#database.on('job-available', async () => {
+    if (this.#pushListenerSetup) {
+      return
+    }
+
+    this.#pushListenerSetup = true
+
+    this.#pushListener = () => {
       this.fetch({
         batchSize: 1,
       }).catch((error) => {
         this.#logger.error({ error }, '[Duron] [PushListener] Error fetching job')
       })
-    })
+    }
+
+    this.#database.on('job-available', this.#pushListener)
   }
 }

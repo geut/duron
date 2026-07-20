@@ -149,24 +149,6 @@ export interface AdapterEvents {
       jobId: string
     },
   ]
-  'step-status-changed': [
-    {
-      jobId: string
-      stepId: string
-      status: StepStatus
-      error: any | null
-      clientId: string
-    },
-  ]
-  'step-delayed': [
-    {
-      jobId: string
-      stepId: string
-      delayedMs: number
-      error: any
-      clientId: string
-    },
-  ]
 }
 
 // ============================================================================
@@ -556,21 +538,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
       await this.start()
       const parsedOptions = CompleteJobStepOptionsSchema.parse(options)
       const result = await this._completeJobStep(parsedOptions)
-      const success = BooleanResultSchema.parse(result)
-      if (success) {
-        // Fetch jobId for notification
-        const step = await this._getJobStepById(parsedOptions.stepId)
-        if (step) {
-          await this._notify('step-status-changed', {
-            jobId: step.jobId,
-            stepId: parsedOptions.stepId,
-            status: STEP_STATUS_COMPLETED,
-            error: null,
-            clientId: this.id,
-          })
-        }
-      }
-      return success
+      return BooleanResultSchema.parse(result)
     } catch (error) {
       this.#logger?.error(error, 'Error in Adapter.completeJobStep()')
       throw error
@@ -587,21 +555,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
       await this.start()
       const parsedOptions = FailJobStepOptionsSchema.parse(options)
       const result = await this._failJobStep(parsedOptions)
-      const success = BooleanResultSchema.parse(result)
-      if (success) {
-        // Fetch jobId for notification
-        const step = await this._getJobStepById(parsedOptions.stepId)
-        if (step) {
-          await this._notify('step-status-changed', {
-            jobId: step.jobId,
-            stepId: parsedOptions.stepId,
-            status: STEP_STATUS_FAILED,
-            error: parsedOptions.error,
-            clientId: this.id,
-          })
-        }
-      }
-      return success
+      return BooleanResultSchema.parse(result)
     } catch (error) {
       this.#logger?.error(error, 'Error in Adapter.failJobStep()')
       throw error
@@ -618,21 +572,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
       await this.start()
       const parsedOptions = DelayJobStepOptionsSchema.parse(options)
       const result = await this._delayJobStep(parsedOptions)
-      const success = BooleanResultSchema.parse(result)
-      if (success) {
-        // Fetch jobId for notification
-        const step = await this._getJobStepById(parsedOptions.stepId)
-        if (step) {
-          await this._notify('step-delayed', {
-            jobId: step.jobId,
-            stepId: parsedOptions.stepId,
-            delayedMs: parsedOptions.delayMs,
-            error: parsedOptions.error,
-            clientId: this.id,
-          })
-        }
-      }
-      return success
+      return BooleanResultSchema.parse(result)
     } catch (error) {
       this.#logger?.error(error, 'Error in Adapter.delayJobStep()')
       throw error
@@ -649,21 +589,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
       await this.start()
       const parsedOptions = CancelJobStepOptionsSchema.parse(options)
       const result = await this._cancelJobStep(parsedOptions)
-      const success = BooleanResultSchema.parse(result)
-      if (success) {
-        // Fetch jobId for notification
-        const step = await this._getJobStepById(parsedOptions.stepId)
-        if (step) {
-          await this._notify('step-status-changed', {
-            jobId: step.jobId,
-            stepId: parsedOptions.stepId,
-            status: STEP_STATUS_CANCELLED,
-            error: null,
-            clientId: this.id,
-          })
-        }
-      }
-      return success
+      return BooleanResultSchema.parse(result)
     } catch (error) {
       this.#logger?.error(error, 'Error in Adapter.cancelJobStep()')
       throw error

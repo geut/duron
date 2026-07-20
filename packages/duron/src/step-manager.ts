@@ -915,8 +915,9 @@ class ActionContext<
         error: () => 'Error parsing action input',
         reportInput: true,
       })
+    } else {
+      this.#input = job.input ?? {}
     }
-    this.#input = job.input ?? {}
     this.step = this.step.bind(this)
     this.run = this.run.bind(this)
     // Set the run function factory so inline steps can call step definitions with correct parent

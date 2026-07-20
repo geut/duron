@@ -3,6 +3,7 @@
 export default function waitForAbort(signal: AbortSignal) {
   let done = false
   let globalResolve: ((value: void | PromiseLike<void>) => void) | null = null
+  let abortListener: (() => void) | null = null
 
   const promise = new Promise((resolve, reject) => {
     if (done) {
@@ -18,10 +19,11 @@ export default function waitForAbort(signal: AbortSignal) {
 
     globalResolve = resolve
 
-    signal.addEventListener('abort', () => {
+    abortListener = () => {
       done = true
       reject(signal.reason)
-    })
+    }
+    signal.addEventListener('abort', abortListener)
   })
 
   return {
@@ -31,6 +33,13 @@ export default function waitForAbort(signal: AbortSignal) {
         return
       }
 
+      // Remove the abort listener to prevent memory leak
+      if (abortListener) {
+        signal.removeEventListener('abort', abortListener)
+        abortListener = null
+      }
+
+      // Call resolve asynchronously to avoid microtask issues
       setTimeout(() => {
         globalResolve?.()
       }, 0)

@@ -398,6 +398,7 @@ Findings are ordered by **leverage = impact ÷ effort, discounted by confidence 
 
 ### 30. `PruneArchiveOptions.olderThan` type mismatch
 
+- **Status:** ✅ ALREADY FIXED — schema already uses `z.union([z.string(), z.date(), z.number()])`
 - **Origin:** `[NEW]`
 - **Category:** Tech Debt
 - **Evidence:** `src/adapters/schemas.ts` — `PruneArchiveOptionsSchema.olderThan: z.string()`. `src/adapters/postgres/base.ts:2357-2380` — `_parseOlderThan` handles `string | Date | number`.

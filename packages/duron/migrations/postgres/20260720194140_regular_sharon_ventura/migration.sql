@@ -5,7 +5,7 @@ CREATE TABLE "duron"."job_steps_active" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 	"job_id" uuid NOT NULL,
 	"parent_step_id" uuid,
-	"branch" boolean DEFAULT false NOT NULL,
+	"parallel" boolean DEFAULT false NOT NULL,
 	"name" text NOT NULL,
 	"status" text DEFAULT 'active' NOT NULL,
 	"output" jsonb,
@@ -28,7 +28,7 @@ CREATE TABLE "duron"."job_steps_archive" (
 	"id" uuid PRIMARY KEY,
 	"job_id" uuid NOT NULL,
 	"parent_step_id" uuid,
-	"branch" boolean DEFAULT false NOT NULL,
+	"parallel" boolean DEFAULT false NOT NULL,
 	"name" text NOT NULL,
 	"status" text DEFAULT 'active' NOT NULL,
 	"output" jsonb,
@@ -115,26 +115,16 @@ CREATE INDEX "idx_job_steps_active_status" ON "duron"."job_steps_active" ("statu
 CREATE INDEX "idx_job_steps_active_name" ON "duron"."job_steps_active" ("name");--> statement-breakpoint
 CREATE INDEX "idx_job_steps_active_expires_at" ON "duron"."job_steps_active" ("expires_at");--> statement-breakpoint
 CREATE INDEX "idx_job_steps_active_parent_step_id" ON "duron"."job_steps_active" ("parent_step_id");--> statement-breakpoint
-CREATE INDEX "idx_job_steps_active_job_status" ON "duron"."job_steps_active" ("job_id","status");--> statement-breakpoint
-CREATE INDEX "idx_job_steps_active_job_name" ON "duron"."job_steps_active" ("job_id","name");--> statement-breakpoint
-CREATE INDEX "idx_job_steps_active_output_fts" ON "duron"."job_steps_active" USING gin (to_tsvector('english', "output"::text));--> statement-breakpoint
 CREATE INDEX "idx_job_steps_archive_job_id" ON "duron"."job_steps_archive" ("job_id");--> statement-breakpoint
 CREATE INDEX "idx_job_steps_archive_job_finished_at" ON "duron"."job_steps_archive" ("job_finished_at");--> statement-breakpoint
 CREATE INDEX "idx_job_steps_archive_name" ON "duron"."job_steps_archive" ("name");--> statement-breakpoint
 CREATE INDEX "idx_jobs_active_action_name" ON "duron"."jobs_active" ("action_name");--> statement-breakpoint
 CREATE INDEX "idx_jobs_active_status" ON "duron"."jobs_active" ("status");--> statement-breakpoint
 CREATE INDEX "idx_jobs_active_group_key" ON "duron"."jobs_active" ("group_key");--> statement-breakpoint
-CREATE INDEX "idx_jobs_active_description" ON "duron"."jobs_active" ("description");--> statement-breakpoint
-CREATE INDEX "idx_jobs_active_started_at" ON "duron"."jobs_active" ("started_at");--> statement-breakpoint
 CREATE INDEX "idx_jobs_active_expires_at" ON "duron"."jobs_active" ("expires_at");--> statement-breakpoint
 CREATE INDEX "idx_jobs_active_client_id" ON "duron"."jobs_active" ("client_id");--> statement-breakpoint
 CREATE INDEX "idx_jobs_active_checksum" ON "duron"."jobs_active" ("checksum");--> statement-breakpoint
-CREATE INDEX "idx_jobs_active_concurrency_limit" ON "duron"."jobs_active" ("concurrency_limit");--> statement-breakpoint
-CREATE INDEX "idx_jobs_active_concurrency_step_limit" ON "duron"."jobs_active" ("concurrency_step_limit");--> statement-breakpoint
-CREATE INDEX "idx_jobs_active_action_status" ON "duron"."jobs_active" ("action_name","status");--> statement-breakpoint
 CREATE INDEX "idx_jobs_active_action_group" ON "duron"."jobs_active" ("action_name","group_key");--> statement-breakpoint
-CREATE INDEX "idx_jobs_active_input_fts" ON "duron"."jobs_active" USING gin (to_tsvector('english', "input"::text));--> statement-breakpoint
-CREATE INDEX "idx_jobs_active_output_fts" ON "duron"."jobs_active" USING gin (to_tsvector('english', "output"::text));--> statement-breakpoint
 CREATE INDEX "idx_jobs_archive_group_key" ON "duron"."jobs_archive" ("group_key");--> statement-breakpoint
 CREATE INDEX "idx_jobs_archive_action_name" ON "duron"."jobs_archive" ("action_name");--> statement-breakpoint
 CREATE INDEX "idx_jobs_archive_finished_at" ON "duron"."jobs_archive" ("finished_at");--> statement-breakpoint
@@ -146,11 +136,7 @@ CREATE INDEX "idx_spans_span_id" ON "duron"."spans" ("span_id");--> statement-br
 CREATE INDEX "idx_spans_job_id" ON "duron"."spans" ("job_id");--> statement-breakpoint
 CREATE INDEX "idx_spans_step_id" ON "duron"."spans" ("step_id");--> statement-breakpoint
 CREATE INDEX "idx_spans_name" ON "duron"."spans" ("name");--> statement-breakpoint
-CREATE INDEX "idx_spans_kind" ON "duron"."spans" ("kind");--> statement-breakpoint
-CREATE INDEX "idx_spans_status_code" ON "duron"."spans" ("status_code");--> statement-breakpoint
 CREATE INDEX "idx_spans_job_step" ON "duron"."spans" ("job_id","step_id");--> statement-breakpoint
 CREATE INDEX "idx_spans_trace_parent" ON "duron"."spans" ("trace_id","parent_span_id");--> statement-breakpoint
-CREATE INDEX "idx_spans_attributes" ON "duron"."spans" USING gin ("attributes");--> statement-breakpoint
-CREATE INDEX "idx_spans_events" ON "duron"."spans" USING gin ("events");--> statement-breakpoint
 ALTER TABLE "duron"."job_steps_active" ADD CONSTRAINT "job_steps_active_job_id_jobs_active_id_fkey" FOREIGN KEY ("job_id") REFERENCES "duron"."jobs_active"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "duron"."job_steps_archive" ADD CONSTRAINT "job_steps_archive_job_id_jobs_archive_id_fkey" FOREIGN KEY ("job_id") REFERENCES "duron"."jobs_archive"("id") ON DELETE CASCADE;

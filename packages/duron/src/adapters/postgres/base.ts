@@ -586,26 +586,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
       if (archivedJob.length > 0) {
         // Restore job from archive to active
         const job = archivedJob[0]!
-        await tx.insert(this.tables.jobsActiveTable).values({
-          id: job.id,
-          action_name: job.action_name,
-          group_key: job.group_key,
-          description: job.description,
-          status: job.status,
-          checksum: job.checksum,
-          input: job.input,
-          output: job.output,
-          error: job.error,
-          timeout_ms: job.timeout_ms,
-          expires_at: job.expires_at,
-          started_at: job.started_at,
-          finished_at: job.finished_at,
-          client_id: job.client_id,
-          concurrency_limit: job.concurrency_limit,
-          concurrency_step_limit: job.concurrency_step_limit,
-          created_at: job.created_at,
-          updated_at: job.updated_at,
-        })
+        await tx.insert(this.tables.jobsActiveTable).values({ ...job })
 
         // Restore steps from archive to active
         const archivedSteps = await tx
@@ -615,26 +596,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
 
         if (archivedSteps.length > 0) {
           await tx.insert(this.tables.jobStepsActiveTable).values(
-            archivedSteps.map((s) => ({
-              id: s.id,
-              job_id: s.job_id,
-              parent_step_id: s.parent_step_id,
-              parallel: s.parallel,
-              name: s.name,
-              status: s.status,
-              output: s.output,
-              error: s.error,
-              started_at: s.started_at,
-              finished_at: s.finished_at,
-              timeout_ms: s.timeout_ms,
-              expires_at: s.expires_at,
-              retries_limit: s.retries_limit,
-              retries_count: s.retries_count,
-              delayed_ms: s.delayed_ms,
-              history_failed_attempts: s.history_failed_attempts,
-              created_at: s.created_at,
-              updated_at: s.updated_at,
-            })),
+            archivedSteps.map((s) => ({ ...s })),
           )
         }
 

@@ -813,12 +813,20 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
    *
    * @returns Promise resolving to the number of jobs deleted
    */
+  /**
+   * Internal method to delete multiple jobs using the same filters as getJobs.
+   * Only operates on active (non-running) jobs. Archive jobs are not affected.
+   * Active jobs (status='active') are always excluded to prevent data loss.
+   *
+   * @returns Promise resolving to the number of jobs deleted
+   */
   protected async _deleteJobs(options?: DeleteJobsOptions): Promise<number> {
     const jobsTable = this.tables.jobsActiveTable
     const filters = options?.filters ?? {}
     const schemaName = this.schema
 
     // Always exclude active jobs from bulk deletion to prevent data loss
+    // Note: This only deletes from jobs_active, not jobs_archive
     const where = and(
       this._buildJobsWhereClause(filters),
       ne(jobsTable.status, JOB_STATUS_ACTIVE),

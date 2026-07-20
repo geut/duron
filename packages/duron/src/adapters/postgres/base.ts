@@ -174,13 +174,13 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
   /**
    * Generate a consistent advisory lock key from the schema name.
    */
+  /**
+   * Returns a fixed advisory lock key for the prune scheduler.
+   * Uses a fixed key (42) since Duron is a single-schema system.
+   * Multiple schemas would each get their own lock via the schema-prefixed table names.
+   */
   private _advisoryLockKey(): number {
-    let hash = 0
-    for (let i = 0; i < this.schema.length; i++) {
-      hash = (hash << 5) - hash + this.schema.charCodeAt(i)
-      hash |= 0
-    }
-    return Math.abs(hash)
+    return 42
   }
 
   /**

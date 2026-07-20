@@ -90,7 +90,7 @@ export interface AdapterOptions<Connection> {
   pruneArchive?: PruneSchedulerConfig
 }
 
-export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> extends Adapter {
+export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> extends Adapter {
   protected connection: Connection
   protected db!: Database
   protected tables: Schema
@@ -127,9 +127,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   /**
    * Initialize the database connection and Drizzle instance.
    */
-  protected _initDb() {
-    throw new Error('Not implemented')
-  }
+  protected abstract _initDb(): void
 
   // ============================================================================
   // Lifecycle Methods

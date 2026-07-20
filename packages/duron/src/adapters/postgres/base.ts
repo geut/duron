@@ -1422,57 +1422,68 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
    */
   protected async _getJobSteps(options: GetJobStepsOptions): Promise<GetJobStepsResult> {
     const { jobId, search } = options
-
-    // Determine if job is in active or archive table
-    const jobInActive = await this.db
-      .select({ id: this.tables.jobsActiveTable.id })
-      .from(this.tables.jobsActiveTable)
-      .where(eq(this.tables.jobsActiveTable.id, jobId))
-      .limit(1)
-
-    const isActive = jobInActive.length > 0
-    const jobStepsTable = isActive
-      ? this.tables.jobStepsActiveTable
-      : this.tables.jobStepsArchiveTable
-
+    const schemaName = this.schema
     const fuzzySearch = search?.trim()
 
-    const where = and(
-      eq(jobStepsTable.job_id, jobId),
-      fuzzySearch && fuzzySearch.length > 0
-        ? or(
-            ilike(jobStepsTable.name, `%${fuzzySearch}%`),
-            sql`to_tsvector('english', ${jobStepsTable.output}::text) @@ plainto_tsquery('english', ${fuzzySearch})`,
-          )
-        : undefined,
-      options.updatedAfter
-        ? sql`date_trunc('milliseconds', ${jobStepsTable.updated_at}) > ${options.updatedAfter.toISOString()}::timestamptz`
-        : undefined,
+    // Single query using UNION ALL to query both active and archive tables
+    // Active table lacks job_finished_at, so we add NULL as placeholder
+    const steps = this._map(
+      await this.db.execute<JobStep>(sql`
+        SELECT * FROM (
+          SELECT id,
+                 job_id as "jobId",
+                 parent_step_id as "parentStepId",
+                 parallel,
+                 name,
+                 status,
+                 output,
+                 error,
+                 started_at as "startedAt",
+                 finished_at as "finishedAt",
+                 timeout_ms as "timeoutMs",
+                 expires_at as "expiresAt",
+                 retries_limit as "retriesLimit",
+                 retries_count as "retriesCount",
+                 delayed_ms as "delayedMs",
+                 history_failed_attempts as "historyFailedAttempts",
+                 created_at as "createdAt",
+                 updated_at as "updatedAt",
+                 NULL as "jobFinishedAt"
+          FROM ${sql.identifier(schemaName)}.job_steps_active
+          WHERE job_id = ${jobId}
+          UNION ALL
+          SELECT id,
+                 job_id as "jobId",
+                 parent_step_id as "parentStepId",
+                 parallel,
+                 name,
+                 status,
+                 output,
+                 error,
+                 started_at as "startedAt",
+                 finished_at as "finishedAt",
+                 timeout_ms as "timeoutMs",
+                 expires_at as "expiresAt",
+                 retries_limit as "retriesLimit",
+                 retries_count as "retriesCount",
+                 delayed_ms as "delayedMs",
+                 history_failed_attempts as "historyFailedAttempts",
+                 created_at as "createdAt",
+                 updated_at as "updatedAt",
+                 job_finished_at as "jobFinishedAt"
+          FROM ${sql.identifier(schemaName)}.job_steps_archive
+          WHERE job_id = ${jobId}
+        ) s
+        ${fuzzySearch && fuzzySearch.length > 0
+          ? sql`WHERE s.name ILIKE ${`%${fuzzySearch}%`}
+              OR to_tsvector('english', s.output::text) @@ plainto_tsquery('english', ${fuzzySearch})`
+          : sql``}
+        ${options.updatedAfter
+          ? sql`${fuzzySearch && fuzzySearch.length > 0 ? sql`AND` : sql`WHERE`} date_trunc('milliseconds', s."updatedAt") > ${options.updatedAfter.toISOString()}::timestamptz`
+          : sql``}
+        ORDER BY s."createdAt" ASC
+      `),
     )
-
-    const steps = await this.db
-      .select({
-        id: jobStepsTable.id,
-        jobId: jobStepsTable.job_id,
-        parentStepId: jobStepsTable.parent_step_id,
-        parallel: jobStepsTable.parallel,
-        name: jobStepsTable.name,
-        status: jobStepsTable.status,
-        error: jobStepsTable.error,
-        startedAt: jobStepsTable.started_at,
-        finishedAt: jobStepsTable.finished_at,
-        timeoutMs: jobStepsTable.timeout_ms,
-        expiresAt: jobStepsTable.expires_at,
-        retriesLimit: jobStepsTable.retries_limit,
-        retriesCount: jobStepsTable.retries_count,
-        delayedMs: jobStepsTable.delayed_ms,
-        historyFailedAttempts: jobStepsTable.history_failed_attempts,
-        createdAt: jobStepsTable.created_at,
-        updatedAt: jobStepsTable.updated_at,
-      })
-      .from(jobStepsTable)
-      .where(where)
-      .orderBy(asc(jobStepsTable.created_at))
 
     return {
       steps,

@@ -401,17 +401,7 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
     return this.db.transaction(async (tx) => {
       const finishedAt = new Date()
 
-      // 1. Update all steps to cancelled status
-      await tx
-        .update(this.tables.jobStepsActiveTable)
-        .set({
-          status: STEP_STATUS_CANCELLED,
-          finished_at: finishedAt,
-          updated_at: finishedAt,
-        })
-        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
-
-      // 2. Check job exists before archiving
+      // 1. Check job exists before updating steps
       const [job] = await tx
         .select()
         .from(this.tables.jobsActiveTable)
@@ -428,6 +418,16 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
       if (!job) {
         return false
       }
+
+      // 2. Update all steps to cancelled status
+      await tx
+        .update(this.tables.jobStepsActiveTable)
+        .set({
+          status: STEP_STATUS_CANCELLED,
+          finished_at: finishedAt,
+          updated_at: finishedAt,
+        })
+        .where(eq(this.tables.jobStepsActiveTable.job_id, jobId))
 
       // 3. Insert job into archive FIRST (required for FK constraints)
       await tx.insert(this.tables.jobsArchiveTable).values({

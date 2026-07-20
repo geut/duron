@@ -533,6 +533,9 @@ export class StepManager {
             },
             '[StepManager] Step recovered (already completed)',
           )
+          // End the span and clean up to prevent memory leak
+          stepSpan.end()
+          this.#stepSpans.delete(step.id)
           return step.output as TResult
         } else if (step.status === STEP_STATUS_FAILED) {
           throw new NonRetriableError(

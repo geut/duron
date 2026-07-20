@@ -957,44 +957,24 @@ export class Client<
   ): Promise<JobResult | null> {
     await this.start()
 
-    // First, check if the job already exists and is in a terminal state
-    const existingJobStatus = await this.getJobStatus(jobId)
-    if (existingJobStatus) {
-      const terminalStatuses: JobStatus[] = [
-        JOB_STATUS_COMPLETED,
-        JOB_STATUS_FAILED,
-        JOB_STATUS_CANCELLED,
-      ]
-      if (terminalStatuses.includes(existingJobStatus.status)) {
-        const job = await this.getJobById(jobId)
-        if (!job) {
-          return null
-        }
-        return {
-          id: job.id,
-          actionName: job.actionName,
-          status: job.status,
-          groupKey: job.groupKey,
-          description: job.description,
-          input: job.input,
-          output: job.output,
-          error: job.error,
-        }
-      }
-    }
-
     // Set up the shared event listener if not already set up
     this.#setupJobStatusListener()
 
+    // Register the wait BEFORE checking status to prevent TOCTOU race
+    // If the job completes between status check and wait registration,
+    // the NOTIFY would be missed
+    let timeoutId: NodeJS.Timeout | undefined
+    let abortHandler: (() => void) | undefined
+    let registeredResolve: ((result: JobResult | null) => void) | undefined
+
     return new Promise<JobResult | null>((resolve) => {
+      registeredResolve = resolve
+
       // Check if already aborted before setting up wait
       if (options?.signal?.aborted) {
         resolve(null)
         return
       }
-
-      let timeoutId: NodeJS.Timeout | undefined
-      let abortHandler: (() => void) | undefined
 
       // Set up timeout if provided
       if (options?.timeout) {
@@ -1013,7 +993,7 @@ export class Client<
         options.signal.addEventListener('abort', abortHandler)
       }
 
-      // Add this wait request to the pending waits
+      // Add this wait request to the pending waits BEFORE checking status
       if (!this.#pendingJobWaits.has(jobId)) {
         this.#pendingJobWaits.set(jobId, new Set())
       }
@@ -1022,6 +1002,38 @@ export class Client<
         timeoutId,
         signal: options?.signal,
         abortHandler,
+      })
+
+      // Now check if the job is already in a terminal state
+      // If so, remove the wait and resolve immediately
+      this.getJobStatus(jobId).then((existingJobStatus) => {
+        if (existingJobStatus) {
+          const terminalStatuses: JobStatus[] = [
+            JOB_STATUS_COMPLETED,
+            JOB_STATUS_FAILED,
+            JOB_STATUS_CANCELLED,
+          ]
+          if (terminalStatuses.includes(existingJobStatus.status)) {
+            // Job is already terminal, remove the wait and resolve
+            this.#removeJobWait(jobId, resolve)
+            this.getJobById(jobId).then((job) => {
+              if (!job) {
+                resolve(null)
+              } else {
+                resolve({
+                  id: job.id,
+                  actionName: job.actionName,
+                  status: job.status,
+                  groupKey: job.groupKey,
+                  description: job.description,
+                  input: job.input,
+                  output: job.output,
+                  error: job.error,
+                })
+              }
+            })
+          }
+        }
       })
     })
   }

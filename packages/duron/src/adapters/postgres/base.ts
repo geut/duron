@@ -925,24 +925,6 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
         WHERE rj.job_rank <= (eg.concurrency_limit - eg.active_count)
         ORDER BY rj.created_at ASC, rj.id ASC
         LIMIT ${batch}
-      ),
-      verify_concurrency AS (
-        -- Double-check concurrency limit after acquiring lock
-        SELECT
-          nj.id,
-          nj.action_name,
-          nj.job_group_key,
-          eg.concurrency_limit,
-          (SELECT COUNT(*)
-          FROM ${this.tables.jobsActiveTable}
-          WHERE action_name = nj.action_name
-            AND group_key = nj.job_group_key
-            AND status = ${JOB_STATUS_ACTIVE}
-            AND (expires_at IS NULL OR expires_at > now())) as current_active
-        FROM next_job nj
-        INNER JOIN eligible_groups eg
-          ON nj.job_group_key = eg.group_key
-          AND nj.action_name = eg.action_name
       )
       UPDATE ${this.tables.jobsActiveTable} j
       SET status = ${JOB_STATUS_ACTIVE},
@@ -950,9 +932,12 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
           expires_at = now() + (timeout_ms || ' milliseconds')::interval,
           client_id = ${this.id},
           updated_at = now()
-      FROM verify_concurrency vc
-      WHERE j.id = vc.id
-        AND vc.current_active < vc.concurrency_limit  -- Final concurrency check using job's concurrency limit
+      FROM next_job nj
+      INNER JOIN eligible_groups eg
+        ON nj.job_group_key = eg.group_key
+        AND nj.action_name = eg.action_name
+      WHERE j.id = nj.id
+        AND eg.active_count < eg.concurrency_limit
       RETURNING
         j.id,
         j.action_name as "actionName",

@@ -254,7 +254,7 @@ export interface BaseOptionsInput {
    * Processes that don't respond within this timeout will have their jobs recovered.
    * Increase this value if your processes may be temporarily unresponsive under load.
    *
-   * @default 5000
+   * @default 500
    */
   processTimeout?: number
 

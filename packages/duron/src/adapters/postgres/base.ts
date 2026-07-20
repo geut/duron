@@ -1212,14 +1212,14 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           ${retriesLimit},
           ${STEP_STATUS_ACTIVE},
           now(),
-          now() + interval '${sql.raw(timeoutMs.toString())} milliseconds',
+          now() + (${timeoutMs} * interval '1 millisecond'),
           0,
           NULL
         WHERE EXISTS (SELECT 1 FROM job_check)
         ON CONFLICT (job_id, name, parent_step_id) DO UPDATE
         SET
           timeout_ms = ${timeoutMs},
-          expires_at = now() + interval '${sql.raw(timeoutMs.toString())} milliseconds',
+          expires_at = now() + (${timeoutMs} * interval '1 millisecond'),
           retries_count = 0,
           retries_limit = ${retriesLimit},
           delayed_ms = NULL,

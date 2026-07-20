@@ -348,11 +348,17 @@ export function serializeError(error: unknown): SerializableError {
   }
 
   if (error instanceof Error) {
+    // Include enumerable properties that aren't already in the result
+    // This preserves custom properties like 'code' from Node.js errors
+    const customProps = Object.fromEntries(
+      Object.entries(error).filter(([key]) => !['name', 'message', 'cause', 'stack'].includes(key)),
+    )
     return {
       name: error.name,
       message: error.message,
       cause: (error as any).cause,
       stack: error.stack,
+      ...customProps,
     }
   }
 

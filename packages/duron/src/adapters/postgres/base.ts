@@ -488,6 +488,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         FROM ${this.tables.jobsArchiveTable} j
         WHERE j.id = ${jobId}
           AND j.status IN (${JOB_STATUS_COMPLETED}, ${JOB_STATUS_CANCELLED}, ${JOB_STATUS_FAILED})
+        FOR UPDATE
       ),
       existing_retry AS (
         -- Check if a retry already exists (a newer job with same checksum, group_key, and input)

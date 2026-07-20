@@ -2547,8 +2547,19 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected async _truncateArchive(): Promise<void> {
     const schemaName = this.schema
     await this.db.execute(sql`TRUNCATE TABLE ${sql.identifier(schemaName)}.jobs_archive CASCADE`)
-    // Note: We do NOT truncate spans here because spans may belong to active jobs.
-    // Spans for archived jobs become orphans until cleaned up by prune operations.
+
+    // Clean up orphan spans (spans whose job no longer exists in active or archive)
+    // After truncation, spans for archived jobs become orphans and need cleanup
+    await this.db.execute(sql`
+      DELETE FROM ${sql.identifier(schemaName)}.spans s
+      WHERE s.job_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_active ja WHERE ja.id = s.job_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_archive ja WHERE ja.id = s.job_id
+        )
+    `)
   }
 
   protected async _getArchiveStats(): Promise<ArchiveStats> {

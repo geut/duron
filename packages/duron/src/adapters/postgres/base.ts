@@ -851,6 +851,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
   protected async _deleteJobs(options?: DeleteJobsOptions): Promise<number> {
     const jobsTable = this.tables.jobsActiveTable
     const filters = options?.filters ?? {}
+    const schemaName = this.schema
 
     // Always exclude active jobs from bulk deletion to prevent data loss
     const where = and(
@@ -859,6 +860,20 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     )
 
     const result = await this.db.delete(jobsTable).where(where).returning({ id: jobsTable.id })
+
+    // Clean up orphan spans (spans whose job no longer exists in active or archive)
+    if (result.length > 0) {
+      await this.db.execute(sql`
+        DELETE FROM ${sql.identifier(schemaName)}.spans s
+        WHERE s.job_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_active ja WHERE ja.id = s.job_id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_archive ja WHERE ja.id = s.job_id
+          )
+      `)
+    }
 
     return result.length
   }

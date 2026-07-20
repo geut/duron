@@ -1522,7 +1522,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           )
         : undefined,
       filters.groupKey && Array.isArray(filters.groupKey)
-        ? sql`j.group_key LIKE ANY(ARRAY[${sql.raw(filters.groupKey.map((key) => `'${key}'`).join(','))}]::text[])`
+        ? inArray(jobsTable.group_key, filters.groupKey)
         : undefined,
       filters.groupKey && !Array.isArray(filters.groupKey)
         ? ilike(jobsTable.group_key, `%${filters.groupKey}%`)
@@ -1612,7 +1612,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
           )
         : undefined,
       filters.groupKey && Array.isArray(filters.groupKey)
-        ? sql`j.group_key LIKE ANY(ARRAY[${sql.raw(filters.groupKey.map((key) => `'${key}'`).join(','))}]::text[])`
+        ? inArray(archiveTable.group_key, filters.groupKey)
         : undefined,
       filters.groupKey && !Array.isArray(filters.groupKey)
         ? ilike(archiveTable.group_key, `%${filters.groupKey}%`)
@@ -2358,7 +2358,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
             )`
           } else {
             // For non-string values, use exact containment
-            return sql`${arrayPath} @> ${sql.raw(JSON.stringify([arrayValue]))}::jsonb`
+            return sql`${arrayPath} @> ${sql.json([arrayValue])}::jsonb`
           }
         })
 

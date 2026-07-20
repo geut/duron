@@ -313,13 +313,13 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
       // 3. Archive steps using INSERT ... SELECT (SQL-native, no JS round-trip)
       await tx.execute(sql`
         INSERT INTO ${this.tables.jobStepsArchiveTable} (
-          id, job_id, parent_step_id, branch, name, status, output, error,
+          id, job_id, parent_step_id, parallel, name, status, output, error,
           started_at, finished_at, timeout_ms, expires_at, retries_limit,
           retries_count, delayed_ms, history_failed_attempts, created_at,
           updated_at, job_finished_at
         )
         SELECT
-          id, job_id, parent_step_id, branch, name, status, output, error,
+          id, job_id, parent_step_id, parallel, name, status, output, error,
           started_at, finished_at, timeout_ms, expires_at, retries_limit,
           retries_count, delayed_ms, history_failed_attempts, created_at,
           updated_at, ${finishedAt.toISOString()}
@@ -371,13 +371,13 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
       // 3. Archive steps using INSERT ... SELECT
       await tx.execute(sql`
         INSERT INTO ${this.tables.jobStepsArchiveTable} (
-          id, job_id, parent_step_id, branch, name, status, output, error,
+          id, job_id, parent_step_id, parallel, name, status, output, error,
           started_at, finished_at, timeout_ms, expires_at, retries_limit,
           retries_count, delayed_ms, history_failed_attempts, created_at,
           updated_at, job_finished_at
         )
         SELECT
-          id, job_id, parent_step_id, branch, name, status, output, error,
+          id, job_id, parent_step_id, parallel, name, status, output, error,
           started_at, finished_at, timeout_ms, expires_at, retries_limit,
           retries_count, delayed_ms, history_failed_attempts, created_at,
           updated_at, ${finishedAt.toISOString()}
@@ -440,13 +440,13 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
       // 4. Archive steps using INSERT ... SELECT
       await tx.execute(sql`
         INSERT INTO ${this.tables.jobStepsArchiveTable} (
-          id, job_id, parent_step_id, branch, name, status, output, error,
+          id, job_id, parent_step_id, parallel, name, status, output, error,
           started_at, finished_at, timeout_ms, expires_at, retries_limit,
           retries_count, delayed_ms, history_failed_attempts, created_at,
           updated_at, job_finished_at
         )
         SELECT
-          id, job_id, parent_step_id, branch, name, status, output, error,
+          id, job_id, parent_step_id, parallel, name, status, output, error,
           started_at, finished_at, timeout_ms, expires_at, retries_limit,
           retries_count, delayed_ms, history_failed_attempts, created_at,
           updated_at, ${finishedAt.toISOString()}
@@ -647,7 +647,7 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
         CROSS JOIN target_step ts
         WHERE s.job_id = ${jobId}
           AND s.id != ts.id
-          AND s.branch = true
+          AND s.parallel = true
           AND s.status = ${STEP_STATUS_COMPLETED}
           AND (
             (s.parent_step_id IS NULL AND ts.parent_step_id IS NULL)
@@ -663,7 +663,7 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
         )
         WHERE s.job_id = ${jobId}
           AND s.id NOT IN (SELECT id FROM ancestors)
-          AND s.branch = true
+          AND s.parallel = true
           AND s.status = ${STEP_STATUS_COMPLETED}
       ),
       -- Find all descendants of parallel siblings (to keep their children too)
@@ -1061,13 +1061,13 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
         ),
         archived_steps AS (
           INSERT INTO ${this.tables.jobStepsArchiveTable} (
-            id, job_id, parent_step_id, branch, name, status, output, error,
+            id, job_id, parent_step_id, parallel, name, status, output, error,
             started_at, finished_at, timeout_ms, expires_at, retries_limit,
             retries_count, delayed_ms, history_failed_attempts, created_at,
             updated_at, job_finished_at
           )
           SELECT
-            id, job_id, parent_step_id, branch, name, status, output, error,
+            id, job_id, parent_step_id, parallel, name, status, output, error,
             started_at, finished_at, timeout_ms, expires_at, retries_limit,
             retries_count, delayed_ms, history_failed_attempts, created_at,
             updated_at, now()
@@ -1166,7 +1166,7 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
         INSERT INTO ${this.tables.jobStepsActiveTable} (
           job_id,
           parent_step_id,
-          branch,
+          parallel,
           name,
           timeout_ms,
           retries_limit,

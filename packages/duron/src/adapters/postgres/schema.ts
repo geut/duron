@@ -85,7 +85,7 @@ export default function createSchema(schemaName: string) {
         .notNull()
         .references(() => jobsActiveTable.id, { onDelete: 'cascade' }),
       parent_step_id: uuid('parent_step_id'),
-      parallel: boolean('branch').notNull().default(false),
+      parallel: boolean('parallel').notNull().default(false),
       name: text('name').notNull(),
       status: text('status').$type<StepStatus>().notNull().default(STEP_STATUS_ACTIVE),
       output: jsonb('output'),
@@ -224,7 +224,7 @@ export default function createSchema(schemaName: string) {
         .notNull()
         .references(() => jobsArchiveTable.id, { onDelete: 'cascade' }),
       parent_step_id: uuid('parent_step_id'),
-      parallel: boolean('branch').notNull().default(false),
+      parallel: boolean('parallel').notNull().default(false),
       name: text('name').notNull(),
       status: text('status').$type<StepStatus>().notNull().default(STEP_STATUS_ACTIVE),
       output: jsonb('output'),

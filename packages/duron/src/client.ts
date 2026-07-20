@@ -1246,6 +1246,11 @@ export class Client<
       return this.#stopping
     }
 
+    // Wait for any in-flight start() to complete before proceeding
+    if (this.#starting) {
+      await this.#starting
+    }
+
     this.#stopping = (async () => {
       // Stop pull loop
       if (this.#pullInterval) {

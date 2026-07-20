@@ -61,29 +61,15 @@ export default function createSchema(schemaName: string) {
         ),
     },
     (table) => [
-      // Single column indexes
+      // Single column indexes (hot path)
       index('idx_jobs_active_action_name').on(table.action_name),
       index('idx_jobs_active_status').on(table.status),
       index('idx_jobs_active_group_key').on(table.group_key),
-      index('idx_jobs_active_description').on(table.description),
-      index('idx_jobs_active_started_at').on(table.started_at),
       index('idx_jobs_active_expires_at').on(table.expires_at),
       index('idx_jobs_active_client_id').on(table.client_id),
       index('idx_jobs_active_checksum').on(table.checksum),
-      index('idx_jobs_active_concurrency_limit').on(table.concurrency_limit),
-      index('idx_jobs_active_concurrency_step_limit').on(table.concurrency_step_limit),
       // Composite indexes
-      index('idx_jobs_active_action_status').on(table.action_name, table.status),
       index('idx_jobs_active_action_group').on(table.action_name, table.group_key),
-      // GIN indexes for full-text search
-      index('idx_jobs_active_input_fts').using(
-        'gin',
-        sql`to_tsvector('english', ${table.input}::text)`,
-      ),
-      index('idx_jobs_active_output_fts').using(
-        'gin',
-        sql`to_tsvector('english', ${table.output}::text)`,
-      ),
       check(
         'jobs_active_status_check',
         sql`${table.status} IN ${sql.raw(`(${JOB_STATUSES.map((s) => `'${s}'`).join(',')})`)}`,
@@ -127,19 +113,12 @@ export default function createSchema(schemaName: string) {
         ),
     },
     (table) => [
-      // Single column indexes
+      // Single column indexes (hot path)
       index('idx_job_steps_active_job_id').on(table.job_id),
       index('idx_job_steps_active_status').on(table.status),
       index('idx_job_steps_active_name').on(table.name),
       index('idx_job_steps_active_expires_at').on(table.expires_at),
       index('idx_job_steps_active_parent_step_id').on(table.parent_step_id),
-      // Composite indexes
-      index('idx_job_steps_active_job_status').on(table.job_id, table.status),
-      index('idx_job_steps_active_job_name').on(table.job_id, table.name),
-      index('idx_job_steps_active_output_fts').using(
-        'gin',
-        sql`to_tsvector('english', ${table.output}::text)`,
-      ),
       // Unique constraint
       unique('unique_job_step_active_name_parent')
         .on(table.job_id, table.name, table.parent_step_id)
@@ -173,20 +152,15 @@ export default function createSchema(schemaName: string) {
         .default([]),
     },
     (table) => [
-      // Single column indexes
+      // Single column indexes (hot path)
       index('idx_spans_trace_id').on(table.trace_id),
       index('idx_spans_span_id').on(table.span_id),
       index('idx_spans_job_id').on(table.job_id),
       index('idx_spans_step_id').on(table.step_id),
       index('idx_spans_name').on(table.name),
-      index('idx_spans_kind').on(table.kind),
-      index('idx_spans_status_code').on(table.status_code),
       // Composite indexes
       index('idx_spans_job_step').on(table.job_id, table.step_id),
       index('idx_spans_trace_parent').on(table.trace_id, table.parent_span_id),
-      // GIN indexes
-      index('idx_spans_attributes').using('gin', table.attributes),
-      index('idx_spans_events').using('gin', table.events),
       // Constraints
       check('spans_kind_check', sql`${table.kind} IN (0, 1, 2, 3, 4)`),
       check('spans_status_code_check', sql`${table.status_code} IN (0, 1, 2)`),

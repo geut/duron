@@ -583,8 +583,12 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
 
       if (archivedJob.length > 0) {
         // Restore job from archive to active
+        // Use ON CONFLICT DO NOTHING to handle concurrent time-travel gracefully
         const job = archivedJob[0]!
-        await tx.insert(this.tables.jobsActiveTable).values({ ...job })
+        await tx
+          .insert(this.tables.jobsActiveTable)
+          .values({ ...job })
+          .onConflictDoNothing()
 
         // Restore steps from archive to active
         const archivedSteps = await tx
@@ -593,9 +597,10 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
           .where(eq(this.tables.jobStepsArchiveTable.job_id, jobId))
 
         if (archivedSteps.length > 0) {
-          await tx.insert(this.tables.jobStepsActiveTable).values(
-            archivedSteps.map((s) => ({ ...s })),
-          )
+          await tx
+            .insert(this.tables.jobStepsActiveTable)
+            .values(archivedSteps.map((s) => ({ ...s })))
+            .onConflictDoNothing()
         }
 
         // Delete archived job and steps (cascade via FK on steps)

@@ -851,7 +851,11 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
     const jobsTable = this.tables.jobsActiveTable
     const filters = options?.filters ?? {}
 
-    const where = this._buildJobsWhereClause(filters)
+    // Always exclude active jobs from bulk deletion to prevent data loss
+    const where = and(
+      this._buildJobsWhereClause(filters),
+      ne(jobsTable.status, JOB_STATUS_ACTIVE),
+    )
 
     const result = await this.db.delete(jobsTable).where(where).returning({ id: jobsTable.id })
 
@@ -2358,7 +2362,8 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
             )`
           } else {
             // For non-string values, use exact containment
-            return sql`${arrayPath} @> ${sql.json([arrayValue])}::jsonb`
+            // Note: JSON.stringify is safe here because drizzle-orm parameterizes the value
+            return sql`${arrayPath} @> ${JSON.stringify([arrayValue])}::jsonb`
           }
         })
 

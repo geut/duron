@@ -167,6 +167,8 @@ export const RecoverJobsOptionsSchema = z.object({
   multiProcessMode: z.boolean().optional(),
   /** Timeout in milliseconds to wait for process ping responses */
   processTimeout: z.number().optional(),
+  /** AbortSignal to cancel recovery (e.g., during shutdown) */
+  signal: z.instanceof(AbortSignal).optional(),
 })
 
 export const FetchOptionsSchema = z.object({

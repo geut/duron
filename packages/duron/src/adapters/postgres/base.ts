@@ -1010,7 +1010,7 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
    * @returns Promise resolving to the number of jobs recovered
    */
   protected async _recoverJobs(options: RecoverJobsOptions): Promise<number> {
-    const { checksums, multiProcessMode = false, processTimeout = 5_000 } = options
+    const { checksums, multiProcessMode = false, processTimeout = 5_000, signal } = options
 
     const unresponsiveClientIds: string[] = [this.id]
 
@@ -1045,6 +1045,10 @@ export class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> e
         while (pongCount.size < result.length && waitForSeconds > 0) {
           await new Promise((resolve) => setTimeout(resolve, 1000).unref?.())
           waitForSeconds--
+          // Check if recovery was cancelled (e.g., during shutdown)
+          if (signal?.aborted) {
+            break
+          }
         }
 
         unresponsiveClientIds.push(

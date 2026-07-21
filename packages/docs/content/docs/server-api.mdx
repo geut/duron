@@ -138,16 +138,6 @@ app.listen(3000)
 }
 ```
 
-### `spansEnabled`
-
-**Optional.** Enable spans endpoints (`/jobs/:id/spans`, `/steps/:id/spans`). Only works when client is configured with `telemetry.local` enabled. When `true`, enables the dashboard to show spans buttons. Defaults to auto-detected from `client.spansEnabled`.
-
-```ts
-{
-  spansEnabled: true,
-}
-```
-
 ## API Endpoints
 
 All endpoints use Zod for input and response validation.
@@ -427,55 +417,6 @@ Get step status and updatedAt timestamp.
 }
 ```
 
-### Spans
-
-Spans endpoints are only available when `spansEnabled` is true (auto-detected when `telemetry.local` is enabled on the client).
-
-#### `GET /jobs/:id/spans`
-
-Get spans for a job.
-
-**Query Parameters:**
-
-- `fName` - Filter by span name (string or comma-separated)
-- `fKind` - Filter by span kind (0=INTERNAL, 1=SERVER, 2=CLIENT, 3=PRODUCER, 4=CONSUMER)
-- `fTraceId` - Filter by trace ID
-- `fAttributesFilter` - JSONB filter on attributes (JSON string)
-- `sort` - Sort string format: `"field:asc"` or `"field:desc"`
-
-**Response:**
-
-```json
-{
-  "data": [
-    {
-      "traceId": "abc123...",
-      "spanId": "def456...",
-      "parentSpanId": null,
-      "jobId": "job-uuid",
-      "stepId": "step-uuid",
-      "name": "step:fetchUser",
-      "kind": 0,
-      "startTimeUnixNano": "1704067200000000000",
-      "endTimeUnixNano": "1704067201000000000",
-      "statusCode": 1,
-      "statusMessage": null,
-      "attributes": { "duron.job.id": "job-uuid" },
-      "events": []
-    }
-  ],
-  "total": 1
-}
-```
-
-#### `GET /steps/:id/spans`
-
-Get spans for a step.
-
-**Query Parameters:** Same as `GET /jobs/:id/spans`
-
-**Response:** Same format as `GET /jobs/:id/spans`
-
 ### Config
 
 #### `GET /config`
@@ -486,7 +427,6 @@ Get server configuration. This endpoint does not require authentication.
 
 ```json
 {
-  "spansEnabled": true,
   "authEnabled": true
 }
 ```

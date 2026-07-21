@@ -593,51 +593,7 @@ const metadata = await client.getActionsMetadata()
 
 **Returns:** Promise resolving to action metadata array
 
-### `getSpans(options)`
-
-Get spans for a job or step. Only available when `telemetry.local` is enabled.
-
-```ts
-// Get spans for a job
-const result = await client.getSpans({
-  jobId: 'job-uuid',
-  filters: {
-    name: ['ai.'], // Filter by span name prefix
-  },
-  sort: { field: 'startTimeUnixNano', order: 'asc' },
-})
-
-// Get spans for a step
-const result = await client.getSpans({
-  stepId: 'step-uuid',
-})
-```
-
-**Parameters:**
-
-- `options.jobId` - The ID of the job to get spans for
-- `options.stepId` - The ID of the step to get spans for
-- `options.filters.name` - Filter by span name (string or array)
-- `options.filters.kind` - Filter by span kind
-- `options.filters.traceId` - Filter by trace ID
-- `options.filters.attributesFilter` - JSONB filter on attributes
-- `options.sort` - Sort options with `field` and `order`
-
-**Returns:** Promise resolving to spans result
-
-**Throws:** Error if local telemetry is not enabled
-
 ## Utility Methods
-
-### `spansEnabled`
-
-Boolean property indicating if local spans are enabled. This is `true` when `telemetry.local` is configured.
-
-```ts
-if (client.spansEnabled) {
-  const spans = await client.getSpans({ jobId })
-}
-```
 
 ### `getConfig()`
 
@@ -671,15 +627,4 @@ Access the database adapter instance.
 
 ```ts
 const adapter = client.database
-```
-
-### `flushTelemetry()`
-
-Force flush any pending telemetry data. Useful in tests or when you need to ensure spans are exported before querying.
-
-```ts
-await client.flushTelemetry()
-
-// Now you can safely query spans
-const { spans } = await client.getSpans({ jobId })
 ```

@@ -4,7 +4,7 @@ description: Add observability to your job queue with OpenTelemetry tracing
 icon: Activity
 ---
 
-Duron provides built-in OpenTelemetry support for tracing job and step execution. You can store spans locally in the database, export to external systems, or both.
+Duron provides built-in OpenTelemetry support for tracing job and step execution. Spans are exported to external systems via standard OpenTelemetry exporters.
 
 ## Configuration
 
@@ -13,6 +13,7 @@ Configure telemetry when creating a Duron client:
 ```ts
 import { duron } from 'duron'
 import { postgresAdapter } from 'duron/adapters/postgres'
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 
 const client = duron({
   database: postgresAdapter({
@@ -20,41 +21,22 @@ const client = duron({
   }),
   actions: {/* your actions */},
   telemetry: {
-    local: true, // Store spans in the database
+    traceExporter: new OTLPTraceExporter({
+      url: 'http://localhost:4318/v1/traces',
+    }),
   },
 })
 ```
 
 ### Configuration Options
 
-| Option           | Type                               | Description                                                  |
-| ---------------- | ---------------------------------- | ------------------------------------------------------------ |
-| `local`          | `boolean \| LocalTelemetryOptions` | Enable local span storage in the database                    |
-| `traceExporter`  | `SpanExporter`                     | Export spans to external systems (OTLP, Jaeger, etc.)        |
-| `spanProcessors` | `SpanProcessor[]`                  | Add custom span processors                                   |
-| `serviceName`    | `string`                           | Service name for OpenTelemetry resource (default: `'duron'`) |
+| Option          | Type                             | Description                                                   |
+| --------------- | -------------------------------- | ------------------------------------------------------------- |
+| `traceExporter` | `SpanExporter \| SpanExporter[]` | Export spans to external systems (OTLP, Jaeger, etc.)         |
+| `serviceName`   | `string`                         | Service name for OpenTelemetry resource (default: `'duron'`)  |
+| `batchDelayMs`  | `number`                         | Delay in milliseconds between batch exports (default: `5000`) |
 
-### Local Storage
-
-Store spans in the Duron database for querying via the API or dashboard:
-
-```ts
-// Simple: enable with defaults
-telemetry: {
-  local: true
-}
-
-// Custom flush delay (default: 5000ms)
-telemetry: {
-  local: {
-    flushDelayMs: 10000
-  }
-}
-```
-
-### External Export
-
-Export spans to OpenTelemetry-compatible backends:
+### Single Exporter
 
 ```ts
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
@@ -66,16 +48,16 @@ telemetry: {
 }
 ```
 
-### Combined
+### Multiple Exporters
 
-Use both local storage and external export:
+Send spans to multiple backends simultaneously:
 
 ```ts
 telemetry: {
-  local: true,
-  traceExporter: new OTLPTraceExporter({
-    url: 'http://localhost:4318/v1/traces',
-  }),
+  traceExporter: [
+    new OTLPTraceExporter({ url: 'http://localhost:4318/v1/traces' }),
+    new JaegerExporter({ endpoint: 'http://localhost:14268/api/traces' }),
+  ],
 }
 ```
 
@@ -224,54 +206,6 @@ const result = await ctx.step('with-child-span', async ({ telemetry }) => {
 })
 ```
 
-## Querying Spans
-
-When local telemetry is enabled, query spans via the client API:
-
-```ts
-// Get spans for a specific job
-const { spans, total } = await client.getSpans({
-  jobId: 'job-id',
-  page: 1,
-  pageSize: 50,
-})
-
-// Get spans for a specific step
-const { spans } = await client.getSpans({
-  stepId: 'step-id',
-})
-
-// Filter by name pattern
-const { spans } = await client.getSpans({
-  jobId: 'job-id',
-  filters: {
-    name: 'ai.', // Matches spans starting with 'ai.'
-  },
-})
-```
-
-### Span Structure
-
-Each span includes:
-
-```ts
-interface Span {
-  traceId: string
-  spanId: string
-  parentSpanId: string | null
-  jobId: string | null
-  stepId: string | null
-  name: string
-  kind: SpanKind
-  startTimeUnixNano: bigint
-  endTimeUnixNano: bigint | null
-  statusCode: SpanStatusCode
-  statusMessage: string | null
-  attributes: Record<string, any>
-  events: SpanEvent[]
-}
-```
-
 ## Automatic Tracing
 
 Duron automatically creates spans for:
@@ -339,27 +273,12 @@ try {
 For external OpenTelemetry export, install the required packages:
 
 ```bash
-# Core OpenTelemetry packages (included with duron)
-# @opentelemetry/api and @opentelemetry/sdk-trace-node are peer dependencies
-
 # For OTLP export
-bun add @opentelemetry/exporter-trace-otlp-http
+bun add @opentelemetry/sdk-trace-base @opentelemetry/sdk-trace-node @opentelemetry/exporter-trace-otlp-http
 
 # For Jaeger
-bun add @opentelemetry/exporter-jaeger
+bun add @opentelemetry/sdk-trace-base @opentelemetry/sdk-trace-node @opentelemetry/exporter-jaeger
 ```
-
-## Advanced: LocalSpanExporter
-
-If you need lower-level control over local span storage, you can use the `LocalSpanExporter` directly with a custom `SpanProcessor`:
-
-```ts
-import { LocalSpanExporter } from 'duron/telemetry'
-
-const exporter = new LocalSpanExporter({ adapter: myAdapter })
-```
-
-In most cases, use the `telemetry.local` option instead, which configures the `LocalSpanExporter` automatically.
 
 ## Architecture Notes
 
@@ -367,5 +286,5 @@ Duron's telemetry implementation:
 
 - **Does not globally register** the tracer provider, avoiding conflicts with other telemetry in your application
 - Uses a **context-aware tracer wrapper** that automatically links spans to the correct trace hierarchy
-- Stores spans with `duron.job.id` attribute for job association
-- Queries spans by `trace_id` to include external library spans (like AI SDK) in job results
+- Exports spans with `duron.job.id` attribute for job association
+- Supports multiple exporters for sending spans to different backends

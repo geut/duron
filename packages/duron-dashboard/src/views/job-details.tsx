@@ -1,6 +1,6 @@
 'use client'
 
-import { Activity, MoreVertical, Play, X } from 'lucide-react'
+import { MoreVertical, Play, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { useSpans } from '@/contexts/spans-context'
 import { useJobStatusPolling } from '@/hooks/use-job-status-polling'
 import { useCancelJob, useDeleteJob, useJob, useRetryJob } from '@/lib/api'
 import { calculateDurationMs, formatMs } from '@/lib/duration'
@@ -19,7 +18,6 @@ import { formatDate } from '@/lib/format'
 
 import { BadgeStatus } from '../components/badge-status'
 import { JsonView } from '../components/json-view'
-import { JobSpansModal } from '../components/spans-panel'
 import { isExpiring } from '../lib/is-expiring'
 
 interface JobDetailsProps {
@@ -29,8 +27,6 @@ interface JobDetailsProps {
 
 export function JobDetails({ jobId, onClose }: JobDetailsProps) {
   const { data: job, isLoading: jobLoading } = useJob(jobId)
-  const { spansEnabled } = useSpans()
-  const [showSpans, setShowSpans] = useState(false)
 
   // Enable polling for job status updates - refetches entire job detail when status changes
   useJobStatusPolling(jobId, true)
@@ -139,12 +135,7 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
                 <Play className="h-4 w-4 mr-2" />
                 Retry
               </DropdownMenuItem>
-              {spansEnabled && (
-                <DropdownMenuItem onClick={() => setShowSpans(!showSpans)}>
-                  <Activity className="h-4 w-4 mr-2" />
-                  {showSpans ? 'Hide Spans' : 'Show Spans'}
-                </DropdownMenuItem>
-              )}
+
               <DropdownMenuItem
                 onClick={handleCancel}
                 disabled={
@@ -300,11 +291,6 @@ export function JobDetails({ jobId, onClose }: JobDetailsProps) {
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
-
-      {/* Spans Modal */}
-      {spansEnabled && (
-        <JobSpansModal jobId={job.id} open={showSpans} onClose={() => setShowSpans(false)} />
-      )}
     </div>
   )
 }

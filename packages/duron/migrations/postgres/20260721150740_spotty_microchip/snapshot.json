@@ -2,9 +2,7 @@
   "version": "8",
   "dialect": "postgres",
   "id": "8f25527e-02f0-4ff3-ab82-41f4ebaa95fc",
-  "prevIds": [
-    "9327c26b-9fb5-47d2-b3ad-1be9a54d551c"
-  ],
+  "prevIds": ["9327c26b-9fb5-47d2-b3ad-1be9a54d551c"],
   "ddl": [
     {
       "name": "duron",
@@ -1821,14 +1819,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "job_id"
-      ],
+      "columns": ["job_id"],
       "schemaTo": "duron",
       "tableTo": "jobs_active",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "job_steps_active_job_id_jobs_active_id_fkey",
@@ -1838,14 +1832,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "job_id"
-      ],
+      "columns": ["job_id"],
       "schemaTo": "duron",
       "tableTo": "jobs_archive",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "job_steps_archive_job_id_jobs_archive_id_fkey",
@@ -1854,9 +1844,7 @@
       "table": "job_steps_archive"
     },
     {
-      "columns": [
-        "client_id"
-      ],
+      "columns": ["client_id"],
       "nameExplicit": false,
       "name": "clients_pkey",
       "schema": "duron",
@@ -1864,9 +1852,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "job_steps_active_pkey",
       "schema": "duron",
@@ -1874,9 +1860,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "job_steps_archive_pkey",
       "schema": "duron",
@@ -1884,9 +1868,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "jobs_active_pkey",
       "schema": "duron",
@@ -1894,9 +1876,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "jobs_archive_pkey",
       "schema": "duron",
@@ -1904,9 +1884,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "spans_pkey",
       "schema": "duron",
@@ -1915,11 +1893,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "job_id",
-        "name",
-        "parent_step_id"
-      ],
+      "columns": ["job_id", "name", "parent_step_id"],
       "nullsNotDistinct": true,
       "name": "unique_job_step_active_name_parent",
       "entityType": "uniques",

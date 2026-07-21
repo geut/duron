@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-import { type Span, type SpanExporter, type ReadableSpan } from '@opentelemetry/sdk-trace-base'
+import { type SpanExporter, type ReadableSpan } from '@opentelemetry/sdk-trace-base'
 import { z } from 'zod'
 
 import { defineAction } from '../src/action.js'

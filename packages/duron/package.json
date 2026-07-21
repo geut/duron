@@ -1,16 +1,16 @@
 {
   "name": "duron",
   "version": "0.3.0-beta.18",
+  "homepage": "https://github.com/tinchoz49/duron#readme",
+  "bugs": {
+    "url": "https://github.com/tinchoz49/duron/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/tinchoz49/duron.git",
     "directory": "packages/duron"
   },
-  "bugs": {
-    "url": "https://github.com/tinchoz49/duron/issues"
-  },
-  "homepage": "https://github.com/tinchoz49/duron#readme",
   "files": [
     "dist",
     "src",
@@ -70,8 +70,7 @@
       "dev-source": "./src/errors.ts",
       "types": "./dist/errors.d.ts",
       "default": "./dist/errors.js"
-    },
-
+    }
   },
   "scripts": {
     "build": "tsc --project tsconfig.node.json",
@@ -91,18 +90,6 @@
     "zocker": "^3.0.0",
     "zod": "^4.1.12"
   },
-  "peerDependencies": {
-    "@opentelemetry/sdk-trace-base": "^2.4.0",
-    "@opentelemetry/sdk-trace-node": "^2.4.0"
-  },
-  "peerDependenciesMeta": {
-    "@opentelemetry/sdk-trace-base": {
-      "optional": true
-    },
-    "@opentelemetry/sdk-trace-node": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.14",
     "@opentelemetry/core": "^2.4.0",
@@ -114,5 +101,17 @@
     "drizzle-orm": "^1.0.0-rc.4",
     "postgres": "^3.4.7",
     "typescript": "^7"
+  },
+  "peerDependencies": {
+    "@opentelemetry/sdk-trace-base": "^2.4.0",
+    "@opentelemetry/sdk-trace-node": "^2.4.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/sdk-trace-base": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-trace-node": {
+      "optional": true
+    }
   }
 }

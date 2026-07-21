@@ -5,9 +5,9 @@
 
 ## Priority Order
 
-| # | Plan | Status | Effort | Impact |
-|---|------|--------|--------|--------|
-| 001 | [Index Optimization](001-index-optimization.md) | TODO | S | HIGH - 40% write overhead reduction |
+| #   | Plan                                            | Status | Effort | Impact                              |
+| --- | ----------------------------------------------- | ------ | ------ | ----------------------------------- |
+| 001 | [Index Optimization](001-index-optimization.md) | TODO   | S      | HIGH - 40% write overhead reduction |
 
 ## Execution Order
 

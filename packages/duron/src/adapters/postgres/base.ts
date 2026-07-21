@@ -1,18 +1,4 @@
-import {
-  and,
-  asc,
-  between,
-  desc,
-  eq,
-  gt,
-  gte,
-  ilike,
-  inArray,
-  isNull,
-  ne,
-  or,
-  sql,
-} from 'drizzle-orm'
+import { and, between, desc, eq, gt, gte, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm'
 import type { PgAsyncDatabase, PgColumn } from 'drizzle-orm/pg-core'
 import type { AnyRelations } from 'drizzle-orm/relations'
 
@@ -856,8 +842,6 @@ export abstract class PostgresBaseAdapter<
   protected async _deleteJobs(options?: DeleteJobsOptions): Promise<number> {
     const jobsTable = this.tables.jobsActiveTable
     const filters = options?.filters ?? {}
-    const schemaName = this.schema
-
     // Always exclude active jobs from bulk deletion to prevent data loss
     // Note: This only deletes from jobs_active, not jobs_archive
     const where = and(this._buildJobsWhereClause(filters), ne(jobsTable.status, JOB_STATUS_ACTIVE))

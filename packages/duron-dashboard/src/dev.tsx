@@ -19,9 +19,6 @@ const client = duron({
   },
   variables,
   logger: 'info',
-  telemetry: {
-    local: true,
-  },
 })
 
 const app = createServer({
@@ -33,7 +30,6 @@ const app = createServer({
     jwtSecret: process.env.JWT_SECRET || 'dev-secret-key-change-in-production',
     expirationTime: '1d',
   },
-  spansEnabled: true,
 })
 
 const server = serve({

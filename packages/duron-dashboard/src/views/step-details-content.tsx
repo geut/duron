@@ -1,13 +1,9 @@
 'use client'
 
-import { Activity } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { JsonView } from '@/components/json-view'
-import { StepSpansModal } from '@/components/spans-panel'
-import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useSpans } from '@/contexts/spans-context'
 import { useStepStatusPolling } from '@/hooks/use-step-status-polling'
 import { useStep } from '@/lib/api'
 import { calculateDurationMs, formatMs } from '@/lib/duration'
@@ -24,8 +20,6 @@ interface StepDetailsContentProps {
 export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
   // Fetch the full step data including output
   const { data: step, isLoading, error } = useStep(stepId)
-  const { spansEnabled } = useSpans()
-  const [showSpans, setShowSpans] = useState(false)
 
   // Enable polling for individual step status updates
   useStepStatusPolling(stepId, jobId, true)
@@ -194,21 +188,6 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
             ))}
           </div>
         </div>
-      )}
-
-      {/* Spans Button */}
-      {spansEnabled && (
-        <div>
-          <Button variant="outline" size="sm" onClick={() => setShowSpans(true)} className="w-full">
-            <Activity className="h-4 w-4 mr-2" />
-            View Spans
-          </Button>
-        </div>
-      )}
-
-      {/* Spans Modal */}
-      {spansEnabled && (
-        <StepSpansModal stepId={step.id} open={showSpans} onClose={() => setShowSpans(false)} />
       )}
     </div>
   )

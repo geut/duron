@@ -4,7 +4,6 @@ import { z } from 'zod'
 
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
-import { JOB_STATUS_CREATED } from '../src/constants.js'
 
 import { type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.js'
 

@@ -80,7 +80,7 @@ function runDeleteJobsSafetyTests(adapterFactory: AdapterFactory) {
         expect(beforeDelete.jobs.length).toBeGreaterThanOrEqual(1)
 
         // Try to delete ALL jobs with no filters (the dangerous case)
-        const deletedCount = await client.deleteJobs({})
+        await client.deleteJobs({})
 
         // Some jobs may have been deleted (non-active ones), but active ones must survive
         const afterDelete = await adapter.getJobs({ filters: {} })
@@ -112,7 +112,7 @@ function runDeleteJobsSafetyTests(adapterFactory: AdapterFactory) {
 
         // Even if someone tries to delete with status: ['active'], it should be blocked
         // The guard should always protect active jobs
-        const deletedCount = await client.deleteJobs({
+        await client.deleteJobs({
           filters: {
             status: ['active'],
           },

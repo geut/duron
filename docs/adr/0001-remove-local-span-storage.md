@@ -26,6 +26,7 @@ Meanwhile, the OpenTelemetry ecosystem already provides production-grade span st
 Remove `telemetry.local` entirely. Keep the OTel instrumentation (`@opentelemetry/api` context propagation, span creation in `step-manager.ts` and `action-job.ts`) and the `telemetry.traceExporter` path for sending spans to external OTel collectors.
 
 ### What stays
+
 - `@opentelemetry/api` as a regular dependency
 - `ctx.telemetry.span / tracer / track() / flush()` in action contexts
 - Context propagation and automatic span creation
@@ -33,6 +34,7 @@ Remove `telemetry.local` entirely. Keep the OTel instrumentation (`@opentelemetr
 - `traceExporter` now accepts `SpanExporter | SpanExporter[]`
 
 ### What is removed
+
 - `telemetry.local` option and `LocalTelemetryOptions` type
 - `spans` table from the schema
 - `LocalSpanExporter` class
@@ -44,11 +46,14 @@ Remove `telemetry.local` entirely. Keep the OTel instrumentation (`@opentelemetr
 - `@opentelemetry/sdk-trace-base`, `@opentelemetry/sdk-node`, `@opentelemetry/resources`, `@opentelemetry/semantic-conventions` as direct dependencies
 
 ### New optional peer dependencies
+
 Users who want external OTel export install these themselves:
+
 - `@opentelemetry/sdk-trace-base`
 - `@opentelemetry/sdk-node`
 
 ### Error handling
+
 If `traceExporter` is provided but `@opentelemetry/sdk-node` is not installed, Duron throws at startup with a clear message.
 
 ## Consequences

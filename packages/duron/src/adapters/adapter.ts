@@ -8,10 +8,6 @@ import {
   JOB_STATUS_COMPLETED,
   JOB_STATUS_FAILED,
   type JobStatus,
-  STEP_STATUS_CANCELLED,
-  STEP_STATUS_COMPLETED,
-  STEP_STATUS_FAILED,
-  type StepStatus,
 } from '../constants.js'
 
 import type {

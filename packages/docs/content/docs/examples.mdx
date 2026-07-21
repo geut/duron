@@ -435,8 +435,8 @@ const client = duron({
     sendEmail,
     processOrder,
   },
-  multiProcessMode: true,
-  processTimeout: 500, // 0.5 seconds (default)
+  heartbeatInterval: 5_000, // Liveness heartbeat every 5s (default)
+  heartbeatTimeout: 15_000, // Consider dead after 15s (default)
 })
 
 await client.start()

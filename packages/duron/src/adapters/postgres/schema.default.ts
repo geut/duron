@@ -7,6 +7,7 @@ const {
   jobStepsActiveTable,
   jobStepsArchiveTable,
   spansTable,
+  clientsTable,
 } = createSchema('duron')
 
 export {
@@ -16,4 +17,5 @@ export {
   jobStepsActiveTable,
   jobStepsArchiveTable,
   spansTable,
+  clientsTable,
 }

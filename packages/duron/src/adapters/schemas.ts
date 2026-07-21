@@ -163,10 +163,8 @@ export const CreateJobOptionsSchema = z.object({
 export const RecoverJobsOptionsSchema = z.object({
   /** The action checksums to recover jobs for */
   checksums: z.array(z.string()),
-  /** Whether to ping other processes before recovering their jobs */
-  multiProcessMode: z.boolean().optional(),
-  /** Timeout in milliseconds to wait for process ping responses */
-  processTimeout: z.number().optional(),
+  /** Milliseconds after which a client without a heartbeat is considered dead */
+  staleTimeoutMs: z.number().optional(),
   /** AbortSignal to cancel recovery (e.g., during shutdown) */
   signal: z.instanceof(AbortSignal).optional(),
 })

@@ -941,7 +941,7 @@ function runClientTests(adapterFactory: AdapterFactory) {
         // This test simulates a multi-process scenario where:
         // 1. Instance A processes a job and then crashes
         // 2. The job remains active in the database (orphan job)
-        // 3. Instance B (with multiProcessMode enabled) detects the orphan
+        // 3. Instance B (with heartbeat-based recovery) detects the orphan
         //    via periodic recovery in fetch()
         // 4. The expired orphan is archived as failed, freeing up the
         //    concurrency slot for new jobs
@@ -974,9 +974,9 @@ function runClientTests(adapterFactory: AdapterFactory) {
             expiredConcurrencyAction: actionWithConcurrency,
           },
           syncPattern: false,
-          multiProcessMode: true,
+          heartbeatInterval: 500,
+          heartbeatTimeout: 1_000,
           recoverJobsInterval: 1,
-          processTimeout: 500,
           logger: 'error',
         })
 

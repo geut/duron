@@ -90,7 +90,10 @@ export interface AdapterOptions<Connection> {
   pruneArchive?: PruneSchedulerConfig
 }
 
-export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Connection> extends Adapter {
+export abstract class PostgresBaseAdapter<
+  Database extends DrizzleDatabase,
+  Connection,
+> extends Adapter {
   protected connection: Connection
   protected db!: Database
   protected tables: Schema
@@ -140,10 +143,18 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
    * @returns Promise resolving to `true` if started successfully, `false` otherwise
    */
   protected async _start() {
-    await this._listen(`ping-${this.id}`, async (payload: string) => {
-      const fromClientId = JSON.parse(payload).fromClientId
-      await this._notify(`pong-${fromClientId}`, { toClientId: this.id })
-    })
+    // Prune ancient client liveness rows (garbage collection for instances
+    // that died long ago without a graceful release). The threshold is
+    // deliberately generous — recovery uses its own much smaller threshold,
+    // so this can never mark a live-but-slow instance as dead.
+    try {
+      await this.db.execute(sql`
+        DELETE FROM ${this.tables.clientsTable}
+        WHERE last_seen_at < now() - interval '24 hours'
+      `)
+    } catch {
+      // Table may not exist yet (before migration) — skip pruning
+    }
 
     await this._listen(`job-status-changed`, (payload: string) => {
       if (this.listenerCount('job-status-changed') > 0) {
@@ -165,6 +176,33 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
 
   protected async _stop() {
     this._stopScheduler()
+
+    // Release liveness record so other instances can recover this
+    // instance's jobs immediately instead of waiting for staleness.
+    try {
+      await this.db
+        .delete(this.tables.clientsTable)
+        .where(eq(this.tables.clientsTable.client_id, this.id))
+    } catch {
+      // Table may not exist yet (before migration) — skip release
+    }
+  }
+
+  /**
+   * Renew this instance's liveness record (upsert).
+   */
+  protected async _heartbeat(): Promise<void> {
+    try {
+      await this.db
+        .insert(this.tables.clientsTable)
+        .values({ client_id: this.id, last_seen_at: new Date() })
+        .onConflictDoUpdate({
+          target: this.tables.clientsTable.client_id,
+          set: { last_seen_at: new Date() },
+        })
+    } catch {
+      // Table may not exist yet (before migration) — skip heartbeat
+    }
   }
 
   // ============================================================================
@@ -827,10 +865,7 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
 
     // Always exclude active jobs from bulk deletion to prevent data loss
     // Note: This only deletes from jobs_active, not jobs_archive
-    const where = and(
-      this._buildJobsWhereClause(filters),
-      ne(jobsTable.status, JOB_STATUS_ACTIVE),
-    )
+    const where = and(this._buildJobsWhereClause(filters), ne(jobsTable.status, JOB_STATUS_ACTIVE))
 
     const result = await this.db.delete(jobsTable).where(where).returning({ id: jobsTable.id })
 
@@ -963,57 +998,32 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
 
   /**
    * Internal method to recover stuck jobs (jobs that were active but the process that owned them is no longer running).
-   * In multi-process mode, pings other processes to check if they're alive before recovering their jobs.
+   * Uses the clients liveness table to detect dead owners: a client whose heartbeat is older than staleTimeoutMs (or missing) is considered dead.
    *
    * @returns Promise resolving to the number of jobs recovered
    */
   protected async _recoverJobs(options: RecoverJobsOptions): Promise<number> {
-    const { checksums, multiProcessMode = false, processTimeout = 5_000, signal } = options
+    const { checksums, staleTimeoutMs = 15_000 } = options
 
-    const unresponsiveClientIds: string[] = [this.id]
+    // Find owners of active jobs that are dead: no liveness row or stale heartbeat.
+    // This instance's own id is always included to recover jobs left behind
+    // by a previous run of the same client.
+    const deadOwners: { client_id: string }[] = this._map(
+      await this.db.execute<{ client_id: string }>(sql`
+        SELECT DISTINCT j.client_id
+        FROM ${this.tables.jobsActiveTable} j
+        WHERE j.status = ${JOB_STATUS_ACTIVE}
+          AND j.client_id IS NOT NULL
+          AND j.client_id != ${this.id}
+          AND NOT EXISTS (
+            SELECT 1 FROM ${this.tables.clientsTable} c
+            WHERE c.client_id = j.client_id
+              AND c.last_seen_at > now() - (${staleTimeoutMs} * interval '1 millisecond')
+          )
+      `),
+    )
 
-    if (multiProcessMode) {
-      const result = (await this.db
-        .selectDistinct({
-          clientId: this.tables.jobsActiveTable.client_id,
-        })
-        .from(this.tables.jobsActiveTable)
-        .where(
-          and(
-            eq(this.tables.jobsActiveTable.status, JOB_STATUS_ACTIVE),
-            ne(this.tables.jobsActiveTable.client_id, this.id),
-          ),
-        )) as unknown as { clientId: string }[]
-
-      if (result.length > 0) {
-        const pongCount = new Set<string>()
-        const { unlisten } = await this._listen(`pong-${this.id}`, (payload: string) => {
-          const toClientId = JSON.parse(payload).toClientId
-          pongCount.add(toClientId)
-          if (pongCount.size >= result.length) {
-            unlisten()
-          }
-        })
-
-        await Promise.all(
-          result.map((row) => this._notify(`ping-${row.clientId}`, { fromClientId: this.id })),
-        )
-
-        let waitForSeconds = processTimeout / 1_000
-        while (pongCount.size < result.length && waitForSeconds > 0) {
-          await new Promise((resolve) => setTimeout(resolve, 1000).unref?.())
-          waitForSeconds--
-          // Check if recovery was cancelled (e.g., during shutdown)
-          if (signal?.aborted) {
-            break
-          }
-        }
-
-        unresponsiveClientIds.push(
-          ...result.filter((row) => !pongCount.has(row.clientId)).map((row) => row.clientId),
-        )
-      }
-    }
+    const unresponsiveClientIds: string[] = [this.id, ...deadOwners.map((row) => row.client_id)]
 
     let recoveredCount = 0
 
@@ -1491,13 +1501,17 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
           FROM ${sql.identifier(schemaName)}.job_steps_archive
           WHERE job_id = ${jobId}
         ) s
-        ${fuzzySearch && fuzzySearch.length > 0
-          ? sql`WHERE s.name ILIKE ${`%${fuzzySearch}%`}
+        ${
+          fuzzySearch && fuzzySearch.length > 0
+            ? sql`WHERE s.name ILIKE ${`%${fuzzySearch}%`}
               OR to_tsvector('english', s.output::text) @@ plainto_tsquery('english', ${fuzzySearch})`
-          : sql``}
-        ${options.updatedAfter
-          ? sql`${fuzzySearch && fuzzySearch.length > 0 ? sql`AND` : sql`WHERE`} date_trunc('milliseconds', s."updatedAt") > ${options.updatedAfter.toISOString()}::timestamptz`
-          : sql``}
+            : sql``
+        }
+        ${
+          options.updatedAfter
+            ? sql`${fuzzySearch && fuzzySearch.length > 0 ? sql`AND` : sql`WHERE`} date_trunc('milliseconds', s."updatedAt") > ${options.updatedAfter.toISOString()}::timestamptz`
+            : sql``
+        }
         ORDER BY s."createdAt" ASC
       `),
     )

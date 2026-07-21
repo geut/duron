@@ -14,7 +14,7 @@ This example demonstrates how to run Duron with multiple worker processes, where
   - Each worker has a unique ID
   - Processes jobs from the shared database
   - Configured with `syncPattern: 'hybrid'` for efficient job processing
-  - Uses `multiProcessMode: true` for proper job recovery
+  - Heartbeat-based liveness detection for crashed-instance recovery
 
 ## Running the Example
 

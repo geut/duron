@@ -150,7 +150,7 @@ export interface TelemetryOptions {
 export interface BaseOptionsInput {
   /**
    * Unique identifier for this Duron instance.
-   * Used for multi-process coordination and job ownership.
+   * Used for instance identification, heartbeat liveness, and job ownership.
    * If not provided, a random UUID will be generated.
    *
    * @example 'worker-1', 'api-server', 'background-processor'
@@ -238,25 +238,22 @@ export interface BaseOptionsInput {
   recoverJobsOnStart?: boolean
 
   /**
-   * Enable multi-process mode for job recovery.
-   * When enabled, Duron will ping other processes to check if they're alive
-   * before recovering their jobs. This prevents recovering jobs from processes
-   * that are still running but slow to respond.
+   * Interval in milliseconds between heartbeat updates.
+   * Each instance periodically upserts a liveness record in the `clients` table.
+   * Other instances use this to detect crashed owners during recovery.
    *
-   * Only enable this if you're running multiple Duron instances sharing the same database.
-   *
-   * @default false
+   * @default 5000
    */
-  multiProcessMode?: boolean
+  heartbeatInterval?: number
 
   /**
-   * Timeout in milliseconds to wait for process ping responses in multi-process mode.
-   * Processes that don't respond within this timeout will have their jobs recovered.
-   * Increase this value if your processes may be temporarily unresponsive under load.
+   * Milliseconds after which a client without a heartbeat is considered dead.
+   * A dead client's active jobs are recovered (requeued or failed if expired).
+   * Should be at least 3x heartbeatInterval to tolerate missed beats.
    *
-   * @default 500
+   * @default 15000
    */
-  processTimeout?: number
+  heartbeatTimeout?: number
 
   /**
    * Interval in milliseconds between job recovery runs.
@@ -279,8 +276,8 @@ const BaseOptionsSchema = z.object({
   groupConcurrencyLimit: z.number().default(10),
   migrateOnStart: z.boolean().default(true),
   recoverJobsOnStart: z.boolean().default(true),
-  multiProcessMode: z.boolean().default(false),
-  processTimeout: z.number().default(500),
+  heartbeatInterval: z.number().default(5000),
+  heartbeatTimeout: z.number().default(15000),
   recoverJobsInterval: z.number().default(60_000),
 })
 
@@ -380,6 +377,7 @@ export class Client<
   #starting: Promise<boolean> | null = null
   #stopping: Promise<boolean> | null = null
   #pullInterval: NodeJS.Timeout | null = null
+  #heartbeatTimer: NodeJS.Timeout | null = null
   #lastRecoveryAt: number = 0
   #actionManagers = new Map<string, ActionManager<Action<any, any, any>>>()
   #mockInputSchemas = new Map<string, any>()
@@ -394,7 +392,9 @@ export class Client<
   >()
   #jobStatusListenerSetup = false
   #pushListenerSetup = false
-  #jobStatusListener: ((event: { jobId: string; status: JobStatus | 'retried'; clientId: string }) => Promise<void>) | null = null
+  #jobStatusListener:
+    | ((event: { jobId: string; status: JobStatus | 'retried'; clientId: string }) => Promise<void>)
+    | null = null
   #pushListener: (() => void) | null = null
 
   // ============================================================================
@@ -756,19 +756,16 @@ export class Client<
       return []
     }
 
-    // Run recovery periodically only in multi-process mode.
-    // In single-process mode, recovery on startup is sufficient.
+    // Run recovery periodically (time-based, always multi-process)
     const now = Date.now()
     if (
-      this.#options.multiProcessMode &&
       this.#options.recoverJobsInterval > 0 &&
       now - this.#lastRecoveryAt > this.#options.recoverJobsInterval
     ) {
       this.#lastRecoveryAt = now
       await this.#database.recoverJobs({
         checksums: Object.values(this.#actions).map((action) => action.checksum),
-        multiProcessMode: true,
-        processTimeout: this.#options.processTimeout,
+        staleTimeoutMs: this.#options.heartbeatTimeout,
       })
     }
 
@@ -970,7 +967,6 @@ export class Client<
     let abortHandler: (() => void) | undefined
 
     return new Promise<JobResult | null>((resolve) => {
-
       // Check if already aborted before setting up wait
       if (options?.signal?.aborted) {
         resolve(null)
@@ -1209,12 +1205,15 @@ export class Client<
         return false
       }
 
+      // Initial heartbeat to register this instance as alive
+      await this.#database.heartbeat()
+      this.#scheduleHeartbeat()
+
       if (this.#actions) {
         if (this.#options.recoverJobsOnStart) {
           await this.#database.recoverJobs({
             checksums: Object.values(this.#actions).map((action) => action.checksum),
-            multiProcessMode: this.#options.multiProcessMode,
-            processTimeout: this.#options.processTimeout,
+            staleTimeoutMs: this.#options.heartbeatTimeout,
           })
         }
 
@@ -1257,6 +1256,12 @@ export class Client<
     }
 
     this.#stopping = (async () => {
+      // Stop heartbeat timer
+      if (this.#heartbeatTimer) {
+        clearTimeout(this.#heartbeatTimer)
+        this.#heartbeatTimer = null
+      }
+
       // Stop pull loop
       if (this.#pullInterval) {
         clearTimeout(this.#pullInterval)
@@ -1329,7 +1334,11 @@ export class Client<
 
     this.#jobStatusListenerSetup = true
 
-    this.#jobStatusListener = async (event: { jobId: string; status: JobStatus | 'retried'; clientId: string }) => {
+    this.#jobStatusListener = async (event: {
+      jobId: string
+      status: JobStatus | 'retried'
+      clientId: string
+    }) => {
       const pendingWaits = this.#pendingJobWaits.get(event.jobId)
       if (!pendingWaits || pendingWaits.size === 0) {
         return
@@ -1451,6 +1460,28 @@ export class Client<
         `[Duron] Error executing job ${job.id} for action ${action.name}`,
       )
     })
+  }
+
+  /**
+   * Schedule the next heartbeat. Uses recursive setTimeout (not setInterval)
+   * to avoid overlapping calls if a heartbeat is slow.
+   */
+  #scheduleHeartbeat() {
+    if (this.#stopped) {
+      return
+    }
+
+    this.#heartbeatTimer = setTimeout(async () => {
+      if (this.#stopped) {
+        return
+      }
+      try {
+        await this.#database.heartbeat()
+      } catch {
+        // Heartbeat failure is non-fatal — recovery will detect staleness
+      }
+      this.#scheduleHeartbeat()
+    }, this.#options.heartbeatInterval)
   }
 
   /**

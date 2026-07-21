@@ -385,8 +385,8 @@ function runRecoverTests(adapterFactory: AdapterFactory) {
             actions: { slowAction, quickAction },
             syncPattern: false,
             recoverJobsOnStart: true,
-            multiProcessMode: true,
-            processTimeout: 2_000, // Short timeout for testing
+            heartbeatInterval: 500,
+            heartbeatTimeout: 1_000,
             logger: 'error',
           })
           clientsToStop.push(recoveryClient)
@@ -438,8 +438,8 @@ function runRecoverTests(adapterFactory: AdapterFactory) {
             actions: { slowAction, quickAction },
             syncPattern: false,
             recoverJobsOnStart: true,
-            multiProcessMode: true,
-            processTimeout: 2_000,
+            heartbeatInterval: 500,
+            heartbeatTimeout: 1_000,
             logger: 'error',
           })
           clientsToStop.push(recoveryClient)
@@ -506,8 +506,8 @@ function runRecoverTests(adapterFactory: AdapterFactory) {
             syncPattern: 'pull',
             pullInterval: 100,
             recoverJobsOnStart: true,
-            multiProcessMode: true,
-            processTimeout: 2_000,
+            heartbeatInterval: 500,
+            heartbeatTimeout: 1_000,
             logger: 'error',
           })
           clientsToStop.push(recoveryClient)

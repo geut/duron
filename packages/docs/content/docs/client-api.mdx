@@ -163,23 +163,23 @@ Recovery checks for:
 }
 ```
 
-### `multiProcessMode`
+### `heartbeatInterval`
 
-**Optional.** Enable multi-process mode for job recovery. Defaults to `false`.
+**Optional.** Interval in milliseconds between heartbeat updates. Each instance periodically upserts a liveness record in the `clients` table. Defaults to `5000` (5 seconds).
 
 ```ts
 {
-  multiProcessMode: true,
+  heartbeatInterval: 5_000, // 5 seconds
 }
 ```
 
-### `processTimeout`
+### `heartbeatTimeout`
 
-**Optional.** Timeout in milliseconds to wait for process ping responses. Defaults to `500` (0.5 seconds).
+**Optional.** Milliseconds after which a client without a heartbeat is considered dead. A dead client's active jobs are recovered (requeued or failed if expired). Should be at least 3x `heartbeatInterval`. Defaults to `15000` (15 seconds).
 
 ```ts
 {
-  processTimeout: 10 * 1000, // 10 seconds
+  heartbeatTimeout: 15_000, // 15 seconds
 }
 ```
 

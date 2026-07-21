@@ -245,7 +245,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
 
   /**
    * Set the unique identifier for this adapter instance.
-   * Used for multi-process coordination and job ownership.
+   * Used for instance identification, heartbeat liveness, and job ownership.
    *
    * @param id - The unique identifier for this adapter instance
    */
@@ -501,6 +501,24 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
       return NumberResultSchema.parse(result)
     } catch (error) {
       this.#logger?.error(error, 'Error in Adapter.recoverJobs()')
+      throw error
+    }
+  }
+
+  /**
+   * Renew this instance's liveness record.
+   * Should be called periodically by the owner (e.g., the Client) to signal
+   * that this instance is still alive. Other instances use the liveness
+   * record to detect dead owners during recovery.
+   *
+   * @returns Promise resolving to `void`
+   */
+  async heartbeat(): Promise<void> {
+    try {
+      await this.start()
+      await this._heartbeat()
+    } catch (error) {
+      this.#logger?.error(error, 'Error in Adapter.heartbeat()')
       throw error
     }
   }
@@ -1131,4 +1149,11 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    * @returns Promise resolving to `void`
    */
   protected abstract _notify(event: string, data: any): Promise<void>
+
+  /**
+   * Renew this instance's liveness record (heartbeat).
+   *
+   * @returns Promise resolving to `void`
+   */
+  protected abstract _heartbeat(): Promise<void>
 }

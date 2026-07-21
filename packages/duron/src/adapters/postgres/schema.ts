@@ -257,6 +257,15 @@ export default function createSchema(schemaName: string) {
     ],
   )
 
+  // ============================================================================
+  // Clients Table (Instance Liveness)
+  // ============================================================================
+
+  const clientsTable = schema.table('clients', {
+    client_id: text('client_id').primaryKey(),
+    last_seen_at: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  })
+
   return {
     schema,
     jobsActiveTable,
@@ -264,5 +273,6 @@ export default function createSchema(schemaName: string) {
     jobStepsActiveTable,
     jobStepsArchiveTable,
     spansTable,
+    clientsTable,
   }
 }

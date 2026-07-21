@@ -455,7 +455,6 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
         // In a real scenario, this would happen when a process crashes
         const recovered = await adapter.recoverJobs({
           checksums: ['abc123'],
-          multiProcessMode: false,
         })
 
         // The job should be recovered (reset to CREATED status)

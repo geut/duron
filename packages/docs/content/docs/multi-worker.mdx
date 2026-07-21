@@ -26,7 +26,7 @@ A typical multi-worker setup consists of:
 2. **Worker Processes**: Handle job processing
    - Each worker has a unique `id`
    - Configured with `syncPattern: 'hybrid'` for efficient job processing
-   - Uses `multiProcessMode: true` for proper job recovery
+   - Heartbeat-based liveness detection for crashed-instance recovery
 
 All processes share the same database, so jobs created through any process are available to all workers.
 
@@ -37,9 +37,7 @@ All processes share the same database, so jobs created through any process are a
 Each worker process needs:
 
 - **Unique ID**: Each worker must have a unique identifier
-- **Multi-process mode**: Enable `multiProcessMode: true`
 - **Sync pattern**: Use `syncPattern: 'hybrid'` for efficient processing
-- **Process timeout**: Configure `processTimeout` for job recovery
 
 ```ts
 import { duron } from 'duron'
@@ -57,8 +55,8 @@ const client = duron({
     sendEmail,
     processOrder,
   },
-  multiProcessMode: true, // Enable multi-process mode
-  processTimeout: 500, // 0.5 seconds (default)
+  heartbeatInterval: 5_000, // Liveness heartbeat every 5s (default)
+  heartbeatTimeout: 15_000, // Consider dead after 15s (default)
   recoverJobsOnStart: true, // Recover stuck jobs on startup
 })
 
@@ -206,8 +204,8 @@ const client = duron({
   },
   logger: 'debug',
   recoverJobsOnStart: true,
-  multiProcessMode: true,
-  processTimeout: 500, // 0.5 seconds (default)
+  heartbeatInterval: 5_000, // Liveness heartbeat every 5s (default)
+  heartbeatTimeout: 15_000, // Consider dead after 15s (default)
 })
 
 await client.start()
@@ -224,17 +222,17 @@ process.on('SIGINT', async () => {
 
 ## Job Recovery
 
-When `multiProcessMode: true` is enabled, Duron uses a ping-based mechanism to check if other processes are alive before recovering their jobs:
+Duron uses heartbeat-based liveness detection for crashed-instance recovery:
 
-1. **Periodic recovery**: Recovery runs automatically based on `recoverJobsInterval` (default: every 60 seconds)
-2. **On startup**: Each worker checks for stuck jobs (jobs marked as active but owned by other processes)
-3. **Ping check**: Before recovering jobs, workers ping the owning process to verify it's still running
-4. **Timeout**: If a process doesn't respond within `processTimeout`, its jobs are recovered
+1. **Heartbeat**: Each instance periodically upserts a liveness record in the `clients` table (every `heartbeatInterval`)
+2. **Periodic recovery**: Recovery runs automatically based on `recoverJobsInterval` (default: every 60 seconds)
+3. **On startup**: Each worker checks for stuck jobs (jobs marked as active but owned by dead instances)
+4. **Dead detection**: A client is considered dead if its `last_seen_at` is older than `heartbeatTimeout`
 5. **Recovery behavior**:
    - **Expired jobs** (exceeded timeout): Archived as failed with error information
    - **Stuck jobs** (not expired): Reset to `created` status and can be picked up by any worker
 
-This prevents jobs from being incorrectly recovered when a process is temporarily unavailable (e.g., during a restart).
+On graceful shutdown, each instance deletes its liveness row so other instances can recover its jobs immediately.
 
 ## Best Practices
 
@@ -253,17 +251,19 @@ id: process.env.WORKER_ID || `worker-${Date.now()}`
 id: `worker-${Math.random()}`
 ```
 
-### Process Timeout
+### Heartbeat Settings
 
-Set `processTimeout` based on your deployment strategy:
+Configure heartbeat timing based on your deployment:
 
-- **Very short timeout (500ms)**: Default, good for most use cases with fast ping responses
-- **Short timeout (1-2 seconds)**: For fast deployments and quick recovery
-- **Medium timeout (5+ seconds)**: For slow deployments or high-latency networks
+- **`heartbeatInterval`**: How often to send a heartbeat (default: 5s)
+- **`heartbeatTimeout`**: When to consider a client dead (default: 15s)
 
 ```ts
-processTimeout: 500, // 0.5 seconds (default)
+heartbeatInterval: 5_000, // Send heartbeat every 5s
+heartbeatTimeout: 15_000, // Consider dead after 15s
 ```
+
+Keep `heartbeatTimeout` at least 3x `heartbeatInterval` to tolerate occasional missed beats.
 
 ### Resource Management
 
@@ -292,9 +292,8 @@ If jobs aren't being processed:
 
 If jobs remain in `active` status:
 
-1. **Enable multi-process mode**: Set `multiProcessMode: true` on all workers
-2. **Check process timeout**: Ensure `processTimeout` is appropriate for your deployment
-3. **Manual recovery**: Use `client.recoverJobs()` to manually recover stuck jobs
+1. **Check heartbeat settings**: Ensure `heartbeatTimeout` is appropriate (default: 15s)
+2. **Manual recovery**: Use `client.recoverJobs()` to manually recover stuck jobs
 
 ### Duplicate Job Processing
 

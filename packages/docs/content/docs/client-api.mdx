@@ -198,9 +198,13 @@ Recovery checks for:
 **Optional.** Telemetry configuration for OpenTelemetry tracing. See [Telemetry](/docs/telemetry) for details.
 
 ```ts
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
+
 {
   telemetry: {
-    local: true,               // Store spans in the database
+    traceExporter: new OTLPTraceExporter({
+      url: 'http://localhost:4318/v1/traces',
+    }),
     serviceName: 'my-service', // OpenTelemetry service name (default: 'duron')
   },
 }
@@ -208,10 +212,9 @@ Recovery checks for:
 
 **Options:**
 
-- `local` - Enable local span storage (`boolean | { flushDelayMs?: number }`)
-- `traceExporter` - Export spans to external systems (OTLP, Jaeger, etc.)
-- `spanProcessors` - Add custom span processors
+- `traceExporter` - Export spans to external systems (`SpanExporter | SpanExporter[]`)
 - `serviceName` - Service name for OpenTelemetry resource (default: `'duron'`)
+- `batchDelayMs` - Delay in milliseconds between batch exports (default: `5000`)
 
 ## Lifecycle Methods
 

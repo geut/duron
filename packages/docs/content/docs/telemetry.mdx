@@ -270,14 +270,14 @@ try {
 
 ## Installation
 
-For external OpenTelemetry export, install the required packages:
+Duron includes the OpenTelemetry SDK packages as dependencies. You only need to install an exporter:
 
 ```bash
 # For OTLP export
-bun add @opentelemetry/sdk-trace-base @opentelemetry/sdk-trace-node @opentelemetry/exporter-trace-otlp-http
+bun add @opentelemetry/exporter-trace-otlp-http
 
 # For Jaeger
-bun add @opentelemetry/sdk-trace-base @opentelemetry/sdk-trace-node @opentelemetry/exporter-jaeger
+bun add @opentelemetry/exporter-jaeger
 ```
 
 ## Architecture Notes

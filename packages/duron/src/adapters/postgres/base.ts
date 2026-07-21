@@ -1425,11 +1425,30 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
     const schemaName = this.schema
     const fuzzySearch = search?.trim()
 
-    // Single query using UNION ALL to query both active and archive tables
-    // Active table lacks job_finished_at, so we add NULL as placeholder
+    // Single query using UNION ALL to query both active and archive tables.
+    // output is only used internally by the search filter — the outer SELECT
+    // excludes it so Postgres never transfers it (steps do not include output).
+    // job_finished_at is not part of the step result, so it's excluded entirely.
     const steps = this._map(
       await this.db.execute<JobStep>(sql`
-        SELECT * FROM (
+        SELECT s.id,
+               s."jobId",
+               s."parentStepId",
+               s.parallel,
+               s.name,
+               s.status,
+               s.error,
+               s."startedAt",
+               s."finishedAt",
+               s."timeoutMs",
+               s."expiresAt",
+               s."retriesLimit",
+               s."retriesCount",
+               s."delayedMs",
+               s."historyFailedAttempts",
+               s."createdAt",
+               s."updatedAt"
+        FROM (
           SELECT id,
                  job_id as "jobId",
                  parent_step_id as "parentStepId",
@@ -1447,8 +1466,7 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
                  delayed_ms as "delayedMs",
                  history_failed_attempts as "historyFailedAttempts",
                  created_at as "createdAt",
-                 updated_at as "updatedAt",
-                 NULL as "jobFinishedAt"
+                 updated_at as "updatedAt"
           FROM ${sql.identifier(schemaName)}.job_steps_active
           WHERE job_id = ${jobId}
           UNION ALL
@@ -1469,8 +1487,7 @@ export abstract class PostgresBaseAdapter<Database extends DrizzleDatabase, Conn
                  delayed_ms as "delayedMs",
                  history_failed_attempts as "historyFailedAttempts",
                  created_at as "createdAt",
-                 updated_at as "updatedAt",
-                 job_finished_at as "jobFinishedAt"
+                 updated_at as "updatedAt"
           FROM ${sql.identifier(schemaName)}.job_steps_archive
           WHERE job_id = ${jobId}
         ) s

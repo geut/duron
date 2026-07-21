@@ -40,7 +40,6 @@ import {
   type DelayJobStepOptions,
   type DeleteJobOptions,
   type DeleteJobsOptions,
-  type DeleteSpansOptions,
   type FailJobOptions,
   type FailJobStepOptions,
   type FetchOptions,
@@ -49,9 +48,6 @@ import {
   type GetJobStepsResult,
   type GetJobsOptions,
   type GetJobsResult,
-  type GetSpansOptions,
-  type GetSpansResult,
-  type InsertSpanOptions,
   type Job,
   type JobStatusResult,
   type JobStep,
@@ -59,7 +55,6 @@ import {
   type PruneArchiveOptions,
   type RecoverJobsOptions,
   type RetryJobOptions,
-  type SpanSort,
   type TimeTravelJobOptions,
 } from '../adapter.js'
 
@@ -868,21 +863,6 @@ export abstract class PostgresBaseAdapter<
     const where = and(this._buildJobsWhereClause(filters), ne(jobsTable.status, JOB_STATUS_ACTIVE))
 
     const result = await this.db.delete(jobsTable).where(where).returning({ id: jobsTable.id })
-
-    // Clean up orphan spans (spans whose job no longer exists in active or archive)
-    if (result.length > 0) {
-      await this.db.execute(sql`
-        DELETE FROM ${sql.identifier(schemaName)}.spans s
-        WHERE s.job_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_active ja WHERE ja.id = s.job_id
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_archive ja WHERE ja.id = s.job_id
-          )
-      `)
-    }
-
     return result.length
   }
 
@@ -2040,270 +2020,8 @@ export abstract class PostgresBaseAdapter<
   }
 
   // ============================================================================
-  // Metrics Methods
+  // Private Methods
   // ============================================================================
-
-  /**
-   * Internal method to insert multiple span records in a single batch.
-   * Routes spans to active or archive table based on job location.
-   */
-  protected async _insertSpans(spans: InsertSpanOptions[]): Promise<number> {
-    if (spans.length === 0) {
-      return 0
-    }
-
-    const values = spans.map((s) => ({
-      trace_id: s.traceId,
-      span_id: s.spanId,
-      parent_span_id: s.parentSpanId,
-      job_id: s.jobId,
-      step_id: s.stepId,
-      name: s.name,
-      kind: s.kind,
-      start_time_unix_nano: s.startTimeUnixNano,
-      end_time_unix_nano: s.endTimeUnixNano,
-      status_code: s.statusCode,
-      status_message: s.statusMessage,
-      attributes: s.attributes ?? {},
-      events: s.events ?? [],
-    }))
-
-    const result = await this.db
-      .insert(this.tables.spansTable)
-      .values(values)
-      .returning({ id: this.tables.spansTable.id })
-
-    return result.length
-  }
-
-  /**
-   * Internal method to get spans for a job or step.
-   * For step queries, uses a recursive CTE to find all descendant spans.
-   */
-  protected async _getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
-    const filters = options.filters ?? {}
-
-    // Build sort
-    const sortInput = options.sort ?? { field: 'startTimeUnixNano', order: 'asc' }
-    const sortFieldMap: Record<SpanSort['field'], string> = {
-      name: 'name',
-      startTimeUnixNano: 'start_time_unix_nano',
-      endTimeUnixNano: 'end_time_unix_nano',
-    }
-    const sortField = sortFieldMap[sortInput.field]
-    const sortOrder = sortInput.order === 'asc' ? 'ASC' : 'DESC'
-
-    // For step queries, use a recursive CTE to get descendant spans
-    if (options.stepId) {
-      return this._getStepSpansRecursive(options.stepId, sortField, sortOrder, filters)
-    }
-
-    const spansTable = this.tables.spansTable
-
-    // Build WHERE clause for job queries
-    const where = this._buildSpansWhereClause(options.jobId, undefined, filters)
-
-    // Get total count
-    const total = await this.db.$count(spansTable, where)
-    if (!total) {
-      return {
-        spans: [],
-        total: 0,
-      }
-    }
-
-    const sortFieldColumn = sortFieldMap[sortInput.field]
-    const orderByClause =
-      sortInput.order === 'asc'
-        ? asc(spansTable[sortFieldColumn as keyof typeof spansTable] as any)
-        : desc(spansTable[sortFieldColumn as keyof typeof spansTable] as any)
-
-    const rows = await this.db
-      .select({
-        id: spansTable.id,
-        traceId: spansTable.trace_id,
-        spanId: spansTable.span_id,
-        parentSpanId: spansTable.parent_span_id,
-        jobId: spansTable.job_id,
-        stepId: spansTable.step_id,
-        name: spansTable.name,
-        kind: spansTable.kind,
-        startTimeUnixNano: spansTable.start_time_unix_nano,
-        endTimeUnixNano: spansTable.end_time_unix_nano,
-        statusCode: spansTable.status_code,
-        statusMessage: spansTable.status_message,
-        attributes: spansTable.attributes,
-        events: spansTable.events,
-      })
-      .from(spansTable)
-      .where(where)
-      .orderBy(orderByClause)
-
-    // Cast kind and statusCode to proper types, convert BigInt to string for JSON serialization
-    const spans = rows.map((row) => ({
-      ...row,
-      kind: row.kind as 0 | 1 | 2 | 3 | 4,
-      statusCode: row.statusCode as 0 | 1 | 2,
-      // Convert BigInt to string for JSON serialization
-      startTimeUnixNano: row.startTimeUnixNano?.toString() ?? null,
-      endTimeUnixNano: row.endTimeUnixNano?.toString() ?? null,
-    }))
-
-    return {
-      spans,
-      total,
-    }
-  }
-
-  /**
-   * Get spans for a step using a recursive CTE to traverse the span hierarchy.
-   * This returns the step's span and all its descendant spans (children, grandchildren, etc.)
-   */
-  protected async _getStepSpansRecursive(
-    stepId: string,
-    sortField: string,
-    sortOrder: string,
-    _filters?: GetSpansOptions['filters'],
-  ): Promise<GetSpansResult> {
-    const schemaName = this.schema
-
-    const query = sql`
-      WITH RECURSIVE span_tree AS (
-        -- Base case: the span(s) for the step
-        SELECT * FROM ${sql.identifier(schemaName)}.spans WHERE step_id = ${stepId}::uuid
-        UNION ALL
-        -- Recursive case: children of spans we've found
-        SELECT s.* FROM ${sql.identifier(schemaName)}.spans s
-        INNER JOIN span_tree st ON s.parent_span_id = st.span_id
-      )
-      SELECT
-        id,
-        trace_id as "traceId",
-        span_id as "spanId",
-        parent_span_id as "parentSpanId",
-        job_id as "jobId",
-        step_id as "stepId",
-        name,
-        kind,
-        start_time_unix_nano as "startTimeUnixNano",
-        end_time_unix_nano as "endTimeUnixNano",
-        status_code as "statusCode",
-        status_message as "statusMessage",
-        attributes,
-        events
-      FROM span_tree
-      ORDER BY ${sql.identifier(sortField)} ${sql.raw(sortOrder)}
-    `
-
-    // Raw SQL returns numeric types as strings, so we type them as such
-    const rows = (await this.db.execute(query)) as unknown as Array<{
-      id: string | number
-      traceId: string
-      spanId: string
-      parentSpanId: string | null
-      jobId: string | null
-      stepId: string | null
-      name: string
-      kind: string | number
-      startTimeUnixNano: string | bigint | null
-      endTimeUnixNano: string | bigint | null
-      statusCode: string | number
-      statusMessage: string | null
-      attributes: Record<string, any>
-      events: Array<{ name: string; timeUnixNano: string; attributes?: Record<string, any> }>
-    }>
-
-    // Convert types: raw SQL returns numeric types as strings
-    const spans = rows.map((row) => ({
-      ...row,
-      // Convert id to number (bigserial comes as string from raw SQL)
-      id: typeof row.id === 'string' ? Number.parseInt(row.id, 10) : row.id,
-      // Convert kind and statusCode to proper types
-      kind: (typeof row.kind === 'string' ? Number.parseInt(row.kind, 10) : row.kind) as
-        | 0
-        | 1
-        | 2
-        | 3
-        | 4,
-      statusCode: (typeof row.statusCode === 'string'
-        ? Number.parseInt(row.statusCode, 10)
-        : row.statusCode) as 0 | 1 | 2,
-      // Convert BigInt to string for JSON serialization
-      startTimeUnixNano: row.startTimeUnixNano?.toString() ?? null,
-      endTimeUnixNano: row.endTimeUnixNano?.toString() ?? null,
-    }))
-
-    return {
-      spans,
-      total: spans.length,
-    }
-  }
-
-  /**
-   * Internal method to delete all spans for a job.
-   */
-  protected async _deleteSpans(options: DeleteSpansOptions): Promise<number> {
-    const result = await this.db
-      .delete(this.tables.spansTable)
-      .where(eq(this.tables.spansTable.job_id, options.jobId))
-      .returning({ id: this.tables.spansTable.id })
-
-    return result.length
-  }
-
-  /**
-   * Build WHERE clause for spans queries (used for job queries only).
-   * When querying by jobId, we find all spans that share the same trace_id
-   * as spans with that job. This includes spans from external libraries that
-   * don't have the duron.job.id attribute but are part of the same trace.
-   *
-   * Note: Step queries are handled separately by _getStepSpansRecursive using
-   * a recursive CTE to traverse the span hierarchy.
-   */
-  protected _buildSpansWhereClause(
-    jobId?: string,
-    _stepId?: string,
-    filters?: GetSpansOptions['filters'],
-  ) {
-    const spansTable = this.tables.spansTable
-
-    // Build condition for finding spans by trace_id (includes external spans)
-    let traceCondition: ReturnType<typeof eq> | undefined
-
-    if (jobId) {
-      // Find all spans that share a trace_id with any span that has this job_id
-      // This includes external spans (like from AI SDK) that don't have duron.job.id
-      traceCondition = inArray(
-        spansTable.trace_id,
-        this.db
-          .select({ traceId: spansTable.trace_id })
-          .from(spansTable)
-          .where(eq(spansTable.job_id, jobId)),
-      )
-    }
-
-    return and(
-      traceCondition,
-      filters?.name
-        ? Array.isArray(filters.name)
-          ? or(...filters.name.map((n) => ilike(spansTable.name, `%${n}%`)))
-          : ilike(spansTable.name, `%${filters.name}%`)
-        : undefined,
-      filters?.kind
-        ? inArray(spansTable.kind, Array.isArray(filters.kind) ? filters.kind : [filters.kind])
-        : undefined,
-      filters?.statusCode
-        ? inArray(
-            spansTable.status_code,
-            Array.isArray(filters.statusCode) ? filters.statusCode : [filters.statusCode],
-          )
-        : undefined,
-      filters?.traceId ? eq(spansTable.trace_id, filters.traceId) : undefined,
-      ...(filters?.attributesFilter && Object.keys(filters.attributesFilter).length > 0
-        ? this.#buildJsonbWhereConditions(filters.attributesFilter, spansTable.attributes)
-        : []),
-    )
-  }
 
   // ============================================================================
   // Private Methods
@@ -2511,11 +2229,6 @@ export abstract class PostgresBaseAdapter<
             SELECT id FROM ${sql.identifier(schemaName)}.jobs_archive
             WHERE finished_at < ${threshold.toISOString()}
             LIMIT ${batchSize}
-          ),
-          deleted_spans AS (
-            DELETE FROM ${sql.identifier(schemaName)}.spans s
-            USING ids_to_delete d
-            WHERE s.job_id = d.id
           )
           DELETE FROM ${sql.identifier(schemaName)}.jobs_archive j
           USING ids_to_delete d
@@ -2531,45 +2244,18 @@ export abstract class PostgresBaseAdapter<
       totalDeleted += result.length
     }
 
-    // Clean up orphan spans (spans whose job no longer exists in active or archive)
-    if (totalDeleted > 0) {
-      await this.db.execute(sql`
-        DELETE FROM ${sql.identifier(schemaName)}.spans s
-        WHERE s.job_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_active ja WHERE ja.id = s.job_id
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_archive ja WHERE ja.id = s.job_id
-          )
-      `)
-    }
-
     return totalDeleted
   }
 
   protected async _truncateArchive(): Promise<void> {
     const schemaName = this.schema
     await this.db.execute(sql`TRUNCATE TABLE ${sql.identifier(schemaName)}.jobs_archive CASCADE`)
-
-    // Clean up orphan spans (spans whose job no longer exists in active or archive)
-    // After truncation, spans for archived jobs become orphans and need cleanup
-    await this.db.execute(sql`
-      DELETE FROM ${sql.identifier(schemaName)}.spans s
-      WHERE s.job_id IS NOT NULL
-        AND NOT EXISTS (
-          SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_active ja WHERE ja.id = s.job_id
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM ${sql.identifier(schemaName)}.jobs_archive ja WHERE ja.id = s.job_id
-        )
-    `)
   }
 
   protected async _getArchiveStats(): Promise<ArchiveStats> {
     const schemaName = this.schema
 
-    const [jobsResult, stepsResult, spansResult, oldestResult] = await Promise.all([
+    const [jobsResult, stepsResult, oldestResult] = await Promise.all([
       this.db
         .execute<{ count: number }>(sql`
         SELECT COUNT(*)::int as count FROM ${sql.identifier(schemaName)}.jobs_archive
@@ -2578,11 +2264,6 @@ export abstract class PostgresBaseAdapter<
       this.db
         .execute<{ count: number }>(sql`
         SELECT COUNT(*)::int as count FROM ${sql.identifier(schemaName)}.job_steps_archive
-      `)
-        .then((r) => this._map(r)),
-      this.db
-        .execute<{ count: number }>(sql`
-        SELECT COUNT(*)::int as count FROM ${sql.identifier(schemaName)}.spans
       `)
         .then((r) => this._map(r)),
       this.db
@@ -2599,7 +2280,6 @@ export abstract class PostgresBaseAdapter<
     return {
       jobsCount: Number(jobsResult[0]?.count ?? 0),
       stepsCount: Number(stepsResult[0]?.count ?? 0),
-      spansCount: Number(spansResult[0]?.count ?? 0),
       oldestJobDate: oldestDate,
       totalSizeBytes: null,
       lastPrunedAt: this.lastPrunedAt,

@@ -228,7 +228,6 @@ function runArchiveTests(adapterFactory: AdapterFactory) {
       stats = await adapter.getArchiveStats()
       expect(stats.jobsCount).toBe(0)
       expect(stats.stepsCount).toBe(0)
-      expect(stats.spansCount).toBe(0)
     })
 
     it('should query archived job by status filter', async () => {

@@ -320,104 +320,6 @@ export const JobStepStatusResultSchema = z.object({
 })
 
 // ============================================================================
-// Span Schemas (OpenTelemetry compatible)
-// ============================================================================
-
-/**
- * SpanKind values (OpenTelemetry standard):
- * 0 = INTERNAL - Default, internal operation
- * 1 = SERVER - Server-side handling of RPC/HTTP request
- * 2 = CLIENT - Client-side of RPC/HTTP request
- * 3 = PRODUCER - Producer of async message
- * 4 = CONSUMER - Consumer of async message
- */
-export const SpanKindSchema = z.union([
-  z.literal(0),
-  z.literal(1),
-  z.literal(2),
-  z.literal(3),
-  z.literal(4),
-])
-
-/**
- * SpanStatusCode values (OpenTelemetry standard):
- * 0 = UNSET - Status not set
- * 1 = OK - Operation completed successfully
- * 2 = ERROR - Operation failed
- */
-export const SpanStatusCodeSchema = z.union([z.literal(0), z.literal(1), z.literal(2)])
-
-export const SpanEventSchema = z.object({
-  name: z.string(),
-  timeUnixNano: z.string(),
-  attributes: z.record(z.string(), z.any()).optional(),
-})
-
-export const SpanSchema = z.object({
-  id: z.number(),
-  traceId: z.string(),
-  spanId: z.string(),
-  parentSpanId: z.string().nullable(),
-  jobId: z.string().nullable(),
-  stepId: z.string().nullable(),
-  name: z.string(),
-  kind: SpanKindSchema,
-  startTimeUnixNano: z.string().nullable(), // Stored as bigint but serialized as string for JSON
-  endTimeUnixNano: z.string().nullable(), // Stored as bigint but serialized as string for JSON
-  statusCode: SpanStatusCodeSchema,
-  statusMessage: z.string().nullable(),
-  attributes: z.record(z.string(), z.any()),
-  events: z.array(SpanEventSchema),
-})
-
-export const SpanSortFieldSchema = z.enum(['name', 'startTimeUnixNano', 'endTimeUnixNano'])
-
-export const SpanSortSchema = z.object({
-  field: SpanSortFieldSchema,
-  order: SortOrderSchema,
-})
-
-export const SpanFiltersSchema = z.object({
-  name: z.union([z.string(), z.array(z.string())]).optional(),
-  kind: z.union([SpanKindSchema, z.array(SpanKindSchema)]).optional(),
-  statusCode: z.union([SpanStatusCodeSchema, z.array(SpanStatusCodeSchema)]).optional(),
-  traceId: z.string().optional(),
-  attributesFilter: z.record(z.string(), z.any()).optional(),
-})
-
-export const InsertSpanOptionsSchema = z.object({
-  traceId: z.string(),
-  spanId: z.string(),
-  parentSpanId: z.string().nullable(),
-  jobId: z.string().nullable(),
-  stepId: z.string().nullable(),
-  name: z.string(),
-  kind: SpanKindSchema,
-  startTimeUnixNano: z.bigint(),
-  endTimeUnixNano: z.bigint().nullable(),
-  statusCode: SpanStatusCodeSchema,
-  statusMessage: z.string().nullable(),
-  attributes: z.record(z.string(), z.any()).optional(),
-  events: z.array(SpanEventSchema).optional(),
-})
-
-export const GetSpansOptionsSchema = z.object({
-  jobId: z.string().optional(),
-  stepId: z.string().optional(),
-  filters: SpanFiltersSchema.optional(),
-  sort: SpanSortSchema.optional(),
-})
-
-export const GetSpansResultSchema = z.object({
-  spans: z.array(SpanSchema),
-  total: z.number().int().nonnegative(),
-})
-
-export const DeleteSpansOptionsSchema = z.object({
-  jobId: z.string(),
-})
-
-// ============================================================================
 // Archive Schemas
 // ============================================================================
 
@@ -430,7 +332,6 @@ export const PruneArchiveOptionsSchema = z.object({
 export const ArchiveStatsSchema = z.object({
   jobsCount: z.number(),
   stepsCount: z.number(),
-  spansCount: z.number(),
   oldestJobDate: z.date().nullable(),
   totalSizeBytes: z.number().nullable(),
   lastPrunedAt: z.date().nullable(),
@@ -471,16 +372,5 @@ export type DelayJobStepOptions = z.infer<typeof DelayJobStepOptionsSchema>
 export type CancelJobStepOptions = z.infer<typeof CancelJobStepOptionsSchema>
 export type CreateOrRecoverJobStepResult = z.infer<typeof CreateOrRecoverJobStepResultSchema>
 export type TimeTravelJobOptions = z.infer<typeof TimeTravelJobOptionsSchema>
-export type SpanKind = z.infer<typeof SpanKindSchema>
-export type SpanStatusCode = z.infer<typeof SpanStatusCodeSchema>
-export type SpanEvent = z.infer<typeof SpanEventSchema>
-export type Span = z.infer<typeof SpanSchema>
-export type SpanSortField = z.infer<typeof SpanSortFieldSchema>
-export type SpanSort = z.infer<typeof SpanSortSchema>
-export type SpanFilters = z.infer<typeof SpanFiltersSchema>
-export type InsertSpanOptions = z.infer<typeof InsertSpanOptionsSchema>
-export type GetSpansOptions = z.infer<typeof GetSpansOptionsSchema>
-export type GetSpansResult = z.infer<typeof GetSpansResultSchema>
-export type DeleteSpansOptions = z.infer<typeof DeleteSpansOptionsSchema>
 export type PruneArchiveOptions = z.infer<typeof PruneArchiveOptionsSchema>
 export type ArchiveStats = z.infer<typeof ArchiveStatsSchema>

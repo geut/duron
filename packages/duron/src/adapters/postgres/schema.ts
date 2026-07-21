@@ -130,43 +130,6 @@ export default function createSchema(schemaName: string) {
     ],
   )
 
-  const spansTable = schema.table(
-    'spans',
-    {
-      id: bigserial('id', { mode: 'number' }).primaryKey(),
-      trace_id: text('trace_id').notNull(),
-      span_id: text('span_id').notNull(),
-      parent_span_id: text('parent_span_id'),
-      job_id: uuid('job_id'),
-      step_id: uuid('step_id'),
-      name: text('name').notNull(),
-      kind: integer('kind').notNull().default(0),
-      start_time_unix_nano: bigint('start_time_unix_nano', { mode: 'bigint' }).notNull(),
-      end_time_unix_nano: bigint('end_time_unix_nano', { mode: 'bigint' }),
-      status_code: integer('status_code').notNull().default(0),
-      status_message: text('status_message'),
-      attributes: jsonb('attributes').$type<Record<string, any>>().notNull().default({}),
-      events: jsonb('events')
-        .$type<Array<{ name: string; timeUnixNano: string; attributes?: Record<string, any> }>>()
-        .notNull()
-        .default([]),
-    },
-    (table) => [
-      // Single column indexes (hot path)
-      index('idx_spans_trace_id').on(table.trace_id),
-      index('idx_spans_span_id').on(table.span_id),
-      index('idx_spans_job_id').on(table.job_id),
-      index('idx_spans_step_id').on(table.step_id),
-      index('idx_spans_name').on(table.name),
-      // Composite indexes
-      index('idx_spans_job_step').on(table.job_id, table.step_id),
-      index('idx_spans_trace_parent').on(table.trace_id, table.parent_span_id),
-      // Constraints
-      check('spans_kind_check', sql`${table.kind} IN (0, 1, 2, 3, 4)`),
-      check('spans_status_code_check', sql`${table.status_code} IN (0, 1, 2)`),
-    ],
-  )
-
   // ============================================================================
   // Archive Tables (Terminated Work)
   // ============================================================================
@@ -272,7 +235,6 @@ export default function createSchema(schemaName: string) {
     jobsArchiveTable,
     jobStepsActiveTable,
     jobStepsArchiveTable,
-    spansTable,
     clientsTable,
   }
 }

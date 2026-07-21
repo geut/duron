@@ -2,12 +2,11 @@ import { Elysia } from 'elysia'
 import { jwtVerify, SignJWT } from 'jose'
 import { z } from 'zod'
 
-import type { GetJobStepsOptions, GetJobsOptions, GetSpansOptions } from './adapters/adapter.js'
+import type { GetJobStepsOptions, GetJobsOptions } from './adapters/adapter.js'
 import {
   GetActionsResultSchema,
   GetJobStepsResultSchema,
   GetJobsResultSchema,
-  GetSpansResultSchema,
   JobSchema,
   JobSortFieldSchema,
   JobStatusResultSchema,
@@ -15,8 +14,6 @@ import {
   JobStepSchema,
   JobStepStatusResultSchema,
   SortOrderSchema,
-  SpanKindSchema,
-  SpanSortFieldSchema,
 } from './adapters/schemas.js'
 import type { Client } from './client.js'
 
@@ -185,52 +182,6 @@ export const GetActionsMetadataResponseSchema = z.array(
 export type GetJobsQueryInput = z.input<typeof GetJobsQuerySchema>
 export type GetJobStepsQueryInput = z.input<typeof GetJobStepsQuerySchema>
 
-// Spans query schema
-export const GetSpansQuerySchema = z
-  .object({
-    // Filters
-    fName: z.union([z.string(), z.array(z.string())]).optional(),
-    fKind: z.union([SpanKindSchema, z.array(SpanKindSchema)]).optional(),
-    fTraceId: z.string().optional(),
-    fAttributesFilter: z.record(z.string(), z.any()).optional(),
-
-    // Sort - format: "field:asc" or "field:desc"
-    sort: z.string().optional(),
-  })
-  .transform((data) => {
-    const filters: any = {}
-
-    if (data.fName) filters.name = data.fName
-    if (data.fKind) filters.kind = data.fKind
-    if (data.fTraceId) filters.traceId = data.fTraceId
-    if (data.fAttributesFilter) filters.attributesFilter = data.fAttributesFilter
-
-    // Parse sort string: "field:asc" -> { field: 'field', order: 'asc' }
-    let sort:
-      | { field: z.infer<typeof SpanSortFieldSchema>; order: z.infer<typeof SortOrderSchema> }
-      | undefined
-    if (data.sort) {
-      const [field, order] = data.sort.split(':').map((s) => s.trim())
-      if (field && order) {
-        const fieldResult = SpanSortFieldSchema.safeParse(field)
-        const orderResult = SortOrderSchema.safeParse(order.toLowerCase())
-        if (fieldResult.success && orderResult.success) {
-          sort = {
-            field: fieldResult.data,
-            order: orderResult.data,
-          }
-        }
-      }
-    }
-
-    return {
-      filters: Object.keys(filters).length > 0 ? filters : undefined,
-      sort,
-    }
-  })
-
-export type GetSpansQueryInput = z.input<typeof GetSpansQuerySchema>
-
 export const ErrorResponseSchema = z.object({
   error: z.string(),
   message: z.string().optional(),
@@ -280,13 +231,8 @@ export interface CreateServerOptions<P extends string> {
   prefix?: P
 
   /**
-   * Enable spans endpoints (/jobs/:id/spans, /steps/:id/spans).
-   * Only works when client is configured with telemetry.local enabled.
-   * When true, enables the dashboard to show spans buttons.
-   * @default auto-detected from client.spansEnabled
+   * Login configuration for dashboard authentication.
    */
-  spansEnabled?: boolean
-
   login?: {
     onLogin: (body: { email: string; password: string }) => Promise<boolean>
     jwtSecret: string | Uint8Array
@@ -308,12 +254,7 @@ export interface CreateServerOptions<P extends string> {
  * @param options - Configuration options
  * @returns Elysia server instance
  */
-export function createServer<P extends string>({
-  client,
-  prefix,
-  login,
-  spansEnabled,
-}: CreateServerOptions<P>) {
+export function createServer<P extends string>({ client, prefix, login }: CreateServerOptions<P>) {
   // Convert string secret to Uint8Array if needed
   const secretKey =
     typeof login?.jwtSecret === 'string'
@@ -321,9 +262,6 @@ export function createServer<P extends string>({
       : login?.jwtSecret
 
   const routePrefix = (prefix ?? '/api') as P
-
-  // Auto-detect spansEnabled from client if not explicitly set
-  const isSpansEnabled = spansEnabled ?? client.spansEnabled
 
   return new Elysia({
     prefix: routePrefix,
@@ -697,7 +635,6 @@ export function createServer<P extends string>({
           200: z.object({
             jobsCount: z.number(),
             stepsCount: z.number(),
-            spansCount: z.number(),
             oldestJobDate: z.date().nullable(),
             totalSizeBytes: z.number().nullable(),
             lastPrunedAt: z.date().nullable(),
@@ -761,68 +698,16 @@ export function createServer<P extends string>({
       '/config',
       async () => {
         return {
-          spansEnabled: isSpansEnabled,
           authEnabled: !!login,
         }
       },
       {
         response: {
           200: z.object({
-            spansEnabled: z.boolean(),
             authEnabled: z.boolean(),
           }),
           500: ErrorResponseSchema,
         },
-      },
-    )
-    .get(
-      '/jobs/:id/spans',
-      async ({ params, query }) => {
-        if (!isSpansEnabled) {
-          throw new Error('Spans are not enabled. Enable telemetry.local to enable spans.')
-        }
-        const options: GetSpansOptions = {
-          jobId: params.id,
-          filters: query.filters,
-          sort: query.sort,
-        }
-        return client.getSpans(options)
-      },
-      {
-        params: JobIdParamsSchema,
-        query: GetSpansQuerySchema,
-        response: {
-          200: GetSpansResultSchema,
-          400: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-        },
-        auth: true,
-      },
-    )
-    .get(
-      '/steps/:id/spans',
-      async ({ params, query }) => {
-        if (!isSpansEnabled) {
-          throw new Error('Spans are not enabled. Enable telemetry.local to enable spans.')
-        }
-        const options: GetSpansOptions = {
-          stepId: params.id,
-          filters: query.filters,
-          sort: query.sort,
-        }
-        return client.getSpans(options)
-      },
-      {
-        params: StepIdParamsSchema,
-        query: GetSpansQuerySchema,
-        response: {
-          200: GetSpansResultSchema,
-          400: ErrorResponseSchema,
-          500: ErrorResponseSchema,
-          401: ErrorResponseSchema,
-        },
-        auth: true,
       },
     )
     .post(

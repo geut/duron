@@ -968,10 +968,8 @@ export class Client<
     // the NOTIFY would be missed
     let timeoutId: NodeJS.Timeout | undefined
     let abortHandler: (() => void) | undefined
-    let registeredResolve: ((result: JobResult | null) => void) | undefined
 
     return new Promise<JobResult | null>((resolve) => {
-      registeredResolve = resolve
 
       // Check if already aborted before setting up wait
       if (options?.signal?.aborted) {
@@ -1009,35 +1007,42 @@ export class Client<
 
       // Now check if the job is already in a terminal state
       // If so, remove the wait and resolve immediately
-      this.getJobStatus(jobId).then((existingJobStatus) => {
-        if (existingJobStatus) {
-          const terminalStatuses: JobStatus[] = [
-            JOB_STATUS_COMPLETED,
-            JOB_STATUS_FAILED,
-            JOB_STATUS_CANCELLED,
-          ]
-          if (terminalStatuses.includes(existingJobStatus.status)) {
-            // Job is already terminal, remove the wait and resolve
-            this.#removeJobWait(jobId, resolve)
-            this.getJobById(jobId).then((job) => {
-              if (!job) {
-                resolve(null)
-              } else {
-                resolve({
-                  id: job.id,
-                  actionName: job.actionName,
-                  status: job.status,
-                  groupKey: job.groupKey,
-                  description: job.description,
-                  input: job.input,
-                  output: job.output,
-                  error: job.error,
-                })
-              }
-            })
+      // Errors settle the wait as null to avoid hangs and leaked wait entries
+      this.getJobStatus(jobId)
+        .then((existingJobStatus) => {
+          if (existingJobStatus) {
+            const terminalStatuses: JobStatus[] = [
+              JOB_STATUS_COMPLETED,
+              JOB_STATUS_FAILED,
+              JOB_STATUS_CANCELLED,
+            ]
+            if (terminalStatuses.includes(existingJobStatus.status)) {
+              // Job is already terminal, remove the wait and resolve
+              this.#removeJobWait(jobId, resolve)
+              return this.getJobById(jobId).then((job) => {
+                if (!job) {
+                  resolve(null)
+                } else {
+                  resolve({
+                    id: job.id,
+                    actionName: job.actionName,
+                    status: job.status,
+                    groupKey: job.groupKey,
+                    description: job.description,
+                    input: job.input,
+                    output: job.output,
+                    error: job.error,
+                  })
+                }
+              })
+            }
           }
-        }
-      })
+        })
+        .catch((error) => {
+          this.#logger.error({ error, jobId }, '[Duron] [waitForJob] Error checking job status')
+          this.#removeJobWait(jobId, resolve)
+          resolve(null)
+        })
     })
   }
 

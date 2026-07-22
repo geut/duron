@@ -87,8 +87,8 @@ export interface TelemetryContext {
 
   /**
    * Record a custom metric as a span event.
-   * This is a convenience method that stores metrics as span events
-   * which can be queried from the local database when telemetry.local is enabled.
+   * This is a convenience method that records metrics as span events
+   * on the current OpenTelemetry span.
    *
    * @param name - The metric name (e.g., 'tokens.input', 'latency.ms')
    * @param value - The metric value

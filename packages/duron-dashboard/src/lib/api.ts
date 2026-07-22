@@ -485,7 +485,6 @@ export function useRunAction() {
 export interface ArchiveStatsResponse {
   jobsCount: number
   stepsCount: number
-  spansCount: number
   oldestJobDate: string | null
   totalSizeBytes: number | null
   lastPrunedAt: string | null

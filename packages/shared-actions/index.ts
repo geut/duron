@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai'
 import { context, trace } from '@opentelemetry/api'
 import { generateText } from 'ai'
 import { defineAction, NonRetriableError } from 'duron/index'
-import * as z from 'zod'
+import * as z from 'zod/mini'
 
 export const variables = {
   sendEmail: async (
@@ -138,7 +138,7 @@ export const sendEmail = defineAction<typeof variables>()({
     email: z.email(),
     subject: z.string(),
     body: z.string(),
-    timeout: z.number().min(1000).max(60_000).default(4000),
+    timeout: z._default(z.number().check(z.gte(1000), z.lte(60_000)), 4000),
   }),
   output: z.object({
     success: z.boolean(),
@@ -165,17 +165,17 @@ export const sendEmail = defineAction<typeof variables>()({
 export const getWeather = defineAction<typeof variables>()({
   name: 'getWeather',
   input: z.object({
-    city: z.string().min(1).describe('The city name to get weather for'),
+    city: z.string().check(z.minLength(1), z.describe('The city name to get weather for')),
   }),
   output: z.object({
-    niceMessage: z.string().describe('A nice message for the weather'),
+    niceMessage: z.string().check(z.describe('A nice message for the weather')),
     info: z.object({
-      city: z.string().describe('City name'),
-      country: z.string().describe('Country code'),
-      temperature: z.number().describe('Temperature in Celsius'),
-      feelsLike: z.number().describe('Feels like temperature in Celsius'),
-      humidity: z.number().describe('Humidity percentage'),
-      pressure: z.number().describe('Atmospheric pressure in hPa'),
+      city: z.string().check(z.describe('City name')),
+      country: z.string().check(z.describe('Country code')),
+      temperature: z.number().check(z.describe('Temperature in Celsius')),
+      feelsLike: z.number().check(z.describe('Feels like temperature in Celsius')),
+      humidity: z.number().check(z.describe('Humidity percentage')),
+      pressure: z.number().check(z.describe('Atmospheric pressure in hPa')),
     }),
   }),
   handler: async (ctx) => {
@@ -258,19 +258,22 @@ export const getWeather = defineAction<typeof variables>()({
 export const processOrder = defineAction<typeof variables>()({
   name: 'processOrder',
   input: z.object({
-    orderId: z.string().min(1).describe('The order ID to process'),
-    customerId: z.string().min(1).describe('The customer ID'),
+    orderId: z.string().check(z.minLength(1), z.describe('The order ID to process')),
+    customerId: z.string().check(z.minLength(1), z.describe('The customer ID')),
     items: z
       .array(
         z.object({
           productId: z.string(),
-          quantity: z.number().min(1),
-          price: z.number().min(0),
+          quantity: z.number().check(z.gte(1)),
+          price: z.number().check(z.gte(0)),
         }),
       )
-      .min(1)
-      .describe('Order items'),
-    paymentMethod: z.enum(['credit_card', 'paypal', 'bank_transfer']).default('credit_card'),
+      .check(z.minLength(1))
+      .check(z.describe('Order items')),
+    paymentMethod: z._default(
+      z.enum(['credit_card', 'paypal', 'bank_transfer']),
+      'credit_card',
+    ),
     shippingAddress: z.object({
       street: z.string(),
       city: z.string(),
@@ -281,14 +284,14 @@ export const processOrder = defineAction<typeof variables>()({
   output: z.object({
     orderId: z.string(),
     status: z.enum(['completed', 'failed']),
-    transactionId: z.string().nullable(),
-    shipmentId: z.string().nullable(),
+    transactionId: z.nullable(z.string()),
+    shipmentId: z.nullable(z.string()),
     timeline: z.array(
       z.object({
         step: z.string(),
         status: z.enum(['success', 'failed']),
         timestamp: z.string(),
-        details: z.string().optional(),
+        details: z.optional(z.string()),
       }),
     ),
   }),

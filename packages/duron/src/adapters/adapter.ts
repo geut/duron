@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 
 import type { Logger } from 'pino'
-import { z } from 'zod'
+import * as z from 'zod/mini'
 
 import {
   JOB_STATUS_CANCELLED,

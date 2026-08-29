@@ -1,5 +1,5 @@
 import { createParser } from 'nuqs/server'
-import { z } from 'zod'
+import * as z from 'zod/mini'
 
 import { dataTableConfig } from '@/config/data-table.ts'
 import type { ExtendedColumnFilter, ExtendedColumnSort } from '@/types/data-table.ts'

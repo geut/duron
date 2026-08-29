@@ -9,7 +9,7 @@ import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 import pino, { type Logger } from 'pino'
 import { zocker } from 'zocker'
-import * as z from 'zod'
+import * as z from 'zod/mini'
 
 import { ActionManager } from './action-manager.js'
 import type { Action, ConcurrencyHandlerContext } from './action.js'
@@ -37,7 +37,7 @@ import {
  * Extracts the inferred type from an action's input/output schema.
  * Handles the case where the schema might be undefined.
  */
-type InferActionSchema<T> = T extends z.ZodTypeAny ? z.infer<T> : Record<string, unknown>
+type InferActionSchema<T> = T extends z.ZodMiniType ? z.infer<T> : Record<string, unknown>
 
 /**
  * Result returned from waitForJob with untyped input and output.
@@ -245,19 +245,20 @@ export interface BaseOptionsInput {
 }
 
 const BaseOptionsSchema = z.object({
-  id: z.string().optional(),
-  syncPattern: z
-    .union([z.literal('pull'), z.literal('push'), z.literal('hybrid'), z.literal(false)])
-    .default('hybrid'),
-  pullInterval: z.number().default(5_000),
-  batchSize: z.number().default(10),
-  actionConcurrencyLimit: z.number().default(100),
-  groupConcurrencyLimit: z.number().default(10),
-  migrateOnStart: z.boolean().default(true),
-  recoverJobsOnStart: z.boolean().default(true),
-  heartbeatInterval: z.number().default(5000),
-  heartbeatTimeout: z.number().default(15000),
-  recoverJobsInterval: z.number().default(60_000),
+  id: z.optional(z.string()),
+  syncPattern: z._default(
+    z.union([z.literal('pull'), z.literal('push'), z.literal('hybrid'), z.literal(false)]),
+    'hybrid',
+  ),
+  pullInterval: z._default(z.number(), 5_000),
+  batchSize: z._default(z.number(), 10),
+  actionConcurrencyLimit: z._default(z.number(), 100),
+  groupConcurrencyLimit: z._default(z.number(), 10),
+  migrateOnStart: z._default(z.boolean(), true),
+  recoverJobsOnStart: z._default(z.boolean(), true),
+  heartbeatInterval: z._default(z.number(), 5000),
+  heartbeatTimeout: z._default(z.number(), 15000),
+  recoverJobsInterval: z._default(z.number(), 60_000),
 })
 
 // Compile-time check: ensure BaseOptionsInput is assignable to the Zod schema's input type
@@ -491,7 +492,7 @@ export class Client<
    */
   async runAction<TActionName extends keyof TActions>(
     actionName: TActionName,
-    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodObject
+    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodMiniObject
       ? z.input<NonNullable<TActions[TActionName]['input']>>
       : never,
   ): Promise<string> {
@@ -505,10 +506,7 @@ export class Client<
     // Validate input if schema is provided
     let validatedInput: any = input ?? {}
     if (action.input) {
-      validatedInput = action.input.parse(validatedInput, {
-        error: () => 'Error parsing action input',
-        reportInput: true,
-      })
+      validatedInput = action.input.parse(validatedInput)
     }
 
     // Determine groupKey and concurrency limit using concurrency handler or defaults
@@ -569,7 +567,7 @@ export class Client<
    */
   async runActionAndWait<TActionName extends keyof TActions>(
     actionName: TActionName,
-    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodObject
+    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodMiniObject
       ? z.input<NonNullable<TActions[TActionName]['input']>>
       : never,
     options?: {
@@ -1012,10 +1010,10 @@ export class Client<
         if (!this.#mockInputSchemas.has(action.name)) {
           this.#mockInputSchemas.set(
             action.name,
-            zocker(action.input as z.ZodObject)
-              .override(z.ZodString, 'string')
-              .override(z.ZodBigInt, '4000' as any) // Convert BigInt to string for JSON serialization
-              .override(z.ZodNumber, (schema, _ctx) => {
+            zocker(action.input as z.ZodMiniObject)
+              .override(z.ZodMiniString, 'string')
+              .override(z.ZodMiniBigInt, '4000' as any) // Convert BigInt to string for JSON serialization
+              .override(z.ZodMiniNumber, (schema, _ctx) => {
                 const greaterThan = schema.def.checks?.find(
                   (check) => check._zod.def.check === 'greater_than',
                 )?._zod.def as unknown as { value: number; inclusive: boolean }

@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import * as z from 'zod/mini'
 
 import { JOB_STATUSES, STEP_STATUSES } from '../constants.js'
 
@@ -15,15 +15,15 @@ export const StepStatusSchema = z.enum(STEP_STATUSES)
 
 const DateSchema = z.union([
   z.date(),
-  z.string().transform((str) => new Date(str)),
-  z.number().transform((num) => new Date(num)),
+  z.pipe(z.string(), z.transform((str) => new Date(str))),
+  z.pipe(z.number(), z.transform((num) => new Date(num))),
 ])
 
 export const SerializableErrorSchema = z.object({
   name: z.string(),
   message: z.string(),
-  cause: z.any().optional(),
-  stack: z.string().optional(),
+  cause: z.optional(z.any()),
+  stack: z.optional(z.string()),
 })
 
 // ============================================================================
@@ -34,22 +34,22 @@ export const JobSchema = z.object({
   id: z.string(),
   actionName: z.string(),
   groupKey: z.string(),
-  description: z.string().nullable().default(null),
+  description: z._default(z.nullable(z.string()), null),
   input: z.any(),
-  output: z.any().nullable(),
-  error: z.any().nullable(),
+  output: z.nullable(z.any()),
+  error: z.nullable(z.any()),
   status: JobStatusSchema,
   timeoutMs: z.coerce.number(),
-  expiresAt: DateSchema.nullable(),
-  startedAt: DateSchema.nullable().default(null),
-  finishedAt: DateSchema.nullable().default(null),
+  expiresAt: z.nullable(DateSchema),
+  startedAt: z._default(z.nullable(DateSchema), null),
+  finishedAt: z._default(z.nullable(DateSchema), null),
   createdAt: DateSchema,
   updatedAt: DateSchema,
   concurrencyLimit: z.coerce.number(),
   concurrencyStepLimit: z.coerce.number(),
-  clientId: z.string().nullable().optional(),
+  clientId: z.optional(z.nullable(z.string())),
   /** Duration in milliseconds (finishedAt - startedAt). Null if job hasn't finished. */
-  durationMs: z.coerce.number().nullable().default(null),
+  durationMs: z._default(z.nullable(z.coerce.number()), null),
 })
 
 // ============================================================================
@@ -59,19 +59,19 @@ export const JobSchema = z.object({
 export const JobStepSchema = z.object({
   id: z.string(),
   jobId: z.string(),
-  parentStepId: z.string().nullable().default(null),
-  parallel: z.boolean().default(false),
+  parentStepId: z._default(z.nullable(z.string()), null),
+  parallel: z._default(z.boolean(), false),
   name: z.string(),
-  output: z.any().nullable().default(null),
+  output: z._default(z.nullable(z.any()), null),
   status: StepStatusSchema,
-  error: z.any().nullable().default(null),
+  error: z._default(z.nullable(z.any()), null),
   startedAt: DateSchema,
-  finishedAt: DateSchema.nullable().default(null),
+  finishedAt: z._default(z.nullable(DateSchema), null),
   timeoutMs: z.coerce.number(),
-  expiresAt: DateSchema.nullable().default(null),
+  expiresAt: z._default(z.nullable(DateSchema), null),
   retriesLimit: z.coerce.number(),
   retriesCount: z.coerce.number(),
-  delayedMs: z.coerce.number().nullable().default(null),
+  delayedMs: z._default(z.nullable(z.coerce.number()), null),
   historyFailedAttempts: z.record(
     z.string(),
     z.object({
@@ -85,7 +85,7 @@ export const JobStepSchema = z.object({
 })
 
 // JobStep without output (for getJobSteps)
-export const JobStepWithoutOutputSchema = JobStepSchema.omit({ output: true })
+export const JobStepWithoutOutputSchema = z.omit(JobStepSchema, { output: true })
 
 // ============================================================================
 // Query Option Schemas
@@ -110,31 +110,31 @@ export const JobSortSchema = z.object({
 })
 
 export const JobFiltersSchema = z.object({
-  status: z.union([JobStatusSchema, z.array(JobStatusSchema)]).optional(),
-  actionName: z.union([z.string(), z.array(z.string())]).optional(),
-  groupKey: z.union([z.string(), z.array(z.string())]).optional(),
-  clientId: z.union([z.string(), z.array(z.string())]).optional(),
-  description: z.string().optional(),
-  createdAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
-  startedAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
-  finishedAt: z.union([DateSchema, z.array(DateSchema).length(2)]).optional(),
-  updatedAfter: DateSchema.optional(),
-  inputFilter: z.record(z.string(), z.any()).optional(),
-  outputFilter: z.record(z.string(), z.any()).optional(),
-  search: z.string().optional(),
+  status: z.optional(z.union([JobStatusSchema, z.array(JobStatusSchema)])),
+  actionName: z.optional(z.union([z.string(), z.array(z.string())])),
+  groupKey: z.optional(z.union([z.string(), z.array(z.string())])),
+  clientId: z.optional(z.union([z.string(), z.array(z.string())])),
+  description: z.optional(z.string()),
+  createdAt: z.optional(z.union([DateSchema, z.array(DateSchema).check(z.length(2))])),
+  startedAt: z.optional(z.union([DateSchema, z.array(DateSchema).check(z.length(2))])),
+  finishedAt: z.optional(z.union([DateSchema, z.array(DateSchema).check(z.length(2))])),
+  updatedAfter: z.optional(DateSchema),
+  inputFilter: z.optional(z.record(z.string(), z.any())),
+  outputFilter: z.optional(z.record(z.string(), z.any())),
+  search: z.optional(z.string()),
 })
 
 export const GetJobsOptionsSchema = z.object({
-  page: z.number().int().positive().optional(),
-  pageSize: z.number().int().positive().optional(),
-  filters: JobFiltersSchema.optional(),
-  sort: z.union([JobSortSchema, z.array(JobSortSchema)]).optional(),
+  page: z.optional(z.number().check(z.int(), z.positive())),
+  pageSize: z.optional(z.number().check(z.int(), z.positive())),
+  filters: z.optional(JobFiltersSchema),
+  sort: z.optional(z.union([JobSortSchema, z.array(JobSortSchema)])),
 })
 
 export const GetJobStepsOptionsSchema = z.object({
   jobId: z.string(),
-  search: z.string().optional(),
-  updatedAfter: DateSchema.optional(),
+  search: z.optional(z.string()),
+  updatedAfter: z.optional(DateSchema),
 })
 
 // ============================================================================
@@ -157,16 +157,16 @@ export const CreateJobOptionsSchema = z.object({
   /** The concurrency limit for steps within this job */
   concurrencyStepLimit: z.number(),
   /** Optional description for the job */
-  description: z.string().nullable().optional(),
+  description: z.optional(z.nullable(z.string())),
 })
 
 export const RecoverJobsOptionsSchema = z.object({
   /** The action checksums to recover jobs for */
   checksums: z.array(z.string()),
   /** Milliseconds after which a client without a heartbeat is considered dead */
-  staleTimeoutMs: z.number().optional(),
+  staleTimeoutMs: z.optional(z.number()),
   /** AbortSignal to cancel recovery (e.g., during shutdown) */
-  signal: z.instanceof(AbortSignal).optional(),
+  signal: z.optional(z.instanceof(AbortSignal)),
 })
 
 export const FetchOptionsSchema = z.object({
@@ -203,7 +203,7 @@ export const DeleteJobOptionsSchema = z.object({
   jobId: z.string(),
 })
 
-export const DeleteJobsOptionsSchema = GetJobsOptionsSchema.optional()
+export const DeleteJobsOptionsSchema = z.optional(GetJobsOptionsSchema)
 
 export const TimeTravelJobOptionsSchema = z.object({
   /** The ID of the job to time travel */
@@ -220,9 +220,9 @@ export const CreateOrRecoverJobStepOptionsSchema = z.object({
   /** The ID of the job this step belongs to */
   jobId: z.string(),
   /** The ID of the parent step (null for root steps) */
-  parentStepId: z.string().nullable().default(null),
+  parentStepId: z._default(z.nullable(z.string()), null),
   /** Whether this step runs in parallel (independent from siblings during time travel) */
-  parallel: z.boolean().default(false),
+  parallel: z._default(z.boolean(), false),
   /** The name of the step */
   name: z.string(),
   /** Timeout in milliseconds for the step */
@@ -265,8 +265,8 @@ export const CreateOrRecoverJobStepResultSchema = z.object({
   retriesLimit: z.number(),
   retriesCount: z.number(),
   timeoutMs: z.number(),
-  error: z.any().nullable(),
-  output: z.any().nullable(),
+  error: z.nullable(z.any()),
+  output: z.nullable(z.any()),
   isNew: z.boolean(),
 })
 
@@ -286,23 +286,23 @@ export const CreateOrRecoverJobStepResultNullableSchema = z.union([
 
 export const GetJobsResultSchema = z.object({
   jobs: z.array(JobSchema),
-  total: z.number().int().nonnegative(),
-  page: z.number().int().positive(),
-  pageSize: z.number().int().positive(),
+  total: z.number().check(z.int(), z.nonnegative()),
+  page: z.number().check(z.int(), z.positive()),
+  pageSize: z.number().check(z.int(), z.positive()),
 })
 
 export const GetJobStepsResultSchema = z.object({
   steps: z.array(JobStepWithoutOutputSchema),
-  total: z.number().int().nonnegative(),
+  total: z.number().check(z.int(), z.nonnegative()),
 })
 
 export const ActionStatsSchema = z.object({
   name: z.string(),
-  lastJobCreated: DateSchema.nullable(),
-  active: z.number().int().nonnegative(),
-  completed: z.number().int().nonnegative(),
-  failed: z.number().int().nonnegative(),
-  cancelled: z.number().int().nonnegative(),
+  lastJobCreated: z.nullable(DateSchema),
+  active: z.number().check(z.int(), z.nonnegative()),
+  completed: z.number().check(z.int(), z.nonnegative()),
+  failed: z.number().check(z.int(), z.nonnegative()),
+  cancelled: z.number().check(z.int(), z.nonnegative()),
 })
 
 export const GetActionsResultSchema = z.object({
@@ -325,16 +325,16 @@ export const JobStepStatusResultSchema = z.object({
 
 export const PruneArchiveOptionsSchema = z.object({
   olderThan: z.union([z.string(), z.date(), z.number()]),
-  batchSize: z.number().optional(),
-  maxBatches: z.number().optional(),
+  batchSize: z.optional(z.number()),
+  maxBatches: z.optional(z.number()),
 })
 
 export const ArchiveStatsSchema = z.object({
   jobsCount: z.number(),
   stepsCount: z.number(),
-  oldestJobDate: z.date().nullable(),
-  totalSizeBytes: z.number().nullable(),
-  lastPrunedAt: z.date().nullable(),
+  oldestJobDate: z.nullable(z.date()),
+  totalSizeBytes: z.nullable(z.number()),
+  lastPrunedAt: z.nullable(z.date()),
 })
 
 // ============================================================================

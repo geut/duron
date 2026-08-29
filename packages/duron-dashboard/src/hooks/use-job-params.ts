@@ -1,6 +1,6 @@
 import { parseAsArrayOf, parseAsInteger, parseAsJson, parseAsString, useQueryState } from 'nuqs'
 import { useMemo } from 'react'
-import { z } from 'zod'
+import * as z from 'zod/mini'
 
 import type { JobStatus } from '@/lib/api'
 

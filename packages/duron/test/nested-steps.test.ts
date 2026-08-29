@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-import { z } from 'zod'
+import { z } from 'zod/mini'
 
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
@@ -25,7 +25,7 @@ const nestedStepAction = defineAction()({
   name: 'nested-step-action',
   version: '1.0.0',
   input: z.object({
-    depth: z.number().default(1),
+    depth: z._default(z.number(), 1),
   }),
   output: z.object({
     results: z.array(z.string()),
@@ -101,7 +101,7 @@ const concurrentChildrenAction = defineAction()({
   name: 'concurrent-children-action',
   version: '1.0.0',
   input: z.object({
-    childCount: z.number().default(3),
+    childCount: z._default(z.number(), 3),
   }),
   output: z.object({
     childResults: z.array(z.number()),
@@ -207,7 +207,7 @@ const parentStepIdVerificationAction = defineAction()({
     parentChain: z.array(
       z.object({
         stepId: z.string(),
-        parentStepId: z.string().nullable(),
+        parentStepId: z.nullable(z.string()),
       }),
     ),
   }),
@@ -248,7 +248,7 @@ const parallelStepsAction = defineAction()({
   name: 'parallel-steps-action',
   version: '1.0.0',
   input: z.object({
-    delay: z.number().default(100),
+    delay: z._default(z.number(), 100),
   }),
   output: z.object({}),
   steps: {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-import { z } from 'zod'
+import { z } from 'zod/mini'
 
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
@@ -12,18 +12,18 @@ import { pgliteFactory } from './adapters.js'
 const testProcessOrder = defineAction()({
   name: 'processOrder',
   input: z.object({
-    orderId: z.string().min(1),
-    customerId: z.string().min(1),
+    orderId: z.string().check(z.minLength(1)),
+    customerId: z.string().check(z.minLength(1)),
     items: z
       .array(
         z.object({
           productId: z.string(),
-          quantity: z.number().min(1),
-          price: z.number().min(0),
+          quantity: z.number().check(z.gte(1)),
+          price: z.number().check(z.gte(0)),
         }),
       )
-      .min(1),
-    paymentMethod: z.enum(['credit_card', 'paypal', 'bank_transfer']).default('credit_card'),
+      .check(z.minLength(1)),
+    paymentMethod: z._default(z.enum(['credit_card', 'paypal', 'bank_transfer']), 'credit_card'),
     shippingAddress: z.object({
       street: z.string(),
       city: z.string(),
@@ -34,14 +34,14 @@ const testProcessOrder = defineAction()({
   output: z.object({
     orderId: z.string(),
     status: z.enum(['completed', 'failed']),
-    transactionId: z.string().nullable(),
-    shipmentId: z.string().nullable(),
+    transactionId: z.nullable(z.string()),
+    shipmentId: z.nullable(z.string()),
     timeline: z.array(
       z.object({
         step: z.string(),
         status: z.enum(['success', 'failed']),
         timestamp: z.string(),
-        details: z.string().optional(),
+        details: z.optional(z.string()),
       }),
     ),
   }),

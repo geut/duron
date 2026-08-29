@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia'
 import { jwtVerify, SignJWT } from 'jose'
-import { z } from 'zod'
+import * as z from 'zod/mini'
 
 import type { GetJobStepsOptions, GetJobsOptions } from './adapters/adapter.js'
 import {
@@ -59,46 +59,47 @@ export class UnauthorizedError extends Error {
 // JobStepSchema, GetJobStepsResultSchema, GetJobsResultSchema, and
 // GetActionsResultSchema are imported from ./adapters/schemas.js to avoid duplication
 
-export const GetJobStepsQuerySchema = z
-  .object({
-    search: z.string().optional(),
-    fUpdatedAfter: z.coerce.date().optional(),
-  })
-  .transform((data) => ({
+export const GetJobStepsQuerySchema = z.pipe(
+  z.object({
+    search: z.optional(z.string()),
+    fUpdatedAfter: z.optional(z.coerce.date()),
+  }),
+  z.transform((data) => ({
     search: data.search,
     updatedAfter: data.fUpdatedAfter,
-  }))
+  })),
+)
 
 // Reuse GetJobStepsResultSchema from schemas.ts
 export const GetJobStepsResponseSchema = GetJobStepsResultSchema
 
-export const GetJobsQuerySchema = z
-  .object({
+export const GetJobsQuerySchema = z.pipe(
+  z.object({
     // Pagination
-    page: z.coerce.number().int().min(1).optional(),
-    pageSize: z.coerce.number().int().min(1).max(1000).optional(),
+    page: z.optional(z.coerce.number().check(z.int(), z.gte(1))),
+    pageSize: z.optional(z.coerce.number().check(z.int(), z.gte(1), z.lte(1000))),
 
     // Filters - arrays can be passed as comma-separated or multiple params
-    fStatus: z.union([JobStatusSchema, z.array(JobStatusSchema)]).optional(),
-    fActionName: z.union([z.string(), z.array(z.string())]).optional(),
-    fGroupKey: z.union([z.string(), z.array(z.string())]).optional(),
-    fClientId: z.union([z.string(), z.array(z.string())]).optional(),
-    fDescription: z.string().optional(),
+    fStatus: z.optional(z.union([JobStatusSchema, z.array(JobStatusSchema)])),
+    fActionName: z.optional(z.union([z.string(), z.array(z.string())])),
+    fGroupKey: z.optional(z.union([z.string(), z.array(z.string())])),
+    fClientId: z.optional(z.union([z.string(), z.array(z.string())])),
+    fDescription: z.optional(z.string()),
     // Date filters: can be a single ISO string or JSON array [start, end] - both coerced to Date objects
-    fCreatedAt: z.union([z.coerce.date(), z.array(z.coerce.date())]).optional(),
-    fStartedAt: z.union([z.coerce.date(), z.array(z.coerce.date())]).optional(),
-    fFinishedAt: z.union([z.coerce.date(), z.array(z.coerce.date())]).optional(),
-    fUpdatedAfter: z.coerce.date().optional(),
-    fSearch: z.string().optional(),
+    fCreatedAt: z.optional(z.union([z.coerce.date(), z.array(z.coerce.date())])),
+    fStartedAt: z.optional(z.union([z.coerce.date(), z.array(z.coerce.date())])),
+    fFinishedAt: z.optional(z.union([z.coerce.date(), z.array(z.coerce.date())])),
+    fUpdatedAfter: z.optional(z.coerce.date()),
+    fSearch: z.optional(z.string()),
 
     // Sort - format: "field:asc,field:desc"
-    sort: z.string().optional(),
+    sort: z.optional(z.string()),
 
     // JSONB filters as JSON strings
-    fInputFilter: z.record(z.string(), z.any()).optional(),
-    fOutputFilter: z.record(z.string(), z.any()).optional(),
-  })
-  .transform((data) => {
+    fInputFilter: z.optional(z.record(z.string(), z.any())),
+    fOutputFilter: z.optional(z.record(z.string(), z.any())),
+  }),
+  z.transform((data) => {
     const filters: any = {}
 
     if (data.fStatus) filters.status = data.fStatus
@@ -163,7 +164,8 @@ export const GetJobsQuerySchema = z
       filters: Object.keys(filters).length > 0 ? filters : undefined,
       sort,
     }
-  })
+  }),
+)
 
 // Reuse GetJobsResultSchema from schemas.ts
 export const GetJobsResponseSchema = GetJobsResultSchema
@@ -184,7 +186,7 @@ export type GetJobStepsQueryInput = z.input<typeof GetJobStepsQuerySchema>
 
 export const ErrorResponseSchema = z.object({
   error: z.string(),
-  message: z.string().optional(),
+  message: z.optional(z.string()),
 })
 
 const JobIdParamsSchema = z.object({
@@ -297,7 +299,7 @@ export function createServer<P extends string>({ client, prefix, login }: Create
     })
     .macro('getUser', {
       headers: z.object({
-        authorization: z.string().optional(),
+        authorization: z.optional(z.string()),
       }),
       resolve: async ({ headers }) => {
         if (login) {
@@ -635,9 +637,9 @@ export function createServer<P extends string>({ client, prefix, login }: Create
           200: z.object({
             jobsCount: z.number(),
             stepsCount: z.number(),
-            oldestJobDate: z.date().nullable(),
-            totalSizeBytes: z.number().nullable(),
-            lastPrunedAt: z.date().nullable(),
+            oldestJobDate: z.nullable(z.date()),
+            totalSizeBytes: z.nullable(z.number()),
+            lastPrunedAt: z.nullable(z.date()),
           }),
           400: ErrorResponseSchema,
           500: ErrorResponseSchema,
@@ -655,8 +657,8 @@ export function createServer<P extends string>({ client, prefix, login }: Create
       {
         body: z.object({
           olderThan: z.union([z.string(), z.coerce.date(), z.number()]),
-          batchSize: z.number().optional(),
-          maxBatches: z.number().optional(),
+          batchSize: z.optional(z.number()),
+          maxBatches: z.optional(z.number()),
         }),
         response: {
           200: z.object({

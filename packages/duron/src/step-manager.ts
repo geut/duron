@@ -10,7 +10,7 @@ import {
 } from '@opentelemetry/api'
 import fastq from 'fastq'
 import type { Logger } from 'pino'
-import type { z } from 'zod'
+import type { z } from 'zod/mini'
 
 import {
   type Action,
@@ -383,8 +383,8 @@ export class StepManager {
    * @returns ActionHandlerContext instance
    */
   createActionContext<
-    TInput extends z.ZodObject,
-    TOutput extends z.ZodObject,
+    TInput extends z.ZodMiniObject,
+    TOutput extends z.ZodMiniObject,
     TVariables = Record<string, unknown>,
   >(
     job: { id: string; input: z.infer<TInput>; groupKey?: string },
@@ -878,8 +878,8 @@ export class StepManager {
  * It implements ActionHandlerContext and provides access to input, variables, logger, and the step function.
  */
 class ActionContext<
-  TInput extends z.ZodObject,
-  TOutput extends z.ZodObject,
+  TInput extends z.ZodMiniObject,
+  TOutput extends z.ZodMiniObject,
   TVariables = Record<string, unknown>,
 > implements ActionHandlerContext<TInput, TVariables> {
   #stepManager: StepManager
@@ -1018,7 +1018,7 @@ class ActionContext<
    * @param options - Optional step configuration overrides
    * @returns Promise resolving to the step result
    */
-  async run<TStepInput extends z.ZodObject, TResult>(
+  async run<TStepInput extends z.ZodMiniObject, TResult>(
     stepDef: StepDefinition<TStepInput, TResult, TVariables>,
     input: z.input<TStepInput>,
     options: Partial<z.input<typeof StepOptionsSchema>> = {},
@@ -1030,7 +1030,7 @@ class ActionContext<
    * Internal method to execute a step definition with explicit parent step ID and abort signal.
    * Used by both the public run method and the run functions passed to step contexts.
    */
-  async #runInternal<TStepInput extends z.ZodObject, TResult>(
+  async #runInternal<TStepInput extends z.ZodMiniObject, TResult>(
     stepDef: StepDefinition<TStepInput, TResult, TVariables>,
     input: z.input<TStepInput>,
     options: Partial<z.input<typeof StepOptionsSchema>> = {},

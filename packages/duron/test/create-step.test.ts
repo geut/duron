@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-import { z } from 'zod'
+import { z } from 'zod/mini'
 
 import { createStep, defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
@@ -32,7 +32,7 @@ const variables = {
 const sendEmailStep = createStep<typeof variables>()({
   name: 'send-email',
   input: z.object({
-    email: z.string().email(),
+    email: z.email(),
     body: z.string(),
   }),
   handler: async (ctx) => {
@@ -47,7 +47,7 @@ const sendEmailStep = createStep<typeof variables>()({
 const sendEmailDynamicStep = createStep<typeof variables>()({
   name: (ctx) => `send-email-${ctx.input.email}`,
   input: z.object({
-    email: z.string().email(),
+    email: z.email(),
     body: z.string(),
   }),
   handler: async (ctx) => {
@@ -245,7 +245,7 @@ const basicRunAction = defineAction<typeof variables>()({
   name: 'basic-run-action',
   version: '1.0.0',
   input: z.object({
-    email: z.string().email(),
+    email: z.email(),
     body: z.string(),
   }),
   output: z.object({
@@ -335,7 +335,7 @@ const multipleStepsAction = defineAction<typeof variables>()({
   name: 'multiple-steps-action',
   version: '1.0.0',
   input: z.object({
-    emails: z.array(z.string().email()),
+    emails: z.array(z.email()),
     body: z.string(),
   }),
   output: z.object({
@@ -426,7 +426,7 @@ const mixedStepsAction = defineAction<typeof variables>()({
   name: 'mixed-steps-action',
   version: '1.0.0',
   input: z.object({
-    email: z.string().email(),
+    email: z.email(),
   }),
   output: z.object({
     inlineResult: z.string(),
@@ -497,7 +497,7 @@ const inlineStepCallsRunAction = defineAction<typeof variables>()({
   name: 'inline-step-calls-run-action',
   version: '1.0.0',
   input: z.object({
-    email: z.string().email(),
+    email: z.email(),
   }),
   output: z.object({
     inlineStepResult: z.object({

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-import { z } from 'zod'
+import { z } from 'zod/mini'
 
 import { defineAction } from '../src/action.js'
 import { ActionStatsSchema, JobSchema, JobStepSchema } from '../src/adapters/schemas.js'
@@ -25,43 +25,43 @@ import { type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.
 import { expectToBeDefined } from './asserts.js'
 
 // Helper schemas for JSON responses (dates come as strings in JSON)
-const JobResponseSchema = JobSchema.extend({
-  expiresAt: z.string().nullable(),
-  startedAt: z.string().nullable(),
-  finishedAt: z.string().nullable(),
+const JobResponseSchema = z.extend(JobSchema, {
+  expiresAt: z.nullable(z.string()),
+  startedAt: z.nullable(z.string()),
+  finishedAt: z.nullable(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
 
-const JobStepResponseSchema = JobStepSchema.extend({
+const JobStepResponseSchema = z.extend(JobStepSchema, {
   startedAt: z.string(),
-  finishedAt: z.string().nullable(),
-  expiresAt: z.string().nullable(),
+  finishedAt: z.nullable(z.string()),
+  expiresAt: z.nullable(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
 
-const JobStepWithoutOutputResponseSchema = JobStepSchema.omit({ output: true }).extend({
+const JobStepWithoutOutputResponseSchema = z.extend(z.omit(JobStepSchema, { output: true }), {
   startedAt: z.string(),
-  finishedAt: z.string().nullable(),
-  expiresAt: z.string().nullable(),
+  finishedAt: z.nullable(z.string()),
+  expiresAt: z.nullable(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
 
-const GetJobStepsResponseParsedSchema = GetJobStepsResponseSchema.extend({
+const GetJobStepsResponseParsedSchema = z.extend(GetJobStepsResponseSchema, {
   steps: z.array(JobStepWithoutOutputResponseSchema),
 })
 
-const GetJobsResponseParsedSchema = GetJobsResponseSchema.extend({
+const GetJobsResponseParsedSchema = z.extend(GetJobsResponseSchema, {
   jobs: z.array(JobResponseSchema),
 })
 
-const ActionStatsResponseSchema = ActionStatsSchema.extend({
-  lastJobCreated: z.string().nullable(),
+const ActionStatsResponseSchema = z.extend(ActionStatsSchema, {
+  lastJobCreated: z.nullable(z.string()),
 })
 
-const GetActionsResponseParsedSchema = GetActionsResponseSchema.extend({
+const GetActionsResponseParsedSchema = z.extend(GetActionsResponseSchema, {
   actions: z.array(ActionStatsResponseSchema),
 })
 
@@ -85,7 +85,7 @@ function runServerTests(adapterFactory: AdapterFactory) {
       version: '1.0.0',
       input: z.object({
         message: z.string(),
-        value: z.number().optional(),
+        value: z.optional(z.number()),
       }),
       output: z.object({
         result: z.string(),

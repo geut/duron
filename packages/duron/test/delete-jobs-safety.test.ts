@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-import { z } from 'zod'
+import { z } from 'zod/mini'
 
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'

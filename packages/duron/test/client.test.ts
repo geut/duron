@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-import { z } from 'zod'
+import { z } from 'zod/mini'
 
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
@@ -21,7 +21,7 @@ const testAction = defineAction()({
   version: '1.0.0',
   input: z.object({
     message: z.string(),
-    value: z.number().optional(),
+    value: z.optional(z.number()),
   }),
   output: z.object({
     result: z.string(),

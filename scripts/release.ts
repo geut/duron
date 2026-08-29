@@ -26,13 +26,14 @@
  *   --notes <text>  Custom release notes (instead of PR description)
  */
 
-import { parseArgs } from "util"
-import { readFileSync, writeFileSync } from "fs"
-import { join } from "path"
-import { $ } from "bun"
+import { readFileSync, writeFileSync } from 'fs'
+import { join } from 'path'
+import { parseArgs } from 'util'
 
-const ROOT = join(import.meta.dir, "..")
-const PACKAGES = ["duron", "duron-dashboard"] as const
+import { $ } from 'bun'
+
+const ROOT = join(import.meta.dir, '..')
+const PACKAGES = ['duron', 'duron-dashboard'] as const
 
 type Package = (typeof PACKAGES)[number]
 
@@ -44,14 +45,14 @@ interface PackageConfig {
 
 const PACKAGE_CONFIG: Record<Package, PackageConfig> = {
   duron: {
-    name: "duron",
-    path: join(ROOT, "packages/duron/package.json"),
-    npmTag: "latest",
+    name: 'duron',
+    path: join(ROOT, 'packages/duron/package.json'),
+    npmTag: 'latest',
   },
-  "duron-dashboard": {
-    name: "duron-dashboard",
-    path: join(ROOT, "packages/duron-dashboard/package.json"),
-    npmTag: "latest",
+  'duron-dashboard': {
+    name: 'duron-dashboard',
+    path: join(ROOT, 'packages/duron-dashboard/package.json'),
+    npmTag: 'latest',
   },
 }
 
@@ -74,23 +75,23 @@ function bumpVersion(current: string, bump: string): string {
   const isPre = s.prerelease !== null
 
   switch (bump) {
-    case "prerelease": {
+    case 'prerelease': {
       if (!isPre) return `${s.major}.${s.minor}.${s.patch}-beta.0`
-      const parts = s.prerelease.split(".")
+      const parts = s.prerelease.split('.')
       parts[parts.length - 1] = String(+parts[parts.length - 1] + 1)
-      return `${s.major}.${s.minor}.${s.patch}-${parts.join(".")}`
+      return `${s.major}.${s.minor}.${s.patch}-${parts.join('.')}`
     }
-    case "patch":
+    case 'patch':
       return isPre ? `${s.major}.${s.minor}.${s.patch}` : `${s.major}.${s.minor}.${s.patch + 1}`
-    case "minor":
+    case 'minor':
       return `${s.major}.${s.minor + 1}.0`
-    case "major":
+    case 'major':
       return `${s.major + 1}.0.0`
-    case "prepatch":
+    case 'prepatch':
       return `${s.major}.${s.minor}.${s.patch + 1}-beta.0`
-    case "preminor":
+    case 'preminor':
       return `${s.major}.${s.minor + 1}.0-beta.0`
-    case "premajor":
+    case 'premajor':
       return `${s.major + 1}.0.0-beta.0`
     default:
       throw new Error(`Unknown bump type: ${bump}`)
@@ -99,9 +100,14 @@ function bumpVersion(current: string, bump: string): string {
 
 // --- PR body extraction ---
 
-async function getLatestMergedPR(): Promise<{ number: number; title: string; body: string } | null> {
+async function getLatestMergedPR(): Promise<{
+  number: number
+  title: string
+  body: string
+} | null> {
   try {
-    const result = await $`gh pr list --state merged --json number,title,body --limit 1 --jq '.[0]'`.text()
+    const result =
+      await $`gh pr list --state merged --json number,title,body --limit 1 --jq '.[0]'`.text()
     const pr = JSON.parse(result.trim())
     return pr.number ? pr : null
   } catch {
@@ -123,7 +129,7 @@ function formatReleaseNotes(
   prBody: string | null,
   customNotes: string | null,
 ): string {
-  const header = versions.map((v) => `\`${v.name}\`: \`${v.from}\` → \`${v.to}\``).join("\n")
+  const header = versions.map((v) => `\`${v.name}\`: \`${v.from}\` → \`${v.to}\``).join('\n')
 
   if (customNotes) {
     return `${header}\n\n---\n\n${customNotes}`
@@ -141,15 +147,15 @@ function formatReleaseNotes(
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
-    "dry-run": { type: "boolean", default: false },
-    package: { type: "string" },
-    "no-tag": { type: "boolean", default: false },
-    "no-publish": { type: "boolean", default: false },
-    "no-build": { type: "boolean", default: false },
-    "no-release": { type: "boolean", default: false },
-    pr: { type: "string" },
-    notes: { type: "string" },
-    help: { type: "boolean", short: "h" },
+    'dry-run': { type: 'boolean', default: false },
+    package: { type: 'string' },
+    'no-tag': { type: 'boolean', default: false },
+    'no-publish': { type: 'boolean', default: false },
+    'no-build': { type: 'boolean', default: false },
+    'no-release': { type: 'boolean', default: false },
+    pr: { type: 'string' },
+    notes: { type: 'string' },
+    help: { type: 'boolean', short: 'h' },
   },
   allowPositionals: true,
 })
@@ -175,22 +181,22 @@ Options:
 }
 
 const bump = positionals[0]
-const dryRun = values["dry-run"]
+const dryRun = values['dry-run']
 const onlyPackage = values.package as Package | undefined
-const createTag = !values["no-tag"]
-const doPublish = !values["no-publish"]
-const doBuild = !values["no-build"]
-const doRelease = !values["no-release"]
+const createTag = !values['no-tag']
+const doPublish = !values['no-publish']
+const doBuild = !values['no-build']
+const doRelease = !values['no-release']
 const customNotes = values.notes ?? null
 
 if (onlyPackage && !PACKAGES.includes(onlyPackage)) {
-  console.error(`Unknown package: ${onlyPackage}. Use: ${PACKAGES.join(" | ")}`)
+  console.error(`Unknown package: ${onlyPackage}. Use: ${PACKAGES.join(' | ')}`)
   process.exit(1)
 }
 
 const targets = onlyPackage ? [PACKAGE_CONFIG[onlyPackage]] : PACKAGES.map((p) => PACKAGE_CONFIG[p])
 
-console.log(`\n📦 Release plan (${dryRun ? "DRY RUN" : "LIVE"})\n`)
+console.log(`\n📦 Release plan (${dryRun ? 'DRY RUN' : 'LIVE'})\n`)
 
 interface ReleasePlan {
   config: PackageConfig
@@ -201,11 +207,11 @@ interface ReleasePlan {
 const plan: ReleasePlan[] = []
 
 for (const config of targets) {
-  const pkg = JSON.parse(readFileSync(config.path, "utf-8"))
+  const pkg = JSON.parse(readFileSync(config.path, 'utf-8'))
   const current: string = pkg.version
   const next = bumpVersion(current, bump)
   plan.push({ config, current, next })
-  const arrow = current === next ? "(no change)" : `→ ${next}`
+  const arrow = current === next ? '(no change)' : `→ ${next}`
   console.log(`  ${config.name}: ${current} ${arrow}`)
 }
 
@@ -214,7 +220,7 @@ console.log()
 if (dryRun) {
   // Show what the release notes would look like
   if (doRelease) {
-    console.log("📝 Release notes preview:\n")
+    console.log('📝 Release notes preview:\n')
     if (customNotes) {
       console.log(`  Using custom notes: "${customNotes.slice(0, 80)}..."`)
     } else {
@@ -222,34 +228,34 @@ if (dryRun) {
       const prNum = values.pr ? +values.pr[0] : pr?.number
       const prBody = prNum ? await getPRBody(prNum) : null
       if (prBody) {
-        console.log(`  From PR #${prNum} (${pr?.title ?? ""})`)
-        console.log(`  ${prBody.split("\n")[0]}...`)
+        console.log(`  From PR #${prNum} (${pr?.title ?? ''})`)
+        console.log(`  ${prBody.split('\n')[0]}...`)
       } else {
-        console.log("  (no PR found — version header only)")
+        console.log('  (no PR found — version header only)')
       }
     }
     console.log()
   }
-  console.log("Dry run — no changes made.\n")
+  console.log('Dry run — no changes made.\n')
   process.exit(0)
 }
 
 // --- Bump versions ---
 
 for (const { config, next } of plan) {
-  const pkg = JSON.parse(readFileSync(config.path, "utf-8"))
+  const pkg = JSON.parse(readFileSync(config.path, 'utf-8'))
   pkg.version = next
-  writeFileSync(config.path, JSON.stringify(pkg, null, 2) + "\n")
+  writeFileSync(config.path, JSON.stringify(pkg, null, 2) + '\n')
   console.log(`✅ Bumped ${config.name} to ${next}`)
 }
 
 // --- Build ---
 
 if (doBuild) {
-  console.log("\n🔨 Building...")
+  console.log('\n🔨 Building...')
   for (const { config } of plan) {
     try {
-      await $`cd ${join(ROOT, "packages", config.name)} && bun run build`.quiet()
+      await $`cd ${join(ROOT, 'packages', config.name)} && bun run build`.quiet()
       console.log(`  ✅ ${config.name} built`)
     } catch {
       console.error(`  ❌ ${config.name} build failed`)
@@ -261,11 +267,11 @@ if (doBuild) {
 // --- Publish ---
 
 if (doPublish) {
-  console.log("\n🚀 Publishing...")
+  console.log('\n🚀 Publishing...')
   for (const { config, next } of plan) {
     try {
-      const tag = next.includes("beta") || next.includes("alpha") ? "next" : config.npmTag
-      await $`cd ${join(ROOT, "packages", config.name)} && npm publish --tag ${tag}`.quiet()
+      const tag = next.includes('beta') || next.includes('alpha') ? 'next' : config.npmTag
+      await $`cd ${join(ROOT, 'packages', config.name)} && npm publish --tag ${tag}`.quiet()
       console.log(`  ✅ ${config.name}@${next} published (${tag})`)
     } catch {
       console.error(`  ❌ ${config.name} publish failed`)
@@ -277,7 +283,7 @@ if (doPublish) {
 // --- Git commit + tag + push ---
 
 if (createTag) {
-  console.log("\n🏷️  Committing & tagging...")
+  console.log('\n🏷️  Committing & tagging...')
   for (const { config, next } of plan) {
     const tagName = `${config.name}@${next}`
     await $`git add ${config.path}`
@@ -286,16 +292,16 @@ if (createTag) {
     console.log(`  ✅ ${tagName}`)
   }
 
-  console.log("\n  Pushing...")
+  console.log('\n  Pushing...')
   await $`git push`.quiet()
   await $`git push --tags`.quiet()
-  console.log("  ✅ Pushed commits + tags")
+  console.log('  ✅ Pushed commits + tags')
 }
 
 // --- GitHub releases ---
 
 if (doRelease) {
-  console.log("\n📦 Creating GitHub releases...")
+  console.log('\n📦 Creating GitHub releases...')
 
   // Resolve PR body once for all packages
   let prBody: string | null = null
@@ -313,13 +319,17 @@ if (doRelease) {
     }
   }
 
-  const versions = plan.map((p) => ({ name: p.config.name, from: p.current, to: p.next }))
-
   // Create a release per package
   for (const { config, next } of plan) {
     const tagName = `${config.name}@${next}`
     const notes = formatReleaseNotes(
-      [{ name: config.name, from: plan.find((p) => p.config.name === config.name)!.current, to: next }],
+      [
+        {
+          name: config.name,
+          from: plan.find((p) => p.config.name === config.name)!.current,
+          to: next,
+        },
+      ],
       prBody,
       customNotes,
     )
@@ -337,4 +347,4 @@ if (doRelease) {
   }
 }
 
-console.log("\n🎉 Done!\n")
+console.log('\n🎉 Done!\n')

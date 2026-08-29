@@ -74,6 +74,7 @@ Reasoning: <why this bump type>
 ```
 
 Bump rules:
+
 - If current is beta and changes are fixes → `prerelease` (increment beta number)
 - If current is beta and changes include features → `preminor` or `prepatch` (new beta minor)
 - If current is stable and changes are fixes → `patch`
@@ -81,6 +82,7 @@ Bump rules:
 - If there's a breaking change → `major` (or `premajor` if going to beta)
 
 **Wait for user approval before proceeding.** The user may:
+
 - Approve the suggestion
 - Ask for a different bump type
 - Ask to release only one package (`--package duron`)
@@ -118,6 +120,7 @@ herdr pane wait-output <pane-id> --regex "[Oo][Tt][Pp]|one.time" --timeout 12000
 ```
 
 When the prompt appears, tell the user:
+
 > The release is running in a separate pane on the right. Enter your npm OTP there when prompted.
 
 **Do NOT attempt to enter the OTP automatically.** The user must type it manually in the Herdr pane.
@@ -125,6 +128,7 @@ When the prompt appears, tell the user:
 ### If Herdr is not available
 
 Run the release directly. When npm prompts for OTP, ask the user:
+
 > npm is asking for a one-time password. Please provide your OTP (from your authenticator app).
 
 ## Step 4: Verify
@@ -145,6 +149,7 @@ npm view duron-dashboard version 2>/dev/null || echo "not yet on npm"
 ```
 
 Report the result:
+
 - ✅ Published versions
 - ✅ Git tags created
 - ✅ GitHub releases created (link to each)
@@ -152,13 +157,13 @@ Report the result:
 
 ## Flags reference
 
-| Flag | Effect |
-|------|--------|
-| `--dry-run` | Preview without changes |
-| `--package <name>` | Release only one package |
-| `--no-tag` | Skip git commit + tag |
-| `--no-publish` | Skip npm publish |
-| `--no-build` | Skip build step |
-| `--no-release` | Skip GitHub release |
-| `--pr <number>` | Use specific PR for release notes |
-| `--notes <text>` | Custom release notes |
+| Flag               | Effect                            |
+| ------------------ | --------------------------------- |
+| `--dry-run`        | Preview without changes           |
+| `--package <name>` | Release only one package          |
+| `--no-tag`         | Skip git commit + tag             |
+| `--no-publish`     | Skip npm publish                  |
+| `--no-build`       | Skip build step                   |
+| `--no-release`     | Skip GitHub release               |
+| `--pr <number>`    | Use specific PR for release notes |
+| `--notes <text>`   | Custom release notes              |

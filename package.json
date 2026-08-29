@@ -18,7 +18,9 @@
     "dev:examples:basic": "bun run --filter examples dev",
     "build": "bun run --filter '*' build",
     "build:docs": "bun run --filter docs build",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "release": "bun run scripts/release.ts",
+    "release:dry": "bun run scripts/release.ts --dry-run"
   },
   "dependencies": {},
   "devDependencies": {

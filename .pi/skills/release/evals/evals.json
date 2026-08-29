@@ -1,0 +1,29 @@
+{
+  "skill_name": "release",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "release",
+      "expected_output": "Skill analyzes commits since last tag, presents current versions, lists changes, suggests bump type with reasoning, and waits for approval before running the release script.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "we need to cut a new release for the changes we made in this branch",
+      "expected_output": "Skill analyzes branch changes, identifies it's a mix of feat/fix commits, suggests appropriate bump (likely prerelease since currently on beta), shows the version diff, and asks for confirmation.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "bump the version and publish to npm, but only duron not the dashboard",
+      "expected_output": "Skill suggests bump type for duron only, shows the single-package version diff, waits for approval, then runs release with --package duron flag.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "what version should we release next?",
+      "expected_output": "Skill analyzes changes and presents a recommendation without running anything — just the analysis and suggestion, waiting for user decision.",
+      "files": []
+    }
+  ]
+}

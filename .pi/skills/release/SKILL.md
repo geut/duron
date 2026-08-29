@@ -9,16 +9,40 @@ Analyze what changed since the last release, suggest a bump type, then run `scri
 
 ## Step 1: Analyze changes
 
-Find the last release tags and the commits since:
+Find the last release tags and commits since:
 
 ```bash
+# Check for existing tags
 git tag --list 'duron@*' --sort=-version:refname | head -1
 git tag --list 'duron-dashboard@*' --sort=-version:refname | head -1
+```
+
+**If tags exist:** use the most recent tag as the reference point.
+
+```bash
 git log <last-tag>..HEAD --oneline
 git diff <last-tag>..HEAD --stat
 ```
 
-If no tags exist yet, use the first commit or the branch point.
+**If no tags exist:** find the last release-related commit:
+
+```bash
+# Look for commits with "release" in the message
+git log --oneline --all --grep="release" | head -5
+
+# Or find when the current version was set
+git log --oneline -S '"version": "0.3.0' -- packages/duron/package.json | head -1
+```
+
+Use that commit as the reference point. If nothing useful is found, use the first commit and note that this is the initial release.
+
+Get the current versions:
+
+```bash
+grep '"version"' packages/duron/package.json packages/duron-dashboard/package.json
+```
+
+## Step 2: Suggest
 
 Read the commit messages carefully. Look for:
 
@@ -29,13 +53,7 @@ Read the commit messages carefully. Look for:
 - `BREAKING CHANGE` or `!` after scope → **major** bump
 - `docs:`, `chore:`, `test:`, `ci:` → no release needed (unless combined with releasable changes)
 
-Check if the current version is a beta/prerelease (contains `-beta` or `-alpha`):
-
-```bash
-grep '"version"' packages/duron/package.json
-```
-
-## Step 2: Suggest
+Check if the current version is a beta/prerelease (contains `-beta` or `-alpha`).
 
 Present a clear recommendation:
 
@@ -74,63 +92,65 @@ When approved, run the release script. **npm publish requires OTP (one-time pass
 
 ### If Herdr is available (HERDR_ENV=1)
 
-Split a pane to the right and run the release there so the user can enter the OTP when prompted:
+Split a pane to the right and run the release there. This lets the user type the OTP in the new pane without interrupting the conversation.
 
 ```bash
-# Check Herdr is available
-test "${HERDR_ENV:-}" = "1"
-
-# Split a new pane to the right
-herdr pane split --current --direction right --cwd "$PWD" --no-focus
-
-# Run the release in the new pane (capture pane ID from split output)
-herdr pane run <pane-id> "bun run release <bump-args>"
-
-# Wait for the OTP prompt — look for "npm" and "otp" or "One-time" in output
-herdr pane wait-output <pane-id> --regex "otp|One-time|OTP" --timeout 60000
-
-# Tell the user to enter the OTP in the new pane
+# Verify Herdr is available
+test "${HERDR_ENV:-}" = "1" || echo "Herdr not available"
 ```
 
-When the OTP prompt appears, tell the user:
-> The release is running in a separate pane. Enter your npm OTP there when prompted.
+Split a new pane (preserve cwd, keep focus on current pane):
 
-Do NOT attempt to enter the OTP automatically. The user must type it manually.
+```bash
+herdr pane split --current --direction right --cwd "$PWD" --no-focus
+```
+
+Parse the pane ID from the JSON response — it's at `.result.pane.pane_id`. Then run the release in that pane:
+
+```bash
+herdr pane run <pane-id> "cd /Users/tincho/projects/tinchoz49/duron && bun run release <bump-args>"
+```
+
+Wait for the OTP prompt to appear in the pane output:
+
+```bash
+herdr pane wait-output <pane-id> --regex "[Oo][Tt][Pp]|one.time" --timeout 120000
+```
+
+When the prompt appears, tell the user:
+> The release is running in a separate pane on the right. Enter your npm OTP there when prompted.
+
+**Do NOT attempt to enter the OTP automatically.** The user must type it manually in the Herdr pane.
 
 ### If Herdr is not available
 
-Run the release directly and ask the user for the OTP when npm prompts for it:
-
-```bash
-bun run release <bump-args>
-```
-
-When the OTP prompt appears, ask the user:
+Run the release directly. When npm prompts for OTP, ask the user:
 > npm is asking for a one-time password. Please provide your OTP (from your authenticator app).
 
 ## Step 4: Verify
 
-After the release completes:
+After the release completes, verify what was published:
 
 ```bash
-# Check the new tags were created
+# Check tags were created
 git tag --list 'duron@*' --sort=-version:refname | head -1
 git tag --list 'duron-dashboard@*' --sort=-version:refname | head -1
+```
 
-# Verify npm published
-npm view duron version
-npm view duron-dashboard version
+Try to verify npm (may fail if not yet synced):
+
+```bash
+npm view duron version 2>/dev/null || echo "not yet on npm"
+npm view duron-dashboard version 2>/dev/null || echo "not yet on npm"
 ```
 
 Report the result:
 - ✅ Published versions
 - ✅ Git tags created
 - ✅ GitHub releases created (link to each)
-- Remind to push if not already: `git push && git push --tags`
+- If not pushed yet: remind to run `git push && git push --tags`
 
 ## Flags reference
-
-The release script supports:
 
 | Flag | Effect |
 |------|--------|

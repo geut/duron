@@ -80,6 +80,13 @@ bun run build:docs  # docs only
 - `packages/duron-dashboard`: `NODE_ENV=production bun run build.ts && bun run build:get-html`
 - Docs: `vite build`
 
+## Frontend Patterns
+
+- HTML imports with `Bun.serve()` — no Vite (except `packages/docs`)
+- HTML files can import `.tsx/.jsx/.js` directly, Bun bundles automatically
+- `<link>` tags bundle CSS. Import `.css` files in JS too.
+- Run with `bun --hot ./index.ts`
+
 ## Dashboard
 
 - Do **not** modify files in `src/components/ui/` (managed by Shadcn UI).

@@ -114,7 +114,7 @@ Workflow `.github/workflows/test.yml` runs: `bun install` → `typecheck` → `l
 
 Configured on the Duron client:
 
-- `telemetry: { local: true }` → store spans in DB
+- `telemetry: { traceExporter }` → export to OTel backends
 - `telemetry: { traceExporter }` → export to OTel backends
 - No config → disabled
 

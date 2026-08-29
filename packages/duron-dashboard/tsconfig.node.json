@@ -3,6 +3,7 @@
   "compilerOptions": {
     "lib": ["ESNext"],
     "target": "ESNext",
+    "types": ["node"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "allowImportingTsExtensions": false,

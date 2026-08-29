@@ -16,11 +16,14 @@
  *   1.2.3          explicit version
  *
  * Flags:
- *   --dry-run      Show what would happen without writing
- *   --package      Release only one package: duron | duron-dashboard
- *   --no-tag       Skip git tag creation
- *   --no-publish   Skip npm publish (still bumps + tags)
- *   --no-build     Skip build step before publish
+ *   --dry-run       Show what would happen without writing
+ *   --package       Release only one package: duron | duron-dashboard
+ *   --no-tag        Skip git tag creation
+ *   --no-publish    Skip npm publish (still bumps + tags)
+ *   --no-build      Skip build step before publish
+ *   --no-release    Skip GitHub release creation
+ *   --pr <number>   Use specific PR as release notes (default: latest merged)
+ *   --notes <text>  Custom release notes (instead of PR description)
  */
 
 import { parseArgs } from "util"
@@ -36,23 +39,23 @@ type Package = (typeof PACKAGES)[number]
 interface PackageConfig {
   name: Package
   path: string
-  tag: string // npm dist-tag
+  npmTag: string
 }
 
 const PACKAGE_CONFIG: Record<Package, PackageConfig> = {
   duron: {
     name: "duron",
     path: join(ROOT, "packages/duron/package.json"),
-    tag: "latest",
+    npmTag: "latest",
   },
   "duron-dashboard": {
     name: "duron-dashboard",
     path: join(ROOT, "packages/duron-dashboard/package.json"),
-    tag: "latest",
+    npmTag: "latest",
   },
 }
 
-// --- Version math (no external deps) ---
+// --- Version math ---
 
 function parseSemver(v: string) {
   const m = v.match(/^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/)
@@ -65,38 +68,24 @@ function parseSemver(v: string) {
   }
 }
 
-function formatSemver(s: ReturnType<typeof parseSemver>) {
-  return `${s.major}.${s.minor}.${s.patch}${s.prerelease ? `-${s.prerelease}` : ""}`
-}
-
 function bumpVersion(current: string, bump: string): string {
   const s = parseSemver(current)
-
-  // Explicit version
   if (/^\d+\.\d+\.\d+/.test(bump)) return bump
-
-  const isPrerelease = s.prerelease !== null
+  const isPre = s.prerelease !== null
 
   switch (bump) {
-    case "prerelease":
-      if (!isPrerelease) return `${s.major}.${s.minor}.${s.patch}-beta.0`
-      // Increment the numeric part after the last dot in the prerelease tag
+    case "prerelease": {
+      if (!isPre) return `${s.major}.${s.minor}.${s.patch}-beta.0`
       const parts = s.prerelease.split(".")
-      const last = +parts[parts.length - 1]
-      parts[parts.length - 1] = String(last + 1)
+      parts[parts.length - 1] = String(+parts[parts.length - 1] + 1)
       return `${s.major}.${s.minor}.${s.patch}-${parts.join(".")}`
+    }
     case "patch":
-      return isPrerelease
-        ? `${s.major}.${s.minor}.${s.patch}`
-        : `${s.major}.${s.minor}.${s.patch + 1}`
+      return isPre ? `${s.major}.${s.minor}.${s.patch}` : `${s.major}.${s.minor}.${s.patch + 1}`
     case "minor":
-      return isPrerelease
-        ? `${s.major}.${s.minor + 1}.0`
-        : `${s.major}.${s.minor + 1}.0`
+      return `${s.major}.${s.minor + 1}.0`
     case "major":
-      return isPrerelease
-        ? `${s.major + 1}.0.0`
-        : `${s.major + 1}.0.0`
+      return `${s.major + 1}.0.0`
     case "prepatch":
       return `${s.major}.${s.minor}.${s.patch + 1}-beta.0`
     case "preminor":
@@ -106,6 +95,45 @@ function bumpVersion(current: string, bump: string): string {
     default:
       throw new Error(`Unknown bump type: ${bump}`)
   }
+}
+
+// --- PR body extraction ---
+
+async function getLatestMergedPR(): Promise<{ number: number; title: string; body: string } | null> {
+  try {
+    const result = await $`gh pr list --state merged --json number,title,body --limit 1 --jq '.[0]'`.text()
+    const pr = JSON.parse(result.trim())
+    return pr.number ? pr : null
+  } catch {
+    return null
+  }
+}
+
+async function getPRBody(prNumber: number): Promise<string | null> {
+  try {
+    const result = await $`gh pr view ${prNumber} --json title,body --jq '.body'`.text()
+    return result.trim() || null
+  } catch {
+    return null
+  }
+}
+
+function formatReleaseNotes(
+  versions: { name: string; from: string; to: string }[],
+  prBody: string | null,
+  customNotes: string | null,
+): string {
+  const header = versions.map((v) => `\`${v.name}\`: \`${v.from}\` → \`${v.to}\``).join("\n")
+
+  if (customNotes) {
+    return `${header}\n\n---\n\n${customNotes}`
+  }
+
+  if (prBody) {
+    return `${header}\n\n---\n\n${prBody}`
+  }
+
+  return header
 }
 
 // --- Main ---
@@ -118,6 +146,9 @@ const { values, positionals } = parseArgs({
     "no-tag": { type: "boolean", default: false },
     "no-publish": { type: "boolean", default: false },
     "no-build": { type: "boolean", default: false },
+    "no-release": { type: "boolean", default: false },
+    pr: { type: "string" },
+    notes: { type: "string" },
     help: { type: "boolean", short: "h" },
   },
   allowPositionals: true,
@@ -132,9 +163,12 @@ Bump:  patch | minor | major | prepatch | preminor | premajor | prerelease | x.y
 Options:
   --dry-run          Preview changes without writing
   --package <name>   Release only duron or duron-dashboard
-  --no-tag           Skip git tag
+  --no-tag           Skip git tag + commit
   --no-publish       Skip npm publish
   --no-build         Skip build step
+  --no-release       Skip GitHub release
+  --pr <number>      Use specific PR for release notes
+  --notes <text>     Custom release notes
   --help             Show this message
 `)
   process.exit(0)
@@ -146,6 +180,8 @@ const onlyPackage = values.package as Package | undefined
 const createTag = !values["no-tag"]
 const doPublish = !values["no-publish"]
 const doBuild = !values["no-build"]
+const doRelease = !values["no-release"]
+const customNotes = values.notes ?? null
 
 if (onlyPackage && !PACKAGES.includes(onlyPackage)) {
   console.error(`Unknown package: ${onlyPackage}. Use: ${PACKAGES.join(" | ")}`)
@@ -169,7 +205,6 @@ for (const config of targets) {
   const current: string = pkg.version
   const next = bumpVersion(current, bump)
   plan.push({ config, current, next })
-
   const arrow = current === next ? "(no change)" : `→ ${next}`
   console.log(`  ${config.name}: ${current} ${arrow}`)
 }
@@ -177,6 +212,24 @@ for (const config of targets) {
 console.log()
 
 if (dryRun) {
+  // Show what the release notes would look like
+  if (doRelease) {
+    console.log("📝 Release notes preview:\n")
+    if (customNotes) {
+      console.log(`  Using custom notes: "${customNotes.slice(0, 80)}..."`)
+    } else {
+      const pr = values.pr ? null : await getLatestMergedPR()
+      const prNum = values.pr ? +values.pr[0] : pr?.number
+      const prBody = prNum ? await getPRBody(prNum) : null
+      if (prBody) {
+        console.log(`  From PR #${prNum} (${pr?.title ?? ""})`)
+        console.log(`  ${prBody.split("\n")[0]}...`)
+      } else {
+        console.log("  (no PR found — version header only)")
+      }
+    }
+    console.log()
+  }
   console.log("Dry run — no changes made.\n")
   process.exit(0)
 }
@@ -198,7 +251,7 @@ if (doBuild) {
     try {
       await $`cd ${join(ROOT, "packages", config.name)} && bun run build`.quiet()
       console.log(`  ✅ ${config.name} built`)
-    } catch (e) {
+    } catch {
       console.error(`  ❌ ${config.name} build failed`)
       process.exit(1)
     }
@@ -211,20 +264,20 @@ if (doPublish) {
   console.log("\n🚀 Publishing...")
   for (const { config, next } of plan) {
     try {
-      const tag = next.includes("beta") || next.includes("alpha") ? "next" : config.tag
+      const tag = next.includes("beta") || next.includes("alpha") ? "next" : config.npmTag
       await $`cd ${join(ROOT, "packages", config.name)} && npm publish --tag ${tag}`.quiet()
       console.log(`  ✅ ${config.name}@${next} published (${tag})`)
-    } catch (e) {
+    } catch {
       console.error(`  ❌ ${config.name} publish failed`)
       process.exit(1)
     }
   }
 }
 
-// --- Git commit + tag ---
+// --- Git commit + tag + push ---
 
 if (createTag) {
-  console.log("\n🏷️  Tagging...")
+  console.log("\n🏷️  Committing & tagging...")
   for (const { config, next } of plan) {
     const tagName = `${config.name}@${next}`
     await $`git add ${config.path}`
@@ -232,7 +285,56 @@ if (createTag) {
     await $`git tag ${tagName}`
     console.log(`  ✅ ${tagName}`)
   }
-  console.log("\n  Run `git push && git push --tags` when ready.\n")
+
+  console.log("\n  Pushing...")
+  await $`git push`.quiet()
+  await $`git push --tags`.quiet()
+  console.log("  ✅ Pushed commits + tags")
+}
+
+// --- GitHub releases ---
+
+if (doRelease) {
+  console.log("\n📦 Creating GitHub releases...")
+
+  // Resolve PR body once for all packages
+  let prBody: string | null = null
+  let prNumber: number | undefined
+  if (!customNotes) {
+    if (values.pr) {
+      prNumber = +values.pr[0]
+      prBody = await getPRBody(prNumber)
+    } else {
+      const pr = await getLatestMergedPR()
+      if (pr) {
+        prNumber = pr.number
+        prBody = pr.body
+      }
+    }
+  }
+
+  const versions = plan.map((p) => ({ name: p.config.name, from: p.current, to: p.next }))
+
+  // Create a release per package
+  for (const { config, next } of plan) {
+    const tagName = `${config.name}@${next}`
+    const notes = formatReleaseNotes(
+      [{ name: config.name, from: plan.find((p) => p.config.name === config.name)!.current, to: next }],
+      prBody,
+      customNotes,
+    )
+
+    try {
+      await $`gh release create ${tagName} --title ${tagName} --notes ${notes}`.quiet()
+      console.log(`  ✅ ${tagName} released on GitHub`)
+    } catch {
+      console.error(`  ❌ Failed to create release for ${tagName}`)
+    }
+  }
+
+  if (prNumber) {
+    console.log(`\n  📝 Release notes from PR #${prNumber}`)
+  }
 }
 
 console.log("\n🎉 Done!\n")

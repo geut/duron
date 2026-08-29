@@ -103,9 +103,12 @@ export class StepAlreadyExecutedError extends DuronError {
    * @param actionName - The name of the action containing the step
    */
   constructor(stepName: string, jobId: string, actionName: string) {
-    super(`Step "${stepName}" has already been executed for job "${jobId}" and action "${actionName}"`, {
-      metadata: { stepName, jobId, actionName },
-    })
+    super(
+      `Step "${stepName}" has already been executed for job "${jobId}" and action "${actionName}"`,
+      {
+        metadata: { stepName, jobId, actionName },
+      },
+    )
   }
 }
 
@@ -345,11 +348,17 @@ export function serializeError(error: unknown): SerializableError {
   }
 
   if (error instanceof Error) {
+    // Include enumerable properties that aren't already in the result
+    // This preserves custom properties like 'code' from Node.js errors
+    const customProps = Object.fromEntries(
+      Object.entries(error).filter(([key]) => !['name', 'message', 'cause', 'stack'].includes(key)),
+    )
     return {
       name: error.name,
       message: error.message,
       cause: (error as any).cause,
       stack: error.stack,
+      ...customProps,
     }
   }
 

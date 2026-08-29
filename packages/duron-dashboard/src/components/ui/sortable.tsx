@@ -21,7 +21,11 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { restrictToHorizontalAxis, restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import {
+  restrictToHorizontalAxis,
+  restrictToParentElement,
+  restrictToVerticalAxis,
+} from '@dnd-kit/modifiers'
 import {
   arrayMove,
   horizontalListSortingStrategy,
@@ -255,7 +259,17 @@ function SortableRoot<T>(props: SortableRootProps<T>) {
       getItemValue,
       flatCursor,
     }),
-    [id, items, modifiers, strategy, config.modifiers, config.strategy, activeId, getItemValue, flatCursor],
+    [
+      id,
+      items,
+      modifiers,
+      strategy,
+      config.modifiers,
+      config.strategy,
+      activeId,
+      getItemValue,
+      flatCursor,
+    ],
   )
 
   return (
@@ -343,7 +357,9 @@ function SortableItem(props: SortableItemProps) {
   const inSortableOverlay = React.useContext(SortableOverlayContext)
 
   if (!inSortableContent && !inSortableOverlay) {
-    throw new Error(`\`${ITEM_NAME}\` must be used within \`${CONTENT_NAME}\` or \`${OVERLAY_NAME}\``)
+    throw new Error(
+      `\`${ITEM_NAME}\` must be used within \`${CONTENT_NAME}\` or \`${OVERLAY_NAME}\``,
+    )
   }
 
   if (value === '') {
@@ -352,7 +368,15 @@ function SortableItem(props: SortableItemProps) {
 
   const context = useSortableContext(ITEM_NAME)
   const id = React.useId()
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: value,
     disabled,
   })
@@ -491,7 +515,11 @@ function SortableOverlay(props: SortableOverlayProps) {
       {...overlayProps}
     >
       <SortableOverlayContext.Provider value={true}>
-        {context.activeId ? (typeof children === 'function' ? children({ value: context.activeId }) : children) : null}
+        {context.activeId
+          ? typeof children === 'function'
+            ? children({ value: context.activeId })
+            : children
+          : null}
       </SortableOverlayContext.Provider>
     </DragOverlay>,
     container,

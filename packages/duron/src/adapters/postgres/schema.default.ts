@@ -1,5 +1,19 @@
 import createSchema from './schema.js'
 
-const { schema, jobsTable, jobStepsTable, spansTable } = createSchema('duron')
+const {
+  schema,
+  jobsActiveTable,
+  jobsArchiveTable,
+  jobStepsActiveTable,
+  jobStepsArchiveTable,
+  clientsTable,
+} = createSchema('duron')
 
-export { schema, jobsTable, jobStepsTable, spansTable }
+export {
+  schema,
+  jobsActiveTable,
+  jobsArchiveTable,
+  jobStepsActiveTable,
+  jobStepsArchiveTable,
+  clientsTable,
+}

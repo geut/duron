@@ -1,10 +1,9 @@
-import { serve } from 'bun'
-
 import { sendEmail, variables } from '@shared-actions/index.js'
+import { serve } from 'bun'
 import { duron } from 'duron'
+import { getHTML } from 'duron-dashboard/get-html'
 import { postgresAdapter } from 'duron/adapters/postgres'
 import { createServer } from 'duron/server'
-import { getHTML } from 'duron-dashboard/get-html'
 
 // Parent process: Only serves the dashboard API
 // This client is configured with syncPattern: false to prevent job processing

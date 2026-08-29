@@ -17,6 +17,7 @@ import type { ActionStats, Job, JobStatus } from '@/lib/api'
 import { useActions, useJobs } from '@/lib/api'
 import { formatExpirationWindow, formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
+
 import { BadgeStatus } from '../components/badge-status'
 import { isExpiring } from '../lib/is-expiring'
 
@@ -49,14 +50,16 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
       {
         id: 'ID',
         accessorKey: 'id',
-        header: ({ column }: { column: Column<Job, unknown> }) => <DataTableColumnHeader column={column} label="ID" />,
+        header: ({ column }: { column: Column<Job, unknown> }) => (
+          <DataTableColumnHeader column={column} label="ID" />
+        ),
         cell: ({ cell }) => {
           const fullId = cell.getValue<string>()
           const lastSegment = fullId.split('-').pop() || fullId
           return (
             <Tooltip>
               <TooltipTrigger asChild={true}>
-                <div className="font-mono text-xs cursor-help">{lastSegment}</div>
+                <div className="font-mono text-xs">{lastSegment}</div>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="font-mono text-xs">{fullId}</p>
@@ -94,7 +97,7 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
           return (
             <Tooltip>
               <TooltipTrigger asChild={true}>
-                <div className="truncate w-full cursor-help">{desc}</div>
+                <div className="truncate w-full">{desc}</div>
               </TooltipTrigger>
               <TooltipContent className="max-w-[400px]">
                 <p className="whitespace-pre-wrap">{desc}</p>
@@ -266,7 +269,9 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
   const handleRowSelectionChange = useCallback<OnChangeFn<RowSelectionState>>(
     (updater) => {
       const newRowSelection =
-        typeof updater === 'function' ? updater(selectedJobId ? { [selectedJobId]: true } : {}) : updater
+        typeof updater === 'function'
+          ? updater(selectedJobId ? { [selectedJobId]: true } : {})
+          : updater
       onJobSelect(Object.keys(newRowSelection)[0] ?? null)
     },
     [onJobSelect, selectedJobId],

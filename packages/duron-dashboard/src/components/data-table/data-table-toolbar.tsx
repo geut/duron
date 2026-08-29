@@ -8,7 +8,14 @@ import { DataTableDateFilter } from '@/components/data-table/data-table-date-fil
 import { DataTableFacetedFilter } from '@/components/data-table/data-table-faceted-filter'
 import { DataTableSliderFilter } from '@/components/data-table/data-table-slider-filter'
 import { Button } from '@/components/ui/button'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -17,7 +24,12 @@ interface DataTableToolbarProps<TData> extends React.ComponentProps<'div'> {
   table: Table<TData>
 }
 
-export function DataTableToolbar<TData>({ table, children, className, ...props }: DataTableToolbarProps<TData>) {
+export function DataTableToolbar<TData>({
+  table,
+  children,
+  className,
+  ...props
+}: DataTableToolbarProps<TData>) {
   const isFiltered = table.getState().columnFilters.length > 0
   const [filtersModalOpen, setFiltersModalOpen] = React.useState(false)
   const [optionsModalOpen, setOptionsModalOpen] = React.useState(false)
@@ -36,7 +48,13 @@ export function DataTableToolbar<TData>({ table, children, className, ...props }
         ))}
       </div>
       {isFiltered && (
-        <Button aria-label="Reset filters" variant="outline" size="sm" className="border-dashed" onClick={onReset}>
+        <Button
+          aria-label="Reset filters"
+          variant="outline"
+          size="sm"
+          className="border-dashed"
+          onClick={onReset}
+        >
           <X className="mr-2 h-4 w-4" />
           Reset Filters
         </Button>
@@ -45,7 +63,10 @@ export function DataTableToolbar<TData>({ table, children, className, ...props }
   )
 
   const columnsForVisibility = React.useMemo(
-    () => table.getAllColumns().filter((column) => typeof column.accessorFn !== 'undefined' && column.getCanHide()),
+    () =>
+      table
+        .getAllColumns()
+        .filter((column) => typeof column.accessorFn !== 'undefined' && column.getCanHide()),
     [table],
   )
 
@@ -61,10 +82,16 @@ export function DataTableToolbar<TData>({ table, children, className, ...props }
               <CommandEmpty>No columns found.</CommandEmpty>
               <CommandGroup>
                 {columnsForVisibility.map((column) => (
-                  <CommandItem key={column.id} onSelect={() => column.toggleVisibility(!column.getIsVisible())}>
+                  <CommandItem
+                    key={column.id}
+                    onSelect={() => column.toggleVisibility(!column.getIsVisible())}
+                  >
                     <span className="truncate">{column.columnDef.meta?.label ?? column.id}</span>
                     <Check
-                      className={cn('ml-auto size-4 shrink-0', column.getIsVisible() ? 'opacity-100' : 'opacity-0')}
+                      className={cn(
+                        'ml-auto size-4 shrink-0',
+                        column.getIsVisible() ? 'opacity-100' : 'opacity-0',
+                      )}
                     />
                   </CommandItem>
                 ))}

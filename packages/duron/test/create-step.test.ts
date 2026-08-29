@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { createStep, defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
 import { JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, STEP_STATUS_FAILED } from '../src/constants.js'
+
 import { type Adapter, type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.js'
 import { expectToBeDefined } from './asserts.js'
 
@@ -975,17 +976,17 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
         expect(stepsResult.steps.length).toBe(2)
 
         // Find the outer inline step and the nested step definition step
-        const outerStep = stepsResult.steps.find((s) => s.name === 'outer-inline-step')
-        const innerStep = stepsResult.steps.find((s) => s.name === 'send-email')
+        const foundOuterStep = stepsResult.steps.find((s) => s.name === 'outer-inline-step')
+        const foundInnerStep = stepsResult.steps.find((s) => s.name === 'send-email')
 
-        expectToBeDefined(outerStep)
-        expectToBeDefined(innerStep)
+        expectToBeDefined(foundOuterStep)
+        expectToBeDefined(foundInnerStep)
 
         // The outer inline step should have no parent (root step)
-        expect(outerStep.parentStepId).toBeNull()
+        expect(foundOuterStep.parentStepId).toBeNull()
 
         // The step definition step should have the inline step as its parent
-        expect(innerStep.parentStepId).toBe(outerStep.id)
+        expect(foundInnerStep.parentStepId).toBe(foundOuterStep.id)
       })
     })
 
@@ -1030,7 +1031,7 @@ function runCreateStepTests(adapterFactory: AdapterFactory) {
 
 // Run tests with both adapters
 runCreateStepTests(pgliteFactory)
-// biome-ignore lint/complexity/useLiteralKeys: type safety
+// oxlint-disable-next-line useLiteralKeys
 if (process.env['POSTGRES_TEST'] === 'true') {
   runCreateStepTests(postgresFactory)
 }

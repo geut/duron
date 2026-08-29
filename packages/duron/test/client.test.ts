@@ -5,12 +5,14 @@ import { z } from 'zod'
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
 import {
+  JOB_STATUS_ACTIVE,
   JOB_STATUS_CANCELLED,
   JOB_STATUS_COMPLETED,
   JOB_STATUS_CREATED,
   JOB_STATUS_FAILED,
   STEP_STATUS_CANCELLED,
 } from '../src/constants.js'
+
 import { type Adapter, type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.js'
 import { expectRejection, expectToBeDefined } from './asserts.js'
 
@@ -934,6 +936,97 @@ function runClientTests(adapterFactory: AdapterFactory) {
 
         await concurrencyClient.stop()
       })
+
+      it('should recover expired orphan jobs from dead processes and allow new jobs to proceed', async () => {
+        // This test simulates a multi-process scenario where:
+        // 1. Instance A processes a job and then crashes
+        // 2. The job remains active in the database (orphan job)
+        // 3. Instance B (with heartbeat-based recovery) detects the orphan
+        //    via periodic recovery in fetch()
+        // 4. The expired orphan is archived as failed, freeing up the
+        //    concurrency slot for new jobs
+        //
+        // We simulate the crashed instance by setting the job's client_id
+        // to a fake process ID that won't respond to pings.
+
+        const actionWithConcurrency = defineAction()({
+          name: 'expired-concurrency-action',
+          input: z.object({
+            group: z.string(),
+          }),
+          output: z.object({ result: z.string() }),
+          groups: {
+            groupKey: async (ctx) => ctx.input.group,
+            concurrency: async () => 1,
+          },
+          handler: async (ctx) => {
+            await new Promise((resolve) => setTimeout(resolve, 100))
+            return { result: ctx.input.group }
+          },
+        })
+
+        const databaseInstance = await adapterFactory.create()
+
+        const concurrencyClient = new Client({
+          id: 'concurrency-client',
+          database: databaseInstance.adapter,
+          actions: {
+            expiredConcurrencyAction: actionWithConcurrency,
+          },
+          syncPattern: false,
+          heartbeatInterval: 500,
+          heartbeatTimeout: 1_000,
+          recoverJobsInterval: 1,
+          logger: 'error',
+        })
+
+        await concurrencyClient.start()
+
+        // Create a job
+        const jobId1 = await concurrencyClient.runAction('expiredConcurrencyAction', {
+          group: 'group-1',
+        })
+
+        // Fetch it to make it active
+        const fetchedJobs1 = await concurrencyClient.fetch({ batchSize: 10 })
+        expect(fetchedJobs1.length).toBe(1)
+        expect(fetchedJobs1[0]!.id).toBe(jobId1)
+
+        // Verify it's active
+        const job1 = await concurrencyClient.getJobById(jobId1)
+        expectToBeDefined(job1)
+        expect(job1.status).toBe(JOB_STATUS_ACTIVE)
+
+        // Manually expire the job by setting expires_at to the past
+        const adapter = databaseInstance.adapter as any
+        await adapter.db.execute(
+          `UPDATE jobs_active SET expires_at = NOW() - INTERVAL '1 minute', client_id = 'concurrency-client-2' WHERE id = '${jobId1}'`,
+        )
+
+        // Create another job for the same group
+        const jobId2 = await concurrencyClient.runAction('expiredConcurrencyAction', {
+          group: 'group-1',
+        })
+
+        // Fetch again - should get the new job because the first one is expired
+        const fetchedJobs2 = await concurrencyClient.fetch({ batchSize: 10 })
+
+        expect(fetchedJobs2.length).toBe(1)
+        expect(fetchedJobs2[0]!.id).toBe(jobId2)
+
+        // Manually trigger recovery to archive the expired job
+        await databaseInstance.adapter.recoverJobs({
+          checksums: [actionWithConcurrency.checksum],
+        })
+
+        // Verify the first job was archived as failed
+        const expiredJob = await concurrencyClient.getJobById(jobId1)
+        expectToBeDefined(expiredJob)
+        expect(expiredJob.status).toBe(JOB_STATUS_FAILED)
+        expect(expiredJob.error).toBeTruthy()
+
+        await concurrencyClient.stop()
+      })
     })
 
     describe('Variables', () => {
@@ -1110,7 +1203,7 @@ function runClientTests(adapterFactory: AdapterFactory) {
 }
 
 runClientTests(postgresFactory)
-// biome-ignore lint/complexity/useLiteralKeys: type safety
+// oxlint-disable-next-line useLiteralKeys
 if (process.env['POSTGRES_TEST'] === 'true') {
   runClientTests(pgliteFactory)
 }

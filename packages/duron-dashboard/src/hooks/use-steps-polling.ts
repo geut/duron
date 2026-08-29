@@ -53,7 +53,9 @@ export function useStepsPolling(jobId: string | null, enabled: boolean = true) {
         queryParams.set('fUpdatedAfter', lastUpdatedAt.toISOString())
         queryParams.set('pageSize', '1') // We only need to know if there are updates
 
-        const data = await apiRequest<GetJobStepsResponse>(`/jobs/${jobId}/steps?${queryParams.toString()}`)
+        const data = await apiRequest<GetJobStepsResponse>(
+          `/jobs/${jobId}/steps?${queryParams.toString()}`,
+        )
 
         if (data.steps.length > 0) {
           // Updates found - update the timestamp and trigger refetch
@@ -69,7 +71,7 @@ export function useStepsPolling(jobId: string | null, enabled: boolean = true) {
         // If no updates found, keep lastUpdatedAt as is to avoid missing updates
       } catch (error) {
         // Silently handle errors - don't spam console
-        // biome-ignore lint/suspicious/noConsole: Debug logging is acceptable here
+        // oxlint-disable-next-line no-console
         console.debug('Steps polling error:', error)
       }
     }
@@ -92,7 +94,11 @@ export function useStepsPolling(jobId: string | null, enabled: boolean = true) {
     }
 
     const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (event?.query?.queryKey[0] === 'job-steps' && event.query.queryKey[1] === jobId && event.type === 'updated') {
+      if (
+        event?.query?.queryKey[0] === 'job-steps' &&
+        event.query.queryKey[1] === jobId &&
+        event.type === 'updated'
+      ) {
         const stepsData = event.query.state.data as GetJobStepsResponse | undefined
         if (stepsData?.steps && stepsData.steps.length > 0) {
           const mostRecent = stepsData.steps.reduce((latest: Date, step) => {
@@ -116,7 +122,7 @@ export function useStepsPolling(jobId: string | null, enabled: boolean = true) {
   }, [enabled, jobId, queryClient])
 
   // Reset lastUpdatedAt when jobId changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: This is intentional
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setLastUpdatedAt(null)
   }, [jobId])

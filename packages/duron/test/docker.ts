@@ -1,4 +1,4 @@
-/** biome-ignore-all lint/suspicious/noConsole: we need to log for debugging */
+/** oxlint-disable no-console */
 import { execFile as baseExecFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -37,7 +37,12 @@ export async function ensureImageExists(image: string) {
   }
 }
 
-export async function createContainer({ image, containerName, ports, environment }: CreateContainerOptions) {
+export async function createContainer({
+  image,
+  containerName,
+  ports,
+  environment,
+}: CreateContainerOptions) {
   if (containersCreated.has(containerName)) {
     return containersCreated.get(containerName)!
   }
@@ -67,7 +72,9 @@ export async function createContainer({ image, containerName, ports, environment
     } catch (error) {
       const err = error as Error
       if (!err.message.includes('Conflict.')) {
-        throw new Error(`❌ Failed to start container "${containerName}": ${err.message}`)
+        throw new Error(`❌ Failed to start container "${containerName}": ${err.message}`, {
+          cause: error,
+        })
       }
     }
   })()
@@ -106,7 +113,13 @@ export async function waitForContainer(containerName: string, expectedMessage: s
   return promise
 }
 
-export const getPostgresConnection = async ({ containerName, port }: { containerName: string; port: number }) => {
+export const getPostgresConnection = async ({
+  containerName,
+  port,
+}: {
+  containerName: string
+  port: number
+}) => {
   await createContainer({
     image: 'postgres:16-alpine',
     containerName,

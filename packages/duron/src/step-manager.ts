@@ -22,7 +22,12 @@ import {
   StepOptionsSchema,
 } from './action.js'
 import type { Adapter, CreateOrRecoverJobStepResult } from './adapters/adapter.js'
-import { STEP_STATUS_CANCELLED, STEP_STATUS_COMPLETED, STEP_STATUS_FAILED, type StepStatus } from './constants.js'
+import {
+  STEP_STATUS_CANCELLED,
+  STEP_STATUS_COMPLETED,
+  STEP_STATUS_FAILED,
+  type StepStatus,
+} from './constants.js'
 import {
   ActionCancelError,
   isCancelError,
@@ -75,6 +80,10 @@ function injectParentSpan(ctx: Context, parentSpan: Span | null): Context {
  * to the current job/step trace hierarchy.
  */
 function createContextAwareTracer(tracer: Tracer, parentSpan: Span | null): Tracer {
+  // Extract duron.job.id and duron.step.id from parent span attributes for propagation
+  const parentJobId = parentSpan ? (parentSpan as any).attributes?.['duron.job.id'] : undefined
+  const parentStepId = parentSpan ? (parentSpan as any).attributes?.['duron.step.id'] : undefined
+
   return {
     startSpan(name: string, options?: SpanOptions, ctx?: Context): Span {
       // Always inject our parent span into the context, regardless of what context is passed.
@@ -83,7 +92,13 @@ function createContextAwareTracer(tracer: Tracer, parentSpan: Span | null): Trac
       // would otherwise create orphan spans.
       const baseContext = ctx ?? context.active()
       const effectiveContext = injectParentSpan(baseContext, parentSpan)
-      return tracer.startSpan(name, options, effectiveContext)
+      // Propagate duron.job.id and duron.step.id so spans can be queried by job
+      const attributes = {
+        ...(parentJobId ? { 'duron.job.id': parentJobId } : {}),
+        ...(parentStepId ? { 'duron.step.id': parentStepId } : {}),
+        ...options?.attributes,
+      }
+      return tracer.startSpan(name, { ...options, attributes }, effectiveContext)
     },
     // startActiveSpan has multiple overloads, we need to handle them all
     startActiveSpan<F extends (span: Span) => unknown>(
@@ -123,6 +138,10 @@ function createContextAwareTracer(tracer: Tracer, parentSpan: Span | null): Trac
  * Create a TelemetryContext that wraps an OTel span.
  */
 function createTelemetryContext(span: Span | null, tracer: Tracer): TelemetryContext {
+  // Extract duron.job.id and duron.step.id from parent span attributes for propagation
+  const parentJobId = span ? (span as any).attributes?.['duron.job.id'] : undefined
+  const parentStepId = span ? (span as any).attributes?.['duron.step.id'] : undefined
+
   return {
     getActiveSpan(): Span | undefined {
       return span ?? undefined
@@ -133,8 +152,14 @@ function createTelemetryContext(span: Span | null, tracer: Tracer): TelemetryCon
     },
     startSpan(name: string, options?: { attributes?: Record<string, any> }): Span {
       // Create a child span linked to the current span (job or step)
+      // Propagate duron.job.id and duron.step.id from parent so spans can be queried by job
+      const attributes = {
+        ...(parentJobId ? { 'duron.job.id': parentJobId } : {}),
+        ...(parentStepId ? { 'duron.step.id': parentStepId } : {}),
+        ...options?.attributes,
+      }
       const parentContext = span ? trace.setSpan(context.active(), span) : context.active()
-      return tracer.startSpan(name, { attributes: options?.attributes }, parentContext)
+      return tracer.startSpan(name, { attributes }, parentContext)
     },
     recordMetric(name: string, value: number, attributes?: Record<string, any>): void {
       if (span) {
@@ -213,7 +238,9 @@ export class StepStore {
         parallel,
       })
     } catch (error) {
-      throw new NonRetriableError(`Failed to get or create step "${name}" for job "${jobId}"`, { cause: error })
+      throw new NonRetriableError(`Failed to get or create step "${name}" for job "${jobId}"`, {
+        cause: error,
+      })
     }
   }
 
@@ -226,7 +253,12 @@ export class StepStore {
    * @param error - Optional error data for failed steps
    * @returns Promise resolving to `true` if update succeeded, `false` otherwise
    */
-  async updateStatus(stepId: string, status: StepStatus, output?: any, error?: any): Promise<boolean> {
+  async updateStatus(
+    stepId: string,
+    status: StepStatus,
+    output?: any,
+    error?: any,
+  ): Promise<boolean> {
     if (status === STEP_STATUS_COMPLETED) {
       return this.#adapter.completeJobStep({ stepId, output })
     } else if (status === STEP_STATUS_FAILED) {
@@ -278,7 +310,9 @@ export class StepManager {
   // Store the job span for creating step spans
   #jobSpan!: Span
   // Factory function to create run functions with the correct parent step ID and abort signal
-  #runFnFactory: ((parentStepId: string | null, abortSignal: AbortSignal) => StepHandlerContext['run']) | null = null
+  #runFnFactory:
+    | ((parentStepId: string | null, abortSignal: AbortSignal) => StepHandlerContext['run'])
+    | null = null
 
   // ============================================================================
   // Constructor
@@ -302,7 +336,14 @@ export class StepManager {
         throw new StepAlreadyExecutedError(task.name, this.#jobId, this.#actionName)
       }
       this.#historySteps.add(stepKey)
-      return this.#executeStep(task.name, task.cb, task.options, task.abortSignal, task.parentStepId, task.parallel)
+      return this.#executeStep(
+        task.name,
+        task.cb,
+        task.options,
+        task.abortSignal,
+        task.parentStepId,
+        task.parallel,
+      )
     }, options.concurrencyLimit)
   }
 
@@ -320,7 +361,9 @@ export class StepManager {
    *
    * @param factory - A function that creates run functions with the correct parent step ID and abort signal
    */
-  setRunFnFactory(factory: (parentStepId: string | null, abortSignal: AbortSignal) => StepHandlerContext['run']): void {
+  setRunFnFactory(
+    factory: (parentStepId: string | null, abortSignal: AbortSignal) => StepHandlerContext['run'],
+  ): void {
     this.#runFnFactory = factory
   }
 
@@ -339,7 +382,11 @@ export class StepManager {
    * @param logger - Pino child logger for this job
    * @returns ActionHandlerContext instance
    */
-  createActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVariables = Record<string, unknown>>(
+  createActionContext<
+    TInput extends z.ZodObject,
+    TOutput extends z.ZodObject,
+    TVariables = Record<string, unknown>,
+  >(
     job: { id: string; input: z.infer<TInput>; groupKey?: string },
     action: Action<TInput, TOutput, TVariables>,
     variables: TVariables,
@@ -425,7 +472,9 @@ export class StepManager {
     const executeStep = async (): Promise<TResult> => {
       if (!step) {
         if (abortSignal.aborted) {
-          throw new ActionCancelError(this.#actionName, this.#jobId, { cause: 'step cancelled before create step' })
+          throw new ActionCancelError(this.#actionName, this.#jobId, {
+            cause: 'step cancelled before create step',
+          })
         }
 
         // Create step record with parentStepId and parallel
@@ -448,7 +497,9 @@ export class StepManager {
 
         // Start step span - uses no-op tracer if no SDK is configured
         const parentSpan = parentStepId ? this.#stepSpans.get(parentStepId) : this.#jobSpan
-        const parentContext = parentSpan ? trace.setSpan(context.active(), parentSpan) : context.active()
+        const parentContext = parentSpan
+          ? trace.setSpan(context.active(), parentSpan)
+          : context.active()
         const stepSpan = this.#tracer.startSpan(
           `step:${name}`,
           {
@@ -465,15 +516,26 @@ export class StepManager {
         this.#stepSpans.set(step.id, stepSpan)
 
         if (abortSignal.aborted) {
-          throw new ActionCancelError(this.#actionName, this.#jobId, { cause: 'step cancelled after create step' })
+          throw new ActionCancelError(this.#actionName, this.#jobId, {
+            cause: 'step cancelled after create step',
+          })
         }
 
         if (step.status === STEP_STATUS_COMPLETED) {
           // this is how we recover a completed step
           this.#logger.debug(
-            { jobId: this.#jobId, actionName: this.#actionName, stepName: name, stepId: step.id, parentStepId },
+            {
+              jobId: this.#jobId,
+              actionName: this.#actionName,
+              stepName: name,
+              stepId: step.id,
+              parentStepId,
+            },
             '[StepManager] Step recovered (already completed)',
           )
+          // End the span and clean up to prevent memory leak
+          stepSpan.end()
+          this.#stepSpans.delete(step.id)
           return step.output as TResult
         } else if (step.status === STEP_STATUS_FAILED) {
           throw new NonRetriableError(
@@ -491,7 +553,13 @@ export class StepManager {
 
         // Log step start
         this.#logger.debug(
-          { jobId: this.#jobId, actionName: this.#actionName, stepName: name, stepId: step.id, parentStepId },
+          {
+            jobId: this.#jobId,
+            actionName: this.#actionName,
+            stepName: name,
+            stepId: step.id,
+            parentStepId,
+          },
           '[StepManager] Step started executing',
         )
       }
@@ -584,7 +652,9 @@ export class StepManager {
 
         // Execute callback within the span context so that child spans inherit the trace
         const currentStepSpan = step?.id ? this.#stepSpans.get(step.id) : undefined
-        const spanContext = currentStepSpan ? trace.setSpan(context.active(), currentStepSpan) : context.active()
+        const spanContext = currentStepSpan
+          ? trace.setSpan(context.active(), currentStepSpan)
+          : context.active()
         const callbackPromise = context.with(spanContext, () => cb(stepContext))
 
         let result: any = null
@@ -663,7 +733,9 @@ export class StepManager {
         // Update step as completed
         const completed = await this.#stepStore.updateStatus(step.id, 'completed', result)
         if (!completed) {
-          throw new Error(`Failed to complete step "${name}" for job "${this.#jobId}" action "${this.#actionName}"`)
+          throw new Error(
+            `Failed to complete step "${name}" for job "${this.#jobId}" action "${this.#actionName}"`,
+          )
         }
 
         // End step span successfully
@@ -721,9 +793,15 @@ export class StepManager {
 
         if (ctx.retriesLeft > 0 && step) {
           this.#clearHistoryForStep(step.id)
-          const delayed = await this.#stepStore.delay(step.id, ctx.finalDelay, serializeError(error))
+          const delayed = await this.#stepStore.delay(
+            step.id,
+            ctx.finalDelay,
+            serializeError(error),
+          )
           if (!delayed) {
-            throw new Error(`Failed to delay step "${name}" for job "${this.#jobId}" action "${this.#actionName}"`)
+            throw new Error(
+              `Failed to delay step "${name}" for job "${this.#jobId}" action "${this.#actionName}"`,
+            )
           }
         } else {
           if (isTimeoutError(error)) {
@@ -765,7 +843,12 @@ export class StepManager {
         if (isCancelError(error)) {
           await this.#stepStore.updateStatus(step.id, 'cancelled')
         } else {
-          await this.#stepStore.updateStatus(step.id, STEP_STATUS_FAILED, null, serializeError(error))
+          await this.#stepStore.updateStatus(
+            step.id,
+            STEP_STATUS_FAILED,
+            null,
+            serializeError(error),
+          )
         }
       }
       throw error
@@ -794,9 +877,11 @@ export class StepManager {
  * ActionContext provides the context for action handlers.
  * It implements ActionHandlerContext and provides access to input, variables, logger, and the step function.
  */
-class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVariables = Record<string, unknown>>
-  implements ActionHandlerContext<TInput, TVariables>
-{
+class ActionContext<
+  TInput extends z.ZodObject,
+  TOutput extends z.ZodObject,
+  TVariables = Record<string, unknown>,
+> implements ActionHandlerContext<TInput, TVariables> {
   #stepManager: StepManager
   #variables: TVariables
   #abortSignal: AbortSignal
@@ -833,13 +918,15 @@ class ActionContext<TInput extends z.ZodObject, TOutput extends z.ZodObject, TVa
         error: () => 'Error parsing action input',
         reportInput: true,
       })
+    } else {
+      this.#input = job.input ?? {}
     }
-    this.#input = job.input ?? {}
     this.step = this.step.bind(this)
     this.run = this.run.bind(this)
     // Set the run function factory so inline steps can call step definitions with correct parent
-    this.#stepManager.setRunFnFactory((parentStepId, abortSignal) => {
-      return (stepDef, input, options) => this.#runInternal(stepDef, input, options, parentStepId, abortSignal)
+    this.#stepManager.setRunFnFactory((parentStepId, signal) => {
+      return (stepDef, input, options) =>
+        this.#runInternal(stepDef, input, options, parentStepId, signal)
     })
   }
 

@@ -114,7 +114,11 @@ export function ThemeProvider({ children, defaultTheme = 'system' }: ThemeProvid
     })
   }, [])
 
-  return <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>{children}</ThemeContext.Provider>
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  )
 }
 
 export function useTheme() {

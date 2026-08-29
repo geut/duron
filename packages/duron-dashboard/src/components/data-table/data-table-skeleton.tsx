@@ -1,5 +1,12 @@
 import { Skeleton } from '@/components/ui/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 
 interface DataTableSkeletonProps extends React.ComponentProps<'div'> {
@@ -25,7 +32,7 @@ export function DataTableSkeleton({
 }: DataTableSkeletonProps) {
   const cozyCellWidths = Array.from(
     { length: columnCount },
-    (_, index) => cellWidths[index % cellWidths.length] ?? 'auto',
+    (_val, index) => cellWidths[index % cellWidths.length] ?? 'auto',
   )
 
   return (
@@ -33,7 +40,9 @@ export function DataTableSkeleton({
       <div className="flex w-full items-center justify-between gap-2 overflow-auto p-1">
         <div className="flex flex-1 items-center gap-2">
           {filterCount > 0
-            ? Array.from({ length: filterCount }).map((_, i) => <Skeleton key={i} className="h-7 w-18 border-dashed" />)
+            ? Array.from({ length: filterCount }).map((_val, i) => (
+                <Skeleton key={i} className="h-7 w-18 border-dashed" />
+              ))
             : null}
         </div>
         {withViewOptions ? <Skeleton className="ml-auto hidden h-7 w-18 lg:flex" /> : null}
@@ -41,9 +50,9 @@ export function DataTableSkeleton({
       <div className="rounded-md border">
         <Table>
           <TableHeader>
-            {Array.from({ length: 1 }).map((_, i) => (
+            {Array.from({ length: 1 }).map((_val, i) => (
               <TableRow key={i} className="hover:bg-transparent">
-                {Array.from({ length: columnCount }).map((_, j) => (
+                {Array.from({ length: columnCount }).map((_val2, j) => (
                   <TableHead
                     key={j}
                     style={{
@@ -58,9 +67,9 @@ export function DataTableSkeleton({
             ))}
           </TableHeader>
           <TableBody>
-            {Array.from({ length: rowCount }).map((_, i) => (
+            {Array.from({ length: rowCount }).map((_val, i) => (
               <TableRow key={i} className="hover:bg-transparent">
-                {Array.from({ length: columnCount }).map((_, j) => (
+                {Array.from({ length: columnCount }).map((_val2, j) => (
                   <TableCell
                     key={j}
                     style={{

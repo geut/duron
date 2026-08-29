@@ -2,8 +2,8 @@ import type { Tracer } from '@opentelemetry/api'
 import fastq from 'fastq'
 import type { Logger } from 'pino'
 
-import type { Action } from './action.js'
 import { ActionJob } from './action-job.js'
+import type { Action } from './action.js'
 import type { Adapter, Job } from './adapters/adapter.js'
 
 export interface ActionManagerOptions<TAction extends Action<any, any, any>> {
@@ -129,7 +129,9 @@ export class ActionManager<TAction extends Action<any, any, any>> {
     this.#stopped = true
     this.abortAll()
     await this.#queue.killAndDrain()
-    await Promise.all(Array.from(this.#activeJobs.values()).map((actionJob) => actionJob.waitForDone()))
+    await Promise.all(
+      Array.from(this.#activeJobs.values()).map((actionJob) => actionJob.waitForDone()),
+    )
   }
 
   // ============================================================================

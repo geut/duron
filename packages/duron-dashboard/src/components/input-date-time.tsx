@@ -29,23 +29,23 @@ const InputDateTime = ({ date, onChange }: InputDateTimeProps) => {
     }
   }, [date])
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value
-    setValue(value)
+  const handleChange = (event: React.FormEvent<HTMLInputElement>) => {
+    const inputValue = event.currentTarget.value
+    setValue(inputValue)
   }
 
   const handleSubmit = useCallback(() => {
     try {
-      let date: Date | undefined
+      let parsedDate: Date | undefined
       if (isMatch(value, 'yyyy-MM-dd HH:mm:ss')) {
-        date = parse(value, 'yyyy-MM-dd HH:mm:ss', new Date())
+        parsedDate = parse(value, 'yyyy-MM-dd HH:mm:ss', new Date())
       } else if (isMatch(value, 'yyyy-MM-dd HH:mm')) {
-        date = parse(value, 'yyyy-MM-dd HH:mm', new Date())
+        parsedDate = parse(value, 'yyyy-MM-dd HH:mm', new Date())
       } else if (isMatch(value, 'yyyy-MM-dd')) {
-        date = parse(value, 'yyyy-MM-dd', new Date())
+        parsedDate = parse(value, 'yyyy-MM-dd', new Date())
       }
-      if (date) {
-        onChange(date)
+      if (parsedDate) {
+        onChange(parsedDate)
       }
     } catch {
       // do nothing

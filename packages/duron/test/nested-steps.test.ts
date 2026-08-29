@@ -4,7 +4,13 @@ import { z } from 'zod'
 
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
-import { JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, STEP_STATUS_CANCELLED, STEP_STATUS_FAILED } from '../src/constants.js'
+import {
+  JOB_STATUS_COMPLETED,
+  JOB_STATUS_FAILED,
+  STEP_STATUS_CANCELLED,
+  STEP_STATUS_FAILED,
+} from '../src/constants.js'
+
 import { type Adapter, type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.js'
 import { expectToBeDefined } from './asserts.js'
 
@@ -258,9 +264,9 @@ const parallelStepsAction = defineAction()({
         return { success: true }
       })
 
-      await nestedStep('verify-customer', async (ctx) => {
+      await nestedStep('verify-customer', async (innerCtx) => {
         await Promise.all([
-          ctx.step(
+          innerCtx.step(
             'deep-step-1',
             async () => {
               await new Promise((resolve) => setTimeout(resolve, input.delay))
@@ -268,7 +274,7 @@ const parallelStepsAction = defineAction()({
             },
             { parallel: true, expire: 2000 },
           ),
-          ctx.step(
+          innerCtx.step(
             'deep-step-2',
             async () => {
               await new Promise((resolve) => setTimeout(resolve, 100))
@@ -609,7 +615,7 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         expect(job.status).toBe(JOB_STATUS_COMPLETED)
 
         const output = job.output as { childResults: number[] }
-        expect(output.childResults.sort()).toEqual([0, 1, 2, 3, 4])
+        expect(output.childResults.toSorted()).toEqual([0, 1, 2, 3, 4])
 
         // Verify all steps exist in database
         const stepsResult = await client.getJobSteps({ jobId })
@@ -673,7 +679,9 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
         // If it does exist, it should be cancelled or failed
         const childStep = stepsResult.steps.find((s) => s.name === 'slow-child')
         if (childStep) {
-          expect(childStep.status === STEP_STATUS_CANCELLED || childStep.status === STEP_STATUS_FAILED).toBe(true)
+          expect(
+            childStep.status === STEP_STATUS_CANCELLED || childStep.status === STEP_STATUS_FAILED,
+          ).toBe(true)
           // Child should have parent step's id
           expect((childStep as any).parentStepId).toBe(parentStep.id)
         }
@@ -783,7 +791,7 @@ function runNestedStepsTests(adapterFactory: AdapterFactory) {
 
 // Run tests with both adapters
 runNestedStepsTests(pgliteFactory)
-// biome-ignore lint/complexity/useLiteralKeys: type safety
+// oxlint-disable-next-line useLiteralKeys
 if (process.env['POSTGRES_TEST'] === 'true') {
   runNestedStepsTests(postgresFactory)
 }

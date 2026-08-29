@@ -8,10 +8,23 @@ import * as React from 'react'
 import { DataTableRangeFilter } from '@/components/data-table/data-table-range-filter'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback'
 import { getDefaultFilterOperator, getFilterOperators } from '@/lib/data-table'
 import { formatDate } from '@/lib/format'
@@ -52,10 +65,10 @@ export function DataTableFilterMenu<TData>({
   const triggerRef = React.useRef<HTMLButtonElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
-  const onOpenChange = React.useCallback((open: boolean) => {
-    setOpen(open)
+  const onOpenChange = React.useCallback((isOpen: boolean) => {
+    setOpen(isOpen)
 
-    if (!open) {
+    if (!isOpen) {
       setTimeout(() => {
         setSelectedColumn(null)
         setInputValue('')
@@ -65,7 +78,11 @@ export function DataTableFilterMenu<TData>({
 
   const onInputKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (REMOVE_FILTER_SHORTCUTS.includes(event.key.toLowerCase()) && !inputValue && selectedColumn) {
+      if (
+        REMOVE_FILTER_SHORTCUTS.includes(event.key.toLowerCase()) &&
+        !inputValue &&
+        selectedColumn
+      ) {
         event.preventDefault()
         setSelectedColumn(null)
       }
@@ -152,7 +169,11 @@ export function DataTableFilterMenu<TData>({
         return
       }
 
-      if (event.key.toLowerCase() === FILTER_SHORTCUT_KEY && (event.ctrlKey || event.metaKey) && event.shiftKey) {
+      if (
+        event.key.toLowerCase() === FILTER_SHORTCUT_KEY &&
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey
+      ) {
         event.preventDefault()
         setOpen((prev) => !prev)
       }
@@ -209,12 +230,18 @@ export function DataTableFilterMenu<TData>({
             {filters.length > 0 ? null : 'Filter'}
           </Button>
         </PopoverTrigger>
-        <PopoverContent align={align} className="w-full max-w-(--radix-popover-content-available-width) p-0" {...props}>
+        <PopoverContent
+          align={align}
+          className="w-full max-w-(--radix-popover-content-available-width) p-0"
+          {...props}
+        >
           <Command loop={true} className="[&_[cmdk-input-wrapper]_svg]:hidden">
             <CommandInput
               ref={inputRef}
               placeholder={
-                selectedColumn ? (selectedColumn.columnDef.meta?.label ?? selectedColumn.id) : 'Search fields...'
+                selectedColumn
+                  ? (selectedColumn.columnDef.meta?.label ?? selectedColumn.id)
+                  : 'Search fields...'
               }
               value={inputValue}
               onValueChange={setInputValue}
@@ -223,7 +250,9 @@ export function DataTableFilterMenu<TData>({
             <CommandList>
               {selectedColumn ? (
                 <>
-                  {selectedColumn.columnDef.meta?.options && <CommandEmpty>No options found.</CommandEmpty>}
+                  {selectedColumn.columnDef.meta?.options && (
+                    <CommandEmpty>No options found.</CommandEmpty>
+                  )}
                   <FilterValueSelector
                     column={selectedColumn}
                     value={inputValue}
@@ -247,7 +276,9 @@ export function DataTableFilterMenu<TData>({
                         }}
                       >
                         {column.columnDef.meta?.icon && <column.columnDef.meta.icon />}
-                        <span className="truncate">{column.columnDef.meta?.label ?? column.id}</span>
+                        <span className="truncate">
+                          {column.columnDef.meta?.label ?? column.id}
+                        </span>
                       </CommandItem>
                     ))}
                   </CommandGroup>
@@ -265,7 +296,10 @@ interface DataTableFilterItemProps<TData> {
   filter: ExtendedColumnFilter<TData>
   filterItemId: string
   columns: Column<TData>[]
-  onFilterUpdate: (filterId: string, updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>) => void
+  onFilterUpdate: (
+    filterId: string,
+    updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>,
+  ) => void
   onFilterRemove: (filterId: string) => void
 }
 
@@ -281,7 +315,7 @@ function DataTableFilterItem<TData>({
     const [showOperatorSelector, setShowOperatorSelector] = React.useState(false)
     const [showValueSelector, setShowValueSelector] = React.useState(false)
 
-    const column = columns.find((column) => column.id === filter.id)
+    const column = columns.find((col) => col.id === filter.id)
 
     const operatorListboxId = `${filterItemId}-operator-listbox`
     const inputId = `${filterItemId}-input`
@@ -291,7 +325,10 @@ function DataTableFilterItem<TData>({
 
     const onItemKeyDown = React.useCallback(
       (event: React.KeyboardEvent<HTMLDivElement>) => {
-        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        if (
+          event.target instanceof HTMLInputElement ||
+          event.target instanceof HTMLTextAreaElement
+        ) {
           return
         }
 
@@ -334,24 +371,29 @@ function DataTableFilterItem<TData>({
               <CommandList>
                 <CommandEmpty>No fields found.</CommandEmpty>
                 <CommandGroup>
-                  {columns.map((column) => (
+                  {columns.map((col) => (
                     <CommandItem
-                      key={column.id}
-                      value={column.id}
+                      key={col.id}
+                      value={col.id}
                       onSelect={() => {
                         onFilterUpdate(filter.filterId, {
-                          id: column.id as Extract<keyof TData, string>,
-                          variant: column.columnDef.meta?.variant ?? 'text',
-                          operator: getDefaultFilterOperator(column.columnDef.meta?.variant ?? 'text'),
+                          id: col.id as Extract<keyof TData, string>,
+                          variant: col.columnDef.meta?.variant ?? 'text',
+                          operator: getDefaultFilterOperator(col.columnDef.meta?.variant ?? 'text'),
                           value: '',
                         })
 
                         setShowFieldSelector(false)
                       }}
                     >
-                      {column.columnDef.meta?.icon && <column.columnDef.meta.icon />}
-                      <span className="truncate">{column.columnDef.meta?.label ?? column.id}</span>
-                      <Check className={cn('ml-auto', column.id === filter.id ? 'opacity-100' : 'opacity-0')} />
+                      {col.columnDef.meta?.icon && <col.columnDef.meta.icon />}
+                      <span className="truncate">{col.columnDef.meta?.label ?? col.id}</span>
+                      <Check
+                        className={cn(
+                          'ml-auto',
+                          column.id === filter.id ? 'opacity-100' : 'opacity-0',
+                        )}
+                      />
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -433,7 +475,11 @@ function FilterValueSelector<TData>({ column, value, onSelect }: FilterValueSele
       return (
         <CommandGroup>
           {column.columnDef.meta?.options?.map((option) => (
-            <CommandItem key={option.value} value={option.value} onSelect={() => onSelect(option.value)}>
+            <CommandItem
+              key={option.value}
+              value={option.value}
+              onSelect={() => onSelect(option.value)}
+            >
               {option.icon && <option.icon />}
               <span className="truncate">{option.label}</span>
               {option.count && <span className="ml-auto font-mono text-xs">{option.count}</span>}
@@ -489,7 +535,10 @@ function onFilterInputRender<TData>({
   filter: ExtendedColumnFilter<TData>
   column: Column<TData>
   inputId: string
-  onFilterUpdate: (filterId: string, updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>) => void
+  onFilterUpdate: (
+    filterId: string,
+    updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>,
+  ) => void
   showValueSelector: boolean
   setShowValueSelector: (value: boolean) => void
 }) {
@@ -511,7 +560,10 @@ function onFilterInputRender<TData>({
     case 'text':
     case 'number':
     case 'range': {
-      if ((filter.variant === 'range' && filter.operator === 'isBetween') || filter.operator === 'isBetween') {
+      if (
+        (filter.variant === 'range' && filter.operator === 'isBetween') ||
+        filter.operator === 'isBetween'
+      ) {
         return (
           <DataTableRangeFilter
             filter={filter}
@@ -593,14 +645,19 @@ function onFilterInputRender<TData>({
                   <div className="-space-x-2 flex items-center rtl:space-x-reverse">
                     {selectedOptions.map((selectedOption) =>
                       selectedOption.icon ? (
-                        <div key={selectedOption.value} className="rounded-full border bg-background p-0.5">
+                        <div
+                          key={selectedOption.value}
+                          className="rounded-full border bg-background p-0.5"
+                        >
                           <selectedOption.icon className="size-3.5" />
                         </div>
                       ) : null,
                     )}
                   </div>
                   <span className="truncate">
-                    {selectedOptions.length > 1 ? `${selectedOptions.length} selected` : selectedOptions[0]?.label}
+                    {selectedOptions.length > 1
+                      ? `${selectedOptions.length} selected`
+                      : selectedOptions[0]?.label}
                   </span>
                 </>
               )}
@@ -630,7 +687,10 @@ function onFilterInputRender<TData>({
                       <span className="truncate">{option.label}</span>
                       {filter.variant === 'multiSelect' && (
                         <Check
-                          className={cn('ml-auto', selectedValues.includes(option.value) ? 'opacity-100' : 'opacity-0')}
+                          className={cn(
+                            'ml-auto',
+                            selectedValues.includes(option.value) ? 'opacity-100' : 'opacity-0',
+                          )}
                         />
                       )}
                     </CommandItem>
@@ -694,7 +754,12 @@ function onFilterInputRender<TData>({
                 }
                 onSelect={(date) => {
                   onFilterUpdate(filter.filterId, {
-                    value: date ? [(date.from?.getTime() ?? '').toString(), (date.to?.getTime() ?? '').toString()] : [],
+                    value: date
+                      ? [
+                          (date.from?.getTime() ?? '').toString(),
+                          (date.to?.getTime() ?? '').toString(),
+                        ]
+                      : [],
                   })
                 }}
               />

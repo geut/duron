@@ -30,9 +30,18 @@ export function useJobParams(pageSize: number = 10) {
       ['created', 'active', 'completed', 'failed', 'cancelled'].includes(s),
     )
   }, [statusFilterParam])
-  const [createdAtFilterParam] = useQueryState('createdAt', parseAsArrayOf(parseAsInteger).withDefault([]))
-  const [startedAtFilterParam] = useQueryState('startedAt', parseAsArrayOf(parseAsInteger).withDefault([]))
-  const [finishedAtFilterParam] = useQueryState('finishedAt', parseAsArrayOf(parseAsInteger).withDefault([]))
+  const [createdAtFilterParam] = useQueryState(
+    'createdAt',
+    parseAsArrayOf(parseAsInteger).withDefault([]),
+  )
+  const [startedAtFilterParam] = useQueryState(
+    'startedAt',
+    parseAsArrayOf(parseAsInteger).withDefault([]),
+  )
+  const [finishedAtFilterParam] = useQueryState(
+    'finishedAt',
+    parseAsArrayOf(parseAsInteger).withDefault([]),
+  )
   const fCreatedAt = useMemo(() => {
     if (createdAtFilterParam.length === 0) return undefined
     return createdAtFilterParam.map((ts) => new Date(ts))

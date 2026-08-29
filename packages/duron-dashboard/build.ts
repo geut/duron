@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// biome-ignore-all lint/suspicious/noConsole: This is a build script
+// oxlint-disable no-console
 import { existsSync } from 'node:fs'
 import { cp, rm } from 'node:fs/promises'
 import path from 'node:path'
@@ -36,7 +36,9 @@ const start = performance.now()
 const entrypoints = [...new Bun.Glob('**.html').scanSync('src')]
   .map((a) => path.resolve('src', a))
   .filter((dir) => !dir.includes('node_modules'))
-console.log(`📄 Found ${entrypoints.length} HTML ${entrypoints.length === 1 ? 'file' : 'files'} to process\n`)
+console.log(
+  `📄 Found ${entrypoints.length} HTML ${entrypoints.length === 1 ? 'file' : 'files'} to process\n`,
+)
 
 const [indexResult, initResult] = await Promise.all([
   Bun.build({
@@ -66,7 +68,10 @@ const [indexResult, initResult] = await Promise.all([
   }),
 ])
 
-await cp(path.join(import.meta.dirname, '..', 'assets', 'favicon.svg'), path.join(outdir, 'favicon.svg'))
+await cp(
+  path.join(import.meta.dirname, '..', 'assets', 'favicon.svg'),
+  path.join(outdir, 'favicon.svg'),
+)
 
 const end = performance.now()
 

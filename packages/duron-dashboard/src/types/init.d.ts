@@ -28,4 +28,7 @@ export interface InitDuronOptions extends DuronDashboardProps {}
  * cleanup()
  * ```
  */
-export declare function initDuron(element: HTMLElement | string, options: InitDuronOptions): () => void
+export declare function initDuron(
+  element: HTMLElement | string,
+  options: InitDuronOptions,
+): () => void

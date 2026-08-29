@@ -8,12 +8,10 @@ import {
   JOB_STATUS_COMPLETED,
   JOB_STATUS_FAILED,
   type JobStatus,
-  STEP_STATUS_CANCELLED,
-  STEP_STATUS_COMPLETED,
-  STEP_STATUS_FAILED,
-  type StepStatus,
 } from '../constants.js'
+
 import type {
+  ArchiveStats,
   CancelJobOptions,
   CancelJobStepOptions,
   CompleteJobOptions,
@@ -24,7 +22,6 @@ import type {
   DelayJobStepOptions,
   DeleteJobOptions,
   DeleteJobsOptions,
-  DeleteSpansOptions,
   FailJobOptions,
   FailJobStepOptions,
   FetchOptions,
@@ -33,18 +30,17 @@ import type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
-  GetSpansOptions,
-  GetSpansResult,
-  InsertSpanOptions,
   Job,
   JobStatusResult,
   JobStep,
   JobStepStatusResult,
+  PruneArchiveOptions,
   RecoverJobsOptions,
   RetryJobOptions,
   TimeTravelJobOptions,
 } from './schemas.js'
 import {
+  ArchiveStatsSchema,
   BooleanResultSchema,
   CancelJobOptionsSchema,
   CancelJobStepOptionsSchema,
@@ -56,7 +52,6 @@ import {
   DelayJobStepOptionsSchema,
   DeleteJobOptionsSchema,
   DeleteJobsOptionsSchema,
-  DeleteSpansOptionsSchema,
   FailJobOptionsSchema,
   FailJobStepOptionsSchema,
   FetchOptionsSchema,
@@ -65,9 +60,6 @@ import {
   GetJobStepsResultSchema,
   GetJobsOptionsSchema,
   GetJobsResultSchema,
-  GetSpansOptionsSchema,
-  GetSpansResultSchema,
-  InsertSpanOptionsSchema,
   JobIdResultSchema,
   JobSchema,
   JobStatusResultSchema,
@@ -75,6 +67,7 @@ import {
   JobStepStatusResultSchema,
   JobsArrayResultSchema,
   NumberResultSchema,
+  PruneArchiveOptionsSchema,
   RecoverJobsOptionsSchema,
   RetryJobOptionsSchema,
   TimeTravelJobOptionsSchema,
@@ -83,6 +76,7 @@ import {
 // Re-export types from schemas for backward compatibility
 export type {
   ActionStats,
+  ArchiveStats,
   CancelJobOptions,
   CancelJobStepOptions,
   CompleteJobOptions,
@@ -93,7 +87,6 @@ export type {
   DelayJobStepOptions,
   DeleteJobOptions,
   DeleteJobsOptions,
-  DeleteSpansOptions,
   FailJobOptions,
   FailJobStepOptions,
   FetchOptions,
@@ -102,9 +95,6 @@ export type {
   GetJobStepsResult,
   GetJobsOptions,
   GetJobsResult,
-  GetSpansOptions,
-  GetSpansResult,
-  InsertSpanOptions,
   Job,
   JobFilters,
   JobSort,
@@ -112,16 +102,10 @@ export type {
   JobStatusResult,
   JobStep,
   JobStepStatusResult,
+  PruneArchiveOptions,
   RecoverJobsOptions,
   RetryJobOptions,
   SortOrder,
-  Span,
-  SpanEvent,
-  SpanFilters,
-  SpanKind,
-  SpanSort,
-  SpanSortField,
-  SpanStatusCode,
   TimeTravelJobOptions,
 } from './schemas.js'
 
@@ -140,24 +124,6 @@ export interface AdapterEvents {
   'job-available': [
     {
       jobId: string
-    },
-  ]
-  'step-status-changed': [
-    {
-      jobId: string
-      stepId: string
-      status: StepStatus
-      error: any | null
-      clientId: string
-    },
-  ]
-  'step-delayed': [
-    {
-      jobId: string
-      stepId: string
-      delayedMs: number
-      error: any
-      clientId: string
     },
   ]
 }
@@ -256,7 +222,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
 
   /**
    * Set the unique identifier for this adapter instance.
-   * Used for multi-process coordination and job ownership.
+   * Used for instance identification, heartbeat liveness, and job ownership.
    *
    * @param id - The unique identifier for this adapter instance
    */
@@ -516,6 +482,24 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
     }
   }
 
+  /**
+   * Renew this instance's liveness record.
+   * Should be called periodically by the owner (e.g., the Client) to signal
+   * that this instance is still alive. Other instances use the liveness
+   * record to detect dead owners during recovery.
+   *
+   * @returns Promise resolving to `void`
+   */
+  async heartbeat(): Promise<void> {
+    try {
+      await this.start()
+      await this._heartbeat()
+    } catch (error) {
+      this.#logger?.error(error, 'Error in Adapter.heartbeat()')
+      throw error
+    }
+  }
+
   // ============================================================================
   // Step Methods
   // ============================================================================
@@ -525,7 +509,9 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    *
    * @returns Promise resolving to the step, or `null` if creation failed
    */
-  async createOrRecoverJobStep(options: CreateOrRecoverJobStepOptions): Promise<CreateOrRecoverJobStepResult | null> {
+  async createOrRecoverJobStep(
+    options: CreateOrRecoverJobStepOptions,
+  ): Promise<CreateOrRecoverJobStepResult | null> {
     try {
       await this.start()
       const parsedOptions = CreateOrRecoverJobStepOptionsSchema.parse(options)
@@ -547,21 +533,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
       await this.start()
       const parsedOptions = CompleteJobStepOptionsSchema.parse(options)
       const result = await this._completeJobStep(parsedOptions)
-      const success = BooleanResultSchema.parse(result)
-      if (success) {
-        // Fetch jobId for notification
-        const step = await this._getJobStepById(parsedOptions.stepId)
-        if (step) {
-          await this._notify('step-status-changed', {
-            jobId: step.jobId,
-            stepId: parsedOptions.stepId,
-            status: STEP_STATUS_COMPLETED,
-            error: null,
-            clientId: this.id,
-          })
-        }
-      }
-      return success
+      return BooleanResultSchema.parse(result)
     } catch (error) {
       this.#logger?.error(error, 'Error in Adapter.completeJobStep()')
       throw error
@@ -578,21 +550,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
       await this.start()
       const parsedOptions = FailJobStepOptionsSchema.parse(options)
       const result = await this._failJobStep(parsedOptions)
-      const success = BooleanResultSchema.parse(result)
-      if (success) {
-        // Fetch jobId for notification
-        const step = await this._getJobStepById(parsedOptions.stepId)
-        if (step) {
-          await this._notify('step-status-changed', {
-            jobId: step.jobId,
-            stepId: parsedOptions.stepId,
-            status: STEP_STATUS_FAILED,
-            error: parsedOptions.error,
-            clientId: this.id,
-          })
-        }
-      }
-      return success
+      return BooleanResultSchema.parse(result)
     } catch (error) {
       this.#logger?.error(error, 'Error in Adapter.failJobStep()')
       throw error
@@ -609,21 +567,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
       await this.start()
       const parsedOptions = DelayJobStepOptionsSchema.parse(options)
       const result = await this._delayJobStep(parsedOptions)
-      const success = BooleanResultSchema.parse(result)
-      if (success) {
-        // Fetch jobId for notification
-        const step = await this._getJobStepById(parsedOptions.stepId)
-        if (step) {
-          await this._notify('step-delayed', {
-            jobId: step.jobId,
-            stepId: parsedOptions.stepId,
-            delayedMs: parsedOptions.delayMs,
-            error: parsedOptions.error,
-            clientId: this.id,
-          })
-        }
-      }
-      return success
+      return BooleanResultSchema.parse(result)
     } catch (error) {
       this.#logger?.error(error, 'Error in Adapter.delayJobStep()')
       throw error
@@ -640,21 +584,7 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
       await this.start()
       const parsedOptions = CancelJobStepOptionsSchema.parse(options)
       const result = await this._cancelJobStep(parsedOptions)
-      const success = BooleanResultSchema.parse(result)
-      if (success) {
-        // Fetch jobId for notification
-        const step = await this._getJobStepById(parsedOptions.stepId)
-        if (step) {
-          await this._notify('step-status-changed', {
-            jobId: step.jobId,
-            stepId: parsedOptions.stepId,
-            status: STEP_STATUS_CANCELLED,
-            error: null,
-            clientId: this.id,
-          })
-        }
-      }
-      return success
+      return BooleanResultSchema.parse(result)
     } catch (error) {
       this.#logger?.error(error, 'Error in Adapter.cancelJobStep()')
       throw error
@@ -995,98 +925,83 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
   protected abstract _getActions(): Promise<GetActionsResult>
 
   // ============================================================================
-  // Span Methods (OpenTelemetry)
+  // Archive Methods
   // ============================================================================
 
   /**
-   * Insert multiple span records in a single batch operation.
-   * Used by LocalSpanExporter to store spans from the OpenTelemetry SDK.
+   * Prune archived jobs older than the specified threshold.
    *
-   * @param spans - Array of span data to insert
-   * @returns Promise resolving to the number of spans inserted
+   * @param options - Prune options including olderThan, batchSize, maxBatches
+   * @returns Promise resolving to the number of jobs deleted
    */
-  async insertSpans(spans: InsertSpanOptions[]): Promise<number> {
+  async pruneArchive(options: PruneArchiveOptions): Promise<number> {
     try {
-      if (spans.length === 0) {
-        return 0
-      }
       await this.start()
-      const parsedSpans = spans.map((s) => InsertSpanOptionsSchema.parse(s))
-      const result = await this._insertSpans(parsedSpans)
+      const parsedOptions = PruneArchiveOptionsSchema.parse(options)
+      const result = await this._pruneArchive(parsedOptions)
       return NumberResultSchema.parse(result)
     } catch (error) {
-      this.#logger?.error(error, 'Error in Adapter.insertSpans()')
+      this.logger?.error(error, 'Error in Adapter.pruneArchive()')
       throw error
     }
   }
 
   /**
-   * Get spans for a job or step.
+   * Truncate all archive tables (nuclear option).
    *
-   * @param options - Query options including jobId/stepId, filters, and sort
-   * @returns Promise resolving to spans result
+   * @returns Promise resolving to void
    */
-  async getSpans(options: GetSpansOptions): Promise<GetSpansResult> {
+  async truncateArchive(): Promise<void> {
     try {
       await this.start()
-      const parsedOptions = GetSpansOptionsSchema.parse(options)
-      // Validate that at least one of jobId or stepId is provided
-      if (!parsedOptions.jobId && !parsedOptions.stepId) {
-        throw new Error('At least one of jobId or stepId must be provided')
-      }
-      const result = await this._getSpans(parsedOptions)
-      return GetSpansResultSchema.parse(result)
+      await this._truncateArchive()
     } catch (error) {
-      this.#logger?.error(error, 'Error in Adapter.getSpans()')
+      this.logger?.error(error, 'Error in Adapter.truncateArchive()')
       throw error
     }
   }
 
   /**
-   * Delete all spans for a job.
+   * Get archive statistics.
    *
-   * @param options - Options containing the jobId
-   * @returns Promise resolving to the number of spans deleted
+   * @returns Promise resolving to archive stats
    */
-  async deleteSpans(options: DeleteSpansOptions): Promise<number> {
+  async getArchiveStats(): Promise<ArchiveStats> {
     try {
       await this.start()
-      const parsedOptions = DeleteSpansOptionsSchema.parse(options)
-      const result = await this._deleteSpans(parsedOptions)
-      return NumberResultSchema.parse(result)
+      const result = await this._getArchiveStats()
+      return ArchiveStatsSchema.parse(result)
     } catch (error) {
-      this.#logger?.error(error, 'Error in Adapter.deleteSpans()')
+      this.logger?.error(error, 'Error in Adapter.getArchiveStats()')
       throw error
     }
   }
 
   // ============================================================================
-  // Private Span Methods (to be implemented by adapters)
+  // Private Archive Methods (to be implemented by adapters)
   // ============================================================================
 
   /**
-   * Internal method to insert multiple span records in a single batch.
+   * Internal method to prune archived jobs.
    *
-   * @param spans - Array of validated span data
-   * @returns Promise resolving to the number of spans inserted
+   * @param options - Validated prune options
+   * @returns Promise resolving to the number of jobs deleted
    */
-  protected abstract _insertSpans(spans: InsertSpanOptions[]): Promise<number>
+  protected abstract _pruneArchive(options: PruneArchiveOptions): Promise<number>
 
   /**
-   * Internal method to get spans for a job or step.
+   * Internal method to truncate all archive tables.
    *
-   * @param options - Validated query options
-   * @returns Promise resolving to spans result
+   * @returns Promise resolving to void
    */
-  protected abstract _getSpans(options: GetSpansOptions): Promise<GetSpansResult>
+  protected abstract _truncateArchive(): Promise<void>
 
   /**
-   * Internal method to delete all spans for a job.
+   * Internal method to get archive statistics.
    *
-   * @param options - Validated options containing the jobId
-   * @returns Promise resolving to the number of spans deleted
+   * @returns Promise resolving to archive stats
    */
-  protected abstract _deleteSpans(options: DeleteSpansOptions): Promise<number>
+  protected abstract _getArchiveStats(): Promise<ArchiveStats>
 
   // ============================================================================
   // Protected Abstract Methods (to be implemented by adapters)
@@ -1117,4 +1032,11 @@ export abstract class Adapter extends EventEmitter<AdapterEvents> {
    * @returns Promise resolving to `void`
    */
   protected abstract _notify(event: string, data: any): Promise<void>
+
+  /**
+   * Renew this instance's liveness record (heartbeat).
+   *
+   * @returns Promise resolving to `void`
+   */
+  protected abstract _heartbeat(): Promise<void>
 }

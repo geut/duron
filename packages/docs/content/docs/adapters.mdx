@@ -23,6 +23,7 @@ const adapter = postgresAdapter({
 ```
 
 **Options:**
+
 - `connection` - PostgreSQL connection string or postgres.js options object
 - `schema` - Database schema name (default: `'duron'`)
 - `migrateOnStart` - Whether to run migrations on startup (default: `true`)
@@ -42,6 +43,7 @@ const adapter = pgliteAdapter({
 ```
 
 **Options:**
+
 - `connection` - `':memory:'` for in-memory database, or a file path for persistence
 - `schema` - Database schema name (default: `'duron'`)
 - `migrateOnStart` - Whether to run migrations on startup (default: `true`)
@@ -112,25 +114,6 @@ Stores step information.
 - `started_at` - Timestamp
 - `finished_at` - Timestamp (nullable)
 - `updated_at` - Timestamp
-
-### `spans` Table
-
-Stores OpenTelemetry spans for observability. Only used when `telemetry.local` is enabled.
-
-- `id` - Bigserial primary key
-- `trace_id` - OpenTelemetry trace ID (32-char hex)
-- `span_id` - OpenTelemetry span ID (16-char hex)
-- `parent_span_id` - Parent span ID (nullable, null for root spans)
-- `job_id` - Foreign key to jobs table (nullable)
-- `step_id` - Foreign key to job_steps table (nullable)
-- `name` - Span name
-- `kind` - Span kind (0=INTERNAL, 1=SERVER, 2=CLIENT, 3=PRODUCER, 4=CONSUMER)
-- `start_time_unix_nano` - Start time in nanoseconds since epoch
-- `end_time_unix_nano` - End time in nanoseconds since epoch (nullable)
-- `status_code` - Status code (0=UNSET, 1=OK, 2=ERROR)
-- `status_message` - Status message (nullable)
-- `attributes` - JSONB span attributes
-- `events` - JSONB array of span events
 
 ### Migrations
 

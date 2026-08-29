@@ -6,10 +6,29 @@ import * as React from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sortable, SortableContent, SortableItem, SortableItemHandle, SortableOverlay } from '@/components/ui/sortable'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Sortable,
+  SortableContent,
+  SortableItem,
+  SortableItemHandle,
+  SortableOverlay,
+} from '@/components/ui/sortable'
 import { dataTableConfig } from '@/config/data-table'
 import { cn } from '@/lib/utils'
 
@@ -91,7 +110,11 @@ export function DataTableSortList<TData>({ table, ...props }: DataTableSortListP
         return
       }
 
-      if (event.key.toLowerCase() === SORT_SHORTCUT_KEY && (event.ctrlKey || event.metaKey) && event.shiftKey) {
+      if (
+        event.key.toLowerCase() === SORT_SHORTCUT_KEY &&
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey
+      ) {
         event.preventDefault()
         setOpen((prev) => !prev)
       }
@@ -138,8 +161,13 @@ export function DataTableSortList<TData>({ table, ...props }: DataTableSortListP
             <h4 id={labelId} className="font-medium leading-none">
               {sorting.length > 0 ? 'Sort by' : 'No sorting applied'}
             </h4>
-            <p id={descriptionId} className={cn('text-muted-foreground text-sm', sorting.length > 0 && 'sr-only')}>
-              {sorting.length > 0 ? 'Modify sorting to organize your rows.' : 'Add sorting to organize your rows.'}
+            <p
+              id={descriptionId}
+              className={cn('text-muted-foreground text-sm', sorting.length > 0 && 'sr-only')}
+            >
+              {sorting.length > 0
+                ? 'Modify sorting to organize your rows.'
+                : 'Add sorting to organize your rows.'}
             </p>
           </div>
           {sorting.length > 0 && (
@@ -233,7 +261,12 @@ function DataTableSortItem({
 
   return (
     <SortableItem value={sort.id} asChild={true}>
-      <li id={sortItemId} tabIndex={-1} className="flex items-center gap-2" onKeyDown={onItemKeyDown}>
+      <li
+        id={sortItemId}
+        tabIndex={-1}
+        className="flex items-center gap-2"
+        onKeyDown={onItemKeyDown}
+      >
         <Popover open={showFieldSelector} onOpenChange={setShowFieldSelector}>
           <PopoverTrigger asChild={true}>
             <Button
@@ -271,9 +304,14 @@ function DataTableSortItem({
           open={showDirectionSelector}
           onOpenChange={setShowDirectionSelector}
           value={sort.desc ? 'desc' : 'asc'}
-          onValueChange={(value: SortDirection) => onSortUpdate(sort.id, { desc: value === 'desc' })}
+          onValueChange={(value: SortDirection) =>
+            onSortUpdate(sort.id, { desc: value === 'desc' })
+          }
         >
-          <SelectTrigger aria-controls={directionListboxId} className="h-8 w-24 rounded data-size:h-8">
+          <SelectTrigger
+            aria-controls={directionListboxId}
+            className="h-8 w-24 rounded data-size:h-8"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent id={directionListboxId} className="min-w-(--radix-select-trigger-width)">

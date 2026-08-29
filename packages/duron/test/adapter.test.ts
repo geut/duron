@@ -12,6 +12,7 @@ import {
   STEP_STATUS_FAILED,
 } from '../src/constants.js'
 import { serializeError } from '../src/errors.js'
+
 import { type Adapter, type AdapterFactory, pgliteFactory, postgresFactory } from './adapters.js'
 import { expectToBeDefined } from './asserts.js'
 
@@ -454,7 +455,6 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
         // In a real scenario, this would happen when a process crashes
         const recovered = await adapter.recoverJobs({
           checksums: ['abc123'],
-          multiProcessMode: false,
         })
 
         // The job should be recovered (reset to CREATED status)
@@ -857,7 +857,7 @@ function runAdapterTests(adapterFactory: AdapterFactory) {
 }
 
 runAdapterTests(postgresFactory)
-// biome-ignore lint/complexity/useLiteralKeys: type safety
+// oxlint-disable-next-line useLiteralKeys
 if (process.env['POSTGRES_TEST'] === 'true') {
   runAdapterTests(pgliteFactory)
 }

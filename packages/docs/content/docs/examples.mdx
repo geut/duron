@@ -95,10 +95,12 @@ const processOrder = defineAction<{ db: Database; paymentService: PaymentService
   input: z.object({
     orderId: z.string(),
     userId: z.string(),
-    items: z.array(z.object({
-      productId: z.string(),
-      quantity: z.number(),
-    })),
+    items: z.array(
+      z.object({
+        productId: z.string(),
+        quantity: z.number(),
+      }),
+    ),
   }),
   output: z.object({
     success: z.boolean(),
@@ -121,15 +123,19 @@ const processOrder = defineAction<{ db: Database; paymentService: PaymentService
     const { orderId, userId, items } = ctx.input
 
     // Step 1: Validate order
-    await ctx.step('validateOrder', async () => {
-      if (items.length === 0) {
-        throw new NonRetriableError('Order must have at least one item')
-      }
-    }, {
-      retry: {
-        limit: 0, // Don't retry validation
+    await ctx.step(
+      'validateOrder',
+      async () => {
+        if (items.length === 0) {
+          throw new NonRetriableError('Order must have at least one item')
+        }
       },
-    })
+      {
+        retry: {
+          limit: 0, // Don't retry validation
+        },
+      },
+    )
 
     // Step 2: Fetch user
     const user = await ctx.step('fetchUser', async ({ signal }) => {
@@ -152,11 +158,14 @@ const processOrder = defineAction<{ db: Database; paymentService: PaymentService
 
     // Step 4: Process payment
     const payment = await ctx.step('processPayment', async ({ signal }) => {
-      return await ctx.var.paymentService.charge({
-        userId,
-        amount: calculateTotal(items),
-        orderId,
-      }, { signal })
+      return await ctx.var.paymentService.charge(
+        {
+          userId,
+          amount: calculateTotal(items),
+          orderId,
+        },
+        { signal },
+      )
     })
 
     if (!payment.success) {
@@ -165,13 +174,16 @@ const processOrder = defineAction<{ db: Database; paymentService: PaymentService
 
     // Step 5: Create order
     const order = await ctx.step('createOrder', async ({ signal }) => {
-      return await ctx.var.db.orders.create({
-        orderId,
-        userId,
-        items,
-        paymentId: payment.id,
-        status: 'confirmed',
-      }, { signal })
+      return await ctx.var.db.orders.create(
+        {
+          orderId,
+          userId,
+          items,
+          paymentId: payment.id,
+          status: 'confirmed',
+        },
+        { signal },
+      )
     })
 
     // Step 6: Update inventory
@@ -183,11 +195,14 @@ const processOrder = defineAction<{ db: Database; paymentService: PaymentService
 
     // Step 7: Send confirmation email
     await ctx.step('sendConfirmation', async ({ signal }) => {
-      await sendEmail({
-        to: user.email,
-        subject: 'Order Confirmed',
-        body: `Your order ${order.orderNumber} has been confirmed.`,
-      }, { signal })
+      await sendEmail(
+        {
+          to: user.email,
+          subject: 'Order Confirmed',
+          body: `Your order ${order.orderNumber} has been confirmed.`,
+        },
+        { signal },
+      )
     })
 
     return {
@@ -210,10 +225,12 @@ const processImage = defineAction<{ s3: S3Client; imageProcessor: ImageProcessor
   name: 'processImage',
   input: z.object({
     imageUrl: z.string().url(),
-    transformations: z.array(z.object({
-      type: z.enum(['resize', 'crop', 'filter']),
-      params: z.record(z.any()),
-    })),
+    transformations: z.array(
+      z.object({
+        type: z.enum(['resize', 'crop', 'filter']),
+        params: z.record(z.any()),
+      }),
+    ),
   }),
   output: z.object({
     success: z.boolean(),
@@ -251,7 +268,7 @@ const processImage = defineAction<{ s3: S3Client; imageProcessor: ImageProcessor
         },
         {
           expire: 5 * 60 * 1000, // 5 minutes per transformation
-        }
+        },
       )
     }
 
@@ -299,10 +316,13 @@ const syncData = defineAction<{ sourceDb: Database; targetDb: Database }>()({
 
     // Step 1: Fetch records from source
     const records = await ctx.step('fetchRecords', async ({ signal }) => {
-      return await ctx.var.sourceDb.query({
-        table,
-        where: lastSyncAt ? { updatedAt: { $gt: lastSyncAt } } : {},
-      }, { signal })
+      return await ctx.var.sourceDb.query(
+        {
+          table,
+          where: lastSyncAt ? { updatedAt: { $gt: lastSyncAt } } : {},
+        },
+        { signal },
+      )
     })
 
     if (records.length === 0) {
@@ -314,17 +334,20 @@ const syncData = defineAction<{ sourceDb: Database; targetDb: Database }>()({
 
     // Step 2: Transform records
     const transformed = await ctx.step('transformRecords', async ({ signal }) => {
-      return records.map(record => transformRecord(record))
+      return records.map((record) => transformRecord(record))
     })
 
     // Step 3: Upsert to target
     let synced = 0
     for (const record of transformed) {
       await ctx.step(`upsert-${record.id}`, async ({ signal }) => {
-        await ctx.var.targetDb.upsert({
-          table,
-          record,
-        }, { signal })
+        await ctx.var.targetDb.upsert(
+          {
+            table,
+            record,
+          },
+          { signal },
+        )
         synced++
       })
     }
@@ -412,8 +435,8 @@ const client = duron({
     sendEmail,
     processOrder,
   },
-  multiProcessMode: true,
-  processTimeout: 5 * 1000, // 5 seconds
+  heartbeatInterval: 5_000, // Liveness heartbeat every 5s (default)
+  heartbeatTimeout: 15_000, // Consider dead after 15s (default)
 })
 
 await client.start()

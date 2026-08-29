@@ -1,17 +1,14 @@
 'use client'
 
-import { Activity } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { JsonView } from '@/components/json-view'
-import { StepSpansModal } from '@/components/spans-panel'
-import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useSpans } from '@/contexts/spans-context'
 import { useStepStatusPolling } from '@/hooks/use-step-status-polling'
 import { useStep } from '@/lib/api'
 import { calculateDurationMs, formatMs } from '@/lib/duration'
 import { formatDate } from '@/lib/format'
+
 import { BadgeStatus } from '../components/badge-status'
 import { isExpiring } from '../lib/is-expiring'
 
@@ -23,8 +20,6 @@ interface StepDetailsContentProps {
 export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
   // Fetch the full step data including output
   const { data: step, isLoading, error } = useStep(stepId)
-  const { spansEnabled } = useSpans()
-  const [showSpans, setShowSpans] = useState(false)
 
   // Enable polling for individual step status updates
   useStepStatusPolling(stepId, jobId, true)
@@ -85,7 +80,9 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
             <span className="font-medium">ID:</span>{' '}
             <Tooltip>
               <TooltipTrigger asChild={true}>
-                <span className="font-mono text-xs cursor-help">{step.id.split('-').pop() || step.id}</span>
+                <span className="font-mono text-xs cursor-help">
+                  {step.id.split('-').pop() || step.id}
+                </span>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="font-mono text-xs">{step.id}</p>
@@ -99,7 +96,9 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
             <span className="font-medium">Job ID:</span>{' '}
             <Tooltip>
               <TooltipTrigger asChild={true}>
-                <span className="font-mono text-xs cursor-help">{step.jobId.split('-').pop() || step.jobId}</span>
+                <span className="font-mono text-xs cursor-help">
+                  {step.jobId.split('-').pop() || step.jobId}
+                </span>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="font-mono text-xs">{step.jobId}</p>
@@ -182,25 +181,14 @@ export function StepDetailsContent({ stepId, jobId }: StepDetailsContentProps) {
                   title={`Attempt Error (${formatDate(attempt.failedAt)})`}
                   height="100px"
                 />
-                {attempt.delayedMs && <div className="mt-1 text-muted-foreground">Delayed: {attempt.delayedMs}ms</div>}
+                {attempt.delayedMs && (
+                  <div className="mt-1 text-muted-foreground">Delayed: {attempt.delayedMs}ms</div>
+                )}
               </div>
             ))}
           </div>
         </div>
       )}
-
-      {/* Spans Button */}
-      {spansEnabled && (
-        <div>
-          <Button variant="outline" size="sm" onClick={() => setShowSpans(true)} className="w-full">
-            <Activity className="h-4 w-4 mr-2" />
-            View Spans
-          </Button>
-        </div>
-      )}
-
-      {/* Spans Modal */}
-      {spansEnabled && <StepSpansModal stepId={step.id} open={showSpans} onClose={() => setShowSpans(false)} />}
     </div>
   )
 }

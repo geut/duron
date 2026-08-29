@@ -60,7 +60,12 @@ let cachedHTML: string | null = null
  * })
  * ```
  */
-export async function getHTML({ url, enableLogin, showLogo, theme }: GetHTMLOptions): Promise<string> {
+export async function getHTML({
+  url,
+  enableLogin,
+  showLogo,
+  theme,
+}: GetHTMLOptions): Promise<string> {
   if (cachedHTML) return cachedHTML
 
   let css = ''

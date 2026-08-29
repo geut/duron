@@ -13,7 +13,11 @@ interface StepStatusResult {
  * Hook to poll for step status updates every 2 seconds.
  * If the updatedAt timestamp changes, it triggers a refetch of the steps list for the job.
  */
-export function useStepStatusPolling(stepId: string | null, jobId: string | null, enabled: boolean = true) {
+export function useStepStatusPolling(
+  stepId: string | null,
+  jobId: string | null,
+  enabled: boolean = true,
+) {
   const queryClient = useQueryClient()
   const apiRequest = useApiRequest()
   const pollingInterval = usePollingInterval()
@@ -45,7 +49,7 @@ export function useStepStatusPolling(stepId: string | null, jobId: string | null
         previousUpdatedAtRef.current = statusResult.updatedAt
       } catch (error) {
         // Silently handle errors - don't spam console
-        // biome-ignore lint/suspicious/noConsole: Debug logging is acceptable here
+        // oxlint-disable-next-line no-console
         console.debug('Step status polling error:', error)
       }
     }
@@ -62,7 +66,7 @@ export function useStepStatusPolling(stepId: string | null, jobId: string | null
   }, [enabled, stepId, jobId, queryClient, apiRequest, pollingInterval])
 
   // Reset previous updatedAt when stepId or jobId changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: This is intentional
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     previousUpdatedAtRef.current = null
   }, [stepId, jobId])

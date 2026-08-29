@@ -1,6 +1,10 @@
 {
   "name": "examples",
   "private": true,
+  "scripts": {
+    "basic": "bun --hot basic/start.ts",
+    "multi-worker": "bun multi-worker/parent.ts"
+  },
   "dependencies": {
     "zod": "^4.1.12"
   },
@@ -10,10 +14,6 @@
     "duron-dashboard": "workspace:*"
   },
   "peerDependencies": {
-    "typescript": "^5"
-  },
-  "scripts": {
-    "basic": "bun --hot basic/start.ts",
-    "multi-worker": "bun multi-worker/parent.ts"
+    "typescript": "^7"
   }
 }

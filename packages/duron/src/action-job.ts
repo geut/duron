@@ -1,9 +1,22 @@
-import { context, type Span, SpanKind, SpanStatusCode, type Tracer, trace } from '@opentelemetry/api'
+import {
+  context,
+  type Span,
+  SpanKind,
+  SpanStatusCode,
+  type Tracer,
+  trace,
+} from '@opentelemetry/api'
 import type { Logger } from 'pino'
 
 import type { Action } from './action.js'
 import type { Adapter } from './adapters/adapter.js'
-import { ActionCancelError, ActionTimeoutError, isCancelError, isTimeoutError, serializeError } from './errors.js'
+import {
+  ActionCancelError,
+  ActionTimeoutError,
+  isCancelError,
+  isTimeoutError,
+  serializeError,
+} from './errors.js'
 import { StepManager } from './step-manager.js'
 import waitForAbort from './utils/wait-for-abort.js'
 
@@ -114,7 +127,11 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       )
 
       this.#timeoutId = setTimeout(() => {
-        const timeoutError = new ActionTimeoutError(this.#action.name, this.#job.id, this.#job.timeoutMs)
+        const timeoutError = new ActionTimeoutError(
+          this.#action.name,
+          this.#job.id,
+          this.#job.timeoutMs,
+        )
         this.#abortController.abort(timeoutError)
       }, this.#job.timeoutMs)
 
@@ -180,7 +197,10 @@ export class ActionJob<TAction extends Action<any, any, any>> {
         isCancelError(error) ||
         (error instanceof Error && error.name === 'AbortError' && isCancelError(error.cause))
       ) {
-        this.#logger.warn({ jobId: this.#job.id, actionName: this.#action.name }, '[ActionJob] Job cancelled')
+        this.#logger.warn(
+          { jobId: this.#job.id, actionName: this.#action.name },
+          '[ActionJob] Job cancelled',
+        )
         await this.#database.cancelJob({ jobId: this.#job.id })
 
         // End job span as cancelled

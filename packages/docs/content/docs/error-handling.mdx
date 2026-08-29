@@ -34,19 +34,23 @@ Use `NonRetriableError` for errors that won't succeed on retry:
 Don't retry validation errors - they won't succeed on retry:
 
 ```ts
-await ctx.step('validateOrder', async () => {
-  if (ctx.input.items.length === 0) {
-    throw new NonRetriableError('Order must have at least one item')
-  }
+await ctx.step(
+  'validateOrder',
+  async () => {
+    if (ctx.input.items.length === 0) {
+      throw new NonRetriableError('Order must have at least one item')
+    }
 
-  if (ctx.input.total < 0) {
-    throw new NonRetriableError('Order total cannot be negative')
-  }
-}, {
-  retry: {
-    limit: 0, // Don't retry validation
+    if (ctx.input.total < 0) {
+      throw new NonRetriableError('Order total cannot be negative')
+    }
   },
-})
+  {
+    retry: {
+      limit: 0, // Don't retry validation
+    },
+  },
+)
 ```
 
 ### Authorization Errors
@@ -127,22 +131,28 @@ const processOrder = defineAction()({
   input: z.object({
     orderId: z.string(),
     userId: z.string(),
-    items: z.array(z.object({
-      productId: z.string(),
-      quantity: z.number(),
-    })),
+    items: z.array(
+      z.object({
+        productId: z.string(),
+        quantity: z.number(),
+      }),
+    ),
   }),
   handler: async (ctx) => {
     // Step 1: Validate input (non-retriable)
-    await ctx.step('validateOrder', async () => {
-      if (ctx.input.items.length === 0) {
-        throw new NonRetriableError('Order must have at least one item')
-      }
-    }, {
-      retry: {
-        limit: 0, // Don't retry validation
+    await ctx.step(
+      'validateOrder',
+      async () => {
+        if (ctx.input.items.length === 0) {
+          throw new NonRetriableError('Order must have at least one item')
+        }
       },
-    })
+      {
+        retry: {
+          limit: 0, // Don't retry validation
+        },
+      },
+    )
 
     // Step 2: Check permissions (non-retriable)
     await ctx.step('checkPermissions', async () => {
@@ -258,7 +268,7 @@ try {
       jobId: ctx.jobId,
       input: ctx.input,
     },
-    'Operation failed'
+    'Operation failed',
   )
 
   // Convert to non-retriable if appropriate
@@ -297,15 +307,23 @@ import { UnhandledChildStepsError } from 'duron'
 
 // This error is thrown automatically by Duron when:
 await ctx.step('parent', async ({ step }) => {
-  step('child1', async () => { /* ... */ }) // Not awaited!
-  step('child2', async () => { /* ... */ }) // Not awaited!
+  step('child1', async () => {
+    /* ... */
+  }) // Not awaited!
+  step('child2', async () => {
+    /* ... */
+  }) // Not awaited!
   return { done: true } // Throws UnhandledChildStepsError
 })
 
 // Always await all child steps:
 await ctx.step('parent', async ({ step }) => {
-  await step('child1', async () => { /* ... */ })
-  await step('child2', async () => { /* ... */ })
+  await step('child1', async () => {
+    /* ... */
+  })
+  await step('child2', async () => {
+    /* ... */
+  })
   return { done: true }
 })
 ```
@@ -316,8 +334,12 @@ Thrown when attempting to execute a step that has already been executed (same st
 
 ```ts
 // This error is thrown automatically when you try to run the same step twice
-await ctx.step('fetchUser', async () => { /* ... */ })
-await ctx.step('fetchUser', async () => { /* ... */ }) // Throws StepAlreadyExecutedError
+await ctx.step('fetchUser', async () => {
+  /* ... */
+})
+await ctx.step('fetchUser', async () => {
+  /* ... */
+}) // Throws StepAlreadyExecutedError
 ```
 
 ### ActionTimeoutError
@@ -342,12 +364,16 @@ const myAction = defineAction()({
 Thrown when a step exceeds its configured timeout. Unlike `ActionTimeoutError`, this error is retriable by default.
 
 ```ts
-await ctx.step('fetchData', async () => {
-  // If this takes too long, StepTimeoutError is thrown
-  await fetch(url)
-}, {
-  expire: 5000, // 5 second timeout for this step
-})
+await ctx.step(
+  'fetchData',
+  async () => {
+    // If this takes too long, StepTimeoutError is thrown
+    await fetch(url)
+  },
+  {
+    expire: 5000, // 5 second timeout for this step
+  },
+)
 ```
 
 ### ActionCancelError
@@ -374,7 +400,9 @@ import {
 } from 'duron/errors'
 
 try {
-  await ctx.step('operation', async () => { /* ... */ })
+  await ctx.step('operation', async () => {
+    /* ... */
+  })
 } catch (error) {
   if (isDuronError(error)) {
     console.log('Duron error code:', error.code)
@@ -406,12 +434,12 @@ try {
 
 Each Duron error has a `code` property for identification:
 
-| Error Type | Code |
-|------------|------|
-| `DuronError` (base) | `DURON_ERROR` |
+| Error Type                 | Code                    |
+| -------------------------- | ----------------------- |
+| `DuronError` (base)        | `DURON_ERROR`           |
 | `StepAlreadyExecutedError` | `STEP_ALREADY_EXECUTED` |
-| `NonRetriableError` | `NON_RETRIABLE` |
-| `ActionTimeoutError` | `ACTION_TIMEOUT` |
-| `StepTimeoutError` | `STEP_TIMEOUT` |
-| `ActionCancelError` | `ACTION_CANCEL` |
+| `NonRetriableError`        | `NON_RETRIABLE`         |
+| `ActionTimeoutError`       | `ACTION_TIMEOUT`        |
+| `StepTimeoutError`         | `STEP_TIMEOUT`          |
+| `ActionCancelError`        | `ACTION_CANCEL`         |
 | `UnhandledChildStepsError` | `UNHANDLED_CHILD_STEPS` |

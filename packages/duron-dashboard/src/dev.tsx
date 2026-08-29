@@ -1,6 +1,5 @@
-import { serve } from 'bun'
-
 import { getWeather, processOrder, sendEmail, variables } from '@shared-actions/index'
+import { serve } from 'bun'
 import { postgresAdapter } from 'duron/adapters/postgres/postgres'
 import { createServer, duron } from 'duron/index'
 
@@ -20,9 +19,6 @@ const client = duron({
   },
   variables,
   logger: 'info',
-  telemetry: {
-    local: true,
-  },
 })
 
 const app = createServer({
@@ -34,7 +30,6 @@ const app = createServer({
     jwtSecret: process.env.JWT_SECRET || 'dev-secret-key-change-in-production',
     expirationTime: '1d',
   },
-  spansEnabled: true,
 })
 
 const server = serve({

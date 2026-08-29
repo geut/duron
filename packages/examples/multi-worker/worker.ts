@@ -18,8 +18,8 @@ const client = duron({
   variables,
   logger: 'debug',
   recoverJobsOnStart: true,
-  multiProcessMode: true, // Enable multi-process mode for job recovery
-  processTimeout: 5 * 1000, // 5 seconds
+  heartbeatInterval: 5000, // Heartbeat interval for liveness detection
+  heartbeatTimeout: 15000, // Consider dead after 15s
 })
 
 await client.start()

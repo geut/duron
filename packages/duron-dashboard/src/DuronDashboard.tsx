@@ -5,7 +5,6 @@ import { ApiProvider, type CustomFetch } from './contexts/api-context'
 import { AuthProvider, useAuth } from './contexts/auth-context'
 import { LayoutProvider } from './contexts/layout-context'
 import { PollingProvider } from './contexts/polling-context'
-import { SpansProvider } from './contexts/spans-context'
 import { type ThemeOption, ThemeProvider } from './contexts/theme-context'
 import { Dashboard } from './views/dashboard'
 import Login from './views/login'
@@ -26,7 +25,12 @@ interface AppContentProps {
   className?: string
 }
 
-function AppContent({ enableLogin = true, showLogo = true, showThemeToggle = true, className }: AppContentProps) {
+function AppContent({
+  enableLogin = true,
+  showLogo = true,
+  showThemeToggle = true,
+  className,
+}: AppContentProps) {
   const { isAuthenticated } = useAuth()
 
   if (enableLogin && !isAuthenticated) {
@@ -105,14 +109,12 @@ export function DuronDashboard({
           <PollingProvider pollingInterval={pollingInterval}>
             <ApiProvider baseUrl={url} customFetch={customFetch}>
               <AuthProvider>
-                <SpansProvider>
-                  <AppContent
-                    enableLogin={enableLogin}
-                    showLogo={showLogo}
-                    showThemeToggle={showThemeToggle}
-                    className={className}
-                  />
-                </SpansProvider>
+                <AppContent
+                  enableLogin={enableLogin}
+                  showLogo={showLogo}
+                  showThemeToggle={showThemeToggle}
+                  className={className}
+                />
               </AuthProvider>
             </ApiProvider>
           </PollingProvider>

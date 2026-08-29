@@ -6,6 +6,7 @@ import { defineAction } from '../src/action.js'
 import { PostgresAdapter } from '../src/adapters/postgres/postgres.js'
 import { Client } from '../src/client.js'
 import { JOB_STATUS_ACTIVE, JOB_STATUS_COMPLETED, JOB_STATUS_CREATED } from '../src/constants.js'
+
 import { type AdapterFactory, postgresFactory } from './adapters.js'
 import { expectToBeDefined } from './asserts.js'
 
@@ -67,7 +68,11 @@ const duronSrcPath = import.meta.dir.replace('/test', '/src')
  * 3. Write a ready file to signal readiness
  * 4. Exit when killed
  */
-function createWorkerScript(connectionUrl: string, workerId: string, readyFilePath: string): string {
+function createWorkerScript(
+  connectionUrl: string,
+  workerId: string,
+  readyFilePath: string,
+): string {
   return `
 import { z } from 'zod'
 import { defineAction } from '${duronSrcPath}/action.js'
@@ -380,8 +385,8 @@ function runRecoverTests(adapterFactory: AdapterFactory) {
             actions: { slowAction, quickAction },
             syncPattern: false,
             recoverJobsOnStart: true,
-            multiProcessMode: true,
-            processTimeout: 2_000, // Short timeout for testing
+            heartbeatInterval: 500,
+            heartbeatTimeout: 1_000,
             logger: 'error',
           })
           clientsToStop.push(recoveryClient)
@@ -433,8 +438,8 @@ function runRecoverTests(adapterFactory: AdapterFactory) {
             actions: { slowAction, quickAction },
             syncPattern: false,
             recoverJobsOnStart: true,
-            multiProcessMode: true,
-            processTimeout: 2_000,
+            heartbeatInterval: 500,
+            heartbeatTimeout: 1_000,
             logger: 'error',
           })
           clientsToStop.push(recoveryClient)
@@ -501,8 +506,8 @@ function runRecoverTests(adapterFactory: AdapterFactory) {
             syncPattern: 'pull',
             pullInterval: 100,
             recoverJobsOnStart: true,
-            multiProcessMode: true,
-            processTimeout: 2_000,
+            heartbeatInterval: 500,
+            heartbeatTimeout: 1_000,
             logger: 'error',
           })
           clientsToStop.push(recoveryClient)
@@ -524,7 +529,7 @@ function runRecoverTests(adapterFactory: AdapterFactory) {
 }
 
 // Only run with PostgreSQL since PGLite doesn't support multi-process
-// biome-ignore lint/complexity/useLiteralKeys: type safety
+// oxlint-disable-next-line useLiteralKeys
 if (process.env['POSTGRES_TEST'] === 'true') {
   runRecoverTests(postgresFactory)
 }

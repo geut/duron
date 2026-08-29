@@ -1,6 +1,7 @@
 import type { Adapter } from '../src/adapters/adapter.js'
 import { PGLiteAdapter } from '../src/adapters/postgres/pglite.js'
 import { PostgresAdapter } from '../src/adapters/postgres/postgres.js'
+
 import { getPostgresConnection } from './docker.js'
 
 export type { Adapter } from '../src/adapters/adapter.js'

@@ -148,7 +148,9 @@ export function useJobs(params: GetJobsParams = {}) {
     queryParams.set('fStatus', status)
   }
   if (params.fActionName) {
-    const action = Array.isArray(params.fActionName) ? params.fActionName.join(',') : params.fActionName
+    const action = Array.isArray(params.fActionName)
+      ? params.fActionName.join(',')
+      : params.fActionName
     queryParams.set('fActionName', action)
   }
   if (params.fGroupKey) {
@@ -163,7 +165,9 @@ export function useJobs(params: GetJobsParams = {}) {
       })
     } else {
       const dateObj =
-        params.fCreatedAt instanceof Date ? params.fCreatedAt : new Date(params.fCreatedAt as Date | string | number)
+        params.fCreatedAt instanceof Date
+          ? params.fCreatedAt
+          : new Date(params.fCreatedAt as Date | string | number)
       queryParams.set('fCreatedAt', dateObj.toISOString())
     }
   }
@@ -175,7 +179,9 @@ export function useJobs(params: GetJobsParams = {}) {
       })
     } else {
       const dateObj =
-        params.fStartedAt instanceof Date ? params.fStartedAt : new Date(params.fStartedAt as Date | string | number)
+        params.fStartedAt instanceof Date
+          ? params.fStartedAt
+          : new Date(params.fStartedAt as Date | string | number)
       queryParams.set('fStartedAt', dateObj.toISOString())
     }
   }
@@ -187,7 +193,9 @@ export function useJobs(params: GetJobsParams = {}) {
       })
     } else {
       const dateObj =
-        params.fFinishedAt instanceof Date ? params.fFinishedAt : new Date(params.fFinishedAt as Date | string | number)
+        params.fFinishedAt instanceof Date
+          ? params.fFinishedAt
+          : new Date(params.fFinishedAt as Date | string | number)
       queryParams.set('fFinishedAt', dateObj.toISOString())
     }
   }
@@ -359,7 +367,8 @@ export function useJobSteps(jobId: string | null, params: GetJobStepsParams = {}
 
   return useQuery<GetJobStepsResponse>({
     queryKey: ['job-steps', jobId, params],
-    queryFn: () => apiRequest<GetJobStepsResponse>(`/jobs/${jobId}/steps?${queryParams.toString()}`),
+    queryFn: () =>
+      apiRequest<GetJobStepsResponse>(`/jobs/${jobId}/steps?${queryParams.toString()}`),
     enabled: !!jobId,
   })
 }
@@ -394,9 +403,12 @@ export function useRetryJob() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (jobId: string) => {
-      return apiRequest<{ success: boolean; message: string; newJobId: string }>(`/jobs/${jobId}/retry`, {
-        method: 'POST',
-      })
+      return apiRequest<{ success: boolean; message: string; newJobId: string }>(
+        `/jobs/${jobId}/retry`,
+        {
+          method: 'POST',
+        },
+      )
     },
     onSuccess: (_, jobId) => {
       queryClient.invalidateQueries({ queryKey: ['job', jobId] })
@@ -448,8 +460,15 @@ export function useActionsMetadata() {
 export function useRunAction() {
   const apiRequest = useApiRequest()
   const queryClient = useQueryClient()
+
   return useMutation({
-    mutationFn: async ({ actionName, input }: { actionName: string; input: any }) => {
+    mutationFn: async ({
+      actionName,
+      input,
+    }: {
+      actionName: string
+      input: Record<string, unknown>
+    }) => {
       return apiRequest<{ success: boolean; jobId: string }>(`/actions/${actionName}/run`, {
         method: 'POST',
         body: JSON.stringify(input),
@@ -458,6 +477,60 @@ export function useRunAction() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
       queryClient.invalidateQueries({ queryKey: ['actions'] })
+    },
+  })
+}
+
+// Archive hooks
+export interface ArchiveStatsResponse {
+  jobsCount: number
+  stepsCount: number
+  oldestJobDate: string | null
+  totalSizeBytes: number | null
+  lastPrunedAt: string | null
+}
+
+export function useArchiveStats() {
+  const apiRequest = useApiRequest()
+
+  return useQuery<ArchiveStatsResponse>({
+    queryKey: ['archive', 'stats'],
+    queryFn: () => apiRequest<ArchiveStatsResponse>('/archive/stats'),
+  })
+}
+
+export function usePruneArchive() {
+  const apiRequest = useApiRequest()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (options: { olderThan: string; batchSize?: number; maxBatches?: number }) => {
+      return apiRequest<{ deletedJobs: number }>('/archive/prune', {
+        method: 'POST',
+        body: JSON.stringify(options),
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['archive', 'stats'] })
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+  })
+}
+
+export function useTruncateArchive() {
+  const apiRequest = useApiRequest()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      return apiRequest<{ success: boolean }>('/archive/truncate', {
+        method: 'POST',
+        body: JSON.stringify({ confirm: true }),
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['archive', 'stats'] })
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
     },
   })
 }

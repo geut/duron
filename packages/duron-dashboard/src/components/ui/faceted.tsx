@@ -34,7 +34,9 @@ function useFacetedContext(name: string) {
   return context
 }
 
-interface FacetedProps<Multiple extends boolean = false> extends React.ComponentProps<typeof Popover> {
+interface FacetedProps<Multiple extends boolean = false> extends React.ComponentProps<
+  typeof Popover
+> {
   value?: FacetedValue<Multiple>
   onValueChange?: (value: FacetedValue<Multiple> | undefined) => void
   children?: React.ReactNode
@@ -131,7 +133,9 @@ function FacetedBadgeList(props: FacetedBadgeListProps) {
   } = props
 
   const context = useFacetedContext('FacetedBadgeList')
-  const values = Array.isArray(context.value) ? context.value : ([context.value].filter(Boolean) as string[])
+  const values = Array.isArray(context.value)
+    ? context.value
+    : ([context.value].filter(Boolean) as string[])
 
   const getLabel = React.useCallback(
     (value: string) => {
@@ -158,7 +162,11 @@ function FacetedBadgeList(props: FacetedBadgeListProps) {
         </Badge>
       ) : (
         values.map((value) => (
-          <Badge key={value} variant="secondary" className={cn('rounded-sm px-1 font-normal', badgeClassName)}>
+          <Badge
+            key={value}
+            variant="secondary"
+            className={cn('rounded-sm px-1 font-normal', badgeClassName)}
+          >
             <span className="truncate">{getLabel(value)}</span>
           </Badge>
         ))

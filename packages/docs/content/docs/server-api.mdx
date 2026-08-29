@@ -91,6 +91,7 @@ app.listen(3000)
 **Required when `login` is provided.** Function to handle login requests.
 
 **Parameters:**
+
 - `email` - User email
 - `password` - User password
 
@@ -137,16 +138,6 @@ app.listen(3000)
 }
 ```
 
-### `spansEnabled`
-
-**Optional.** Enable spans endpoints (`/jobs/:id/spans`, `/steps/:id/spans`). Only works when client is configured with `telemetry.local` enabled. When `true`, enables the dashboard to show spans buttons. Defaults to auto-detected from `client.spansEnabled`.
-
-```ts
-{
-  spansEnabled: true,
-}
-```
-
 ## API Endpoints
 
 All endpoints use Zod for input and response validation.
@@ -158,6 +149,7 @@ All endpoints use Zod for input and response validation.
 Authenticate and receive JWT tokens.
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com",
@@ -166,6 +158,7 @@ Authenticate and receive JWT tokens.
 ```
 
 **Response:**
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -174,6 +167,7 @@ Authenticate and receive JWT tokens.
 ```
 
 **Status Codes:**
+
 - `200` - Success
 - `401` - Invalid credentials
 - `400` - Validation error
@@ -185,6 +179,7 @@ Authenticate and receive JWT tokens.
 Get jobs with pagination, filtering, and sorting.
 
 **Query Parameters:**
+
 - `page` - Page number (default: 1)
 - `pageSize` - Items per page (default: 20, max: 1000)
 - `fStatus` - Filter by status (comma-separated or multiple params)
@@ -202,11 +197,13 @@ Get jobs with pagination, filtering, and sorting.
 - `sort` - Sort string format: `"field:asc,field:desc"` (fields: `createdAt`, `startedAt`, `finishedAt`, `status`, `actionName`, `expiresAt`, `duration`, `description`)
 
 **Example:**
+
 ```
 GET /api/jobs?page=1&pageSize=20&fStatus=active,completed&sort=createdAt:desc
 ```
 
 **Response:**
+
 ```json
 {
   "data": [
@@ -237,6 +234,7 @@ GET /api/jobs?page=1&pageSize=20&fStatus=active,completed&sort=createdAt:desc
 Get a job by its ID.
 
 **Response:**
+
 ```json
 {
   "id": "uuid",
@@ -257,6 +255,7 @@ Get a job by its ID.
 Get job status and updatedAt timestamp.
 
 **Response:**
+
 ```json
 {
   "status": "completed",
@@ -269,6 +268,7 @@ Get job status and updatedAt timestamp.
 Cancel a job.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -281,6 +281,7 @@ Cancel a job.
 Retry a failed job.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -294,6 +295,7 @@ Retry a failed job.
 Time travel a job to restart from a specific step. The job must be in completed, failed, or cancelled status.
 
 **Request Body:**
+
 ```json
 {
   "stepId": "step-uuid"
@@ -301,6 +303,7 @@ Time travel a job to restart from a specific step. The job must be in completed,
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -313,6 +316,7 @@ Time travel a job to restart from a specific step. The job must be in completed,
 Delete a job by its ID. Active jobs cannot be deleted.
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -321,6 +325,7 @@ Delete a job by its ID. Active jobs cannot be deleted.
 ```
 
 **Status Codes:**
+
 - `200` - Success
 - `404` - Job not found or cannot be deleted (active jobs)
 
@@ -331,6 +336,7 @@ Delete multiple jobs using the same query parameters as `GET /jobs`. Active jobs
 **Query Parameters:** Same as `GET /jobs`
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -346,12 +352,14 @@ Delete multiple jobs using the same query parameters as `GET /jobs`. Active jobs
 Get steps for a job with pagination and search.
 
 **Query Parameters:**
+
 - `page` - Page number (default: 1)
 - `pageSize` - Items per page (default: 20, max: 1000)
 - `search` - Fuzzy search in step names
 - `fUpdatedAfter` - Steps updated after this date (ISO string)
 
 **Response:**
+
 ```json
 {
   "data": [
@@ -380,6 +388,7 @@ Get steps for a job with pagination and search.
 Get a step by its ID.
 
 **Response:**
+
 ```json
 {
   "id": "uuid",
@@ -400,59 +409,13 @@ Get a step by its ID.
 Get step status and updatedAt timestamp.
 
 **Response:**
+
 ```json
 {
   "status": "completed",
   "updatedAt": "2024-01-01T00:00:02Z"
 }
 ```
-
-### Spans
-
-Spans endpoints are only available when `spansEnabled` is true (auto-detected when `telemetry.local` is enabled on the client).
-
-#### `GET /jobs/:id/spans`
-
-Get spans for a job.
-
-**Query Parameters:**
-- `fName` - Filter by span name (string or comma-separated)
-- `fKind` - Filter by span kind (0=INTERNAL, 1=SERVER, 2=CLIENT, 3=PRODUCER, 4=CONSUMER)
-- `fTraceId` - Filter by trace ID
-- `fAttributesFilter` - JSONB filter on attributes (JSON string)
-- `sort` - Sort string format: `"field:asc"` or `"field:desc"`
-
-**Response:**
-```json
-{
-  "data": [
-    {
-      "traceId": "abc123...",
-      "spanId": "def456...",
-      "parentSpanId": null,
-      "jobId": "job-uuid",
-      "stepId": "step-uuid",
-      "name": "step:fetchUser",
-      "kind": 0,
-      "startTimeUnixNano": "1704067200000000000",
-      "endTimeUnixNano": "1704067201000000000",
-      "statusCode": 1,
-      "statusMessage": null,
-      "attributes": { "duron.job.id": "job-uuid" },
-      "events": []
-    }
-  ],
-  "total": 1
-}
-```
-
-#### `GET /steps/:id/spans`
-
-Get spans for a step.
-
-**Query Parameters:** Same as `GET /jobs/:id/spans`
-
-**Response:** Same format as `GET /jobs/:id/spans`
 
 ### Config
 
@@ -461,9 +424,9 @@ Get spans for a step.
 Get server configuration. This endpoint does not require authentication.
 
 **Response:**
+
 ```json
 {
-  "spansEnabled": true,
   "authEnabled": true
 }
 ```
@@ -475,6 +438,7 @@ Get server configuration. This endpoint does not require authentication.
 Get action statistics.
 
 **Response:**
+
 ```json
 [
   {
@@ -494,6 +458,7 @@ Get action statistics.
 Get action metadata including input schemas and mock data.
 
 **Response:**
+
 ```json
 [
   {
@@ -512,6 +477,7 @@ Get action metadata including input schemas and mock data.
 Run an action by creating a new job.
 
 **Request Body:**
+
 ```json
 {
   "to": "user@example.com",
@@ -521,6 +487,7 @@ Run an action by creating a new job.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -538,6 +505,7 @@ The server handles errors and returns appropriate status codes:
 - `500` - Internal server error
 
 **Error Response Format:**
+
 ```json
 {
   "error": "Error type",
@@ -563,6 +531,7 @@ The authentication system uses a two-token approach:
 - **Refresh Token**: Long-lived token used to obtain new access tokens (default: `'7d'`)
 
 Token expiration times can be configured via:
+
 - `login.expirationTime` - Access token expiration (defaults to `'1h'`)
 - `login.refreshTokenExpirationTime` - Refresh token expiration (defaults to `'7d'`)
 
@@ -578,6 +547,7 @@ Get tokens by calling the `POST /login` endpoint with valid credentials:
 ```
 
 Response:
+
 ```json
 {
   "accessToken": "eyJ...",
@@ -596,6 +566,7 @@ When the access token expires, use the `POST /refresh` endpoint to obtain a new 
 ```
 
 Response:
+
 ```json
 {
   "accessToken": "eyJ..."
@@ -639,9 +610,7 @@ const api = createServer({
 })
 
 // Create main app
-const app = new Elysia()
-  .use(api)
-  .listen(3000)
+const app = new Elysia().use(api).listen(3000)
 
 console.log('Server running on http://localhost:3000')
 ```

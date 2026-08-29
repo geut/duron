@@ -59,7 +59,7 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
           return (
             <Tooltip>
               <TooltipTrigger asChild={true}>
-                <div className="font-mono text-xs cursor-help">{lastSegment}</div>
+                <div className="font-mono text-xs">{lastSegment}</div>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="font-mono text-xs">{fullId}</p>
@@ -97,7 +97,7 @@ export function JobsTable({ onJobSelect, selectedJobId }: JobsTableProps) {
           return (
             <Tooltip>
               <TooltipTrigger asChild={true}>
-                <div className="truncate w-full cursor-help">{desc}</div>
+                <div className="truncate w-full">{desc}</div>
               </TooltipTrigger>
               <TooltipContent className="max-w-[400px]">
                 <p className="whitespace-pre-wrap">{desc}</p>

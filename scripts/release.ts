@@ -300,7 +300,8 @@ if (doPublish) {
   console.log('\n🚀 Publishing...')
   for (const item of plan) {
     try {
-      const tag = item.next.includes('beta') || item.next.includes('alpha') ? 'next' : item.config.npmTag
+      const tag =
+        item.next.includes('beta') || item.next.includes('alpha') ? 'next' : item.config.npmTag
       await $`cd ${join(ROOT, 'packages', item.config.name)} && npm publish --tag ${tag} --otp ${otp}`.quiet()
       console.log(`  ✅ ${item.config.name}@${item.next} published (${tag})`)
     } catch (e: any) {

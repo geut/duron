@@ -174,12 +174,12 @@ bun run release prerelease --notes "Switched from zod to zod/mini for 60% smalle
 
 ## Flags reference
 
-| Flag               | Effect                                         |
-| ------------------ | ---------------------------------------------- |
-| `--dry-run`        | Preview without changes                        |
-| `--package <name>` | Release only one package                       |
-| `--no-tag`         | Skip git commit + tag                          |
-| `--no-publish`     | Skip npm publish                               |
-| `--no-build`       | Skip build step                                |
-| `--no-release`     | Skip GitHub release                            |
-| `--notes <text>`   | Additional notes (appended after changelog)    |
+| Flag               | Effect                                      |
+| ------------------ | ------------------------------------------- |
+| `--dry-run`        | Preview without changes                     |
+| `--package <name>` | Release only one package                    |
+| `--no-tag`         | Skip git commit + tag                       |
+| `--no-publish`     | Skip npm publish                            |
+| `--no-build`       | Skip build step                             |
+| `--no-release`     | Skip GitHub release                         |
+| `--notes <text>`   | Additional notes (appended after changelog) |

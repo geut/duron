@@ -492,7 +492,7 @@ export class Client<
    */
   async runAction<TActionName extends keyof TActions>(
     actionName: TActionName,
-    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodMiniObject
+    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodMiniType
       ? z.input<NonNullable<TActions[TActionName]['input']>>
       : never,
   ): Promise<string> {
@@ -567,7 +567,7 @@ export class Client<
    */
   async runActionAndWait<TActionName extends keyof TActions>(
     actionName: TActionName,
-    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodMiniObject
+    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodMiniType
       ? z.input<NonNullable<TActions[TActionName]['input']>>
       : never,
     options?: {

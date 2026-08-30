@@ -125,6 +125,23 @@ async function getChangelog(fromRef: string, toRef: string): Promise<string> {
   }
 }
 
+async function getPreviousTag(packageName: string, currentVersion: string): Promise<string | null> {
+  try {
+    // Find the most recent tag for this package that is not the current version
+    const result = await $`git tag --list '${packageName}@*' --sort=-version:refname`.text()
+    const tags = result.trim().split('\n').filter(Boolean)
+    for (const tag of tags) {
+      const version = tag.split('@')[1]
+      if (version && version !== currentVersion) {
+        return tag
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function formatReleaseNotes(
   versions: { name: string; from: string; to: string }[],
   changelog: string,
@@ -315,7 +332,14 @@ if (doRelease) {
 
   for (const item of plan) {
     const tagName = `${item.config.name}@${item.next}`
-    const fromRef = `${item.config.name}@${item.current}`
+    // If version was already bumped (not published), find the previous tag for changelog
+    let fromRef = `${item.config.name}@${item.current}`
+    if (!item.published) {
+      const previousTag = await getPreviousTag(item.config.name, item.current)
+      if (previousTag) {
+        fromRef = previousTag
+      }
+    }
     const changelog = await getChangelog(fromRef, tagName)
     const notes = formatReleaseNotes(
       [{ name: item.config.name, from: item.current, to: item.next }],

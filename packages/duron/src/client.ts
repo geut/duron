@@ -7,6 +7,7 @@ import {
 } from '@opentelemetry/sdk-trace-base'
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
+import type { StandardSchemaV1 } from '@standard-schema/spec'
 import pino, { type Logger } from 'pino'
 import * as z from 'zod/mini'
 
@@ -37,7 +38,9 @@ import { validateSchema } from './standard-schema.js'
  * Extracts the inferred type from an action's input/output schema.
  * Handles the case where the schema might be undefined.
  */
-type InferActionSchema<T> = T extends z.ZodMiniType ? z.infer<T> : Record<string, unknown>
+type InferActionSchema<T> = T extends StandardSchemaV1
+  ? StandardSchemaV1.InferOutput<T>
+  : Record<string, unknown>
 
 /**
  * Result returned from waitForJob with untyped input and output.
@@ -492,8 +495,8 @@ export class Client<
    */
   async runAction<TActionName extends keyof TActions>(
     actionName: TActionName,
-    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodMiniType
-      ? z.input<NonNullable<TActions[TActionName]['input']>>
+    input?: NonNullable<TActions[TActionName]['input']> extends StandardSchemaV1
+      ? StandardSchemaV1.InferInput<NonNullable<TActions[TActionName]['input']>>
       : never,
   ): Promise<string> {
     await this.start()
@@ -567,8 +570,8 @@ export class Client<
    */
   async runActionAndWait<TActionName extends keyof TActions>(
     actionName: TActionName,
-    input?: NonNullable<TActions[TActionName]['input']> extends z.ZodMiniType
-      ? z.input<NonNullable<TActions[TActionName]['input']>>
+    input?: NonNullable<TActions[TActionName]['input']> extends StandardSchemaV1
+      ? StandardSchemaV1.InferInput<NonNullable<TActions[TActionName]['input']>>
       : never,
     options?: {
       /**

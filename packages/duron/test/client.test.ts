@@ -54,6 +54,21 @@ const failingAction = defineAction()({
   },
 })
 
+const emailAction = defineAction()({
+  name: 'email-action',
+  version: '1.0.0',
+  input: z.object({
+    email: z.string(),
+    count: z.number(),
+  }),
+  output: z.object({
+    sent: z.boolean(),
+  }),
+  handler: async (ctx) => {
+    return { sent: true }
+  },
+})
+
 const slowAction = defineAction()({
   name: 'slow-action',
   version: '1.0.0',
@@ -111,6 +126,7 @@ function runClientTests(adapterFactory: AdapterFactory) {
             failingAction,
             slowAction,
             slowStepAction,
+            emailAction,
           },
           syncPattern: false, // Disable auto-fetch for manual control in tests
           recoverJobsOnStart: false,
@@ -188,6 +204,50 @@ function runClientTests(adapterFactory: AdapterFactory) {
             invalid: 'field',
           } as any),
         )
+      })
+
+      it('should reject input with wrong types', async () => {
+        // message is required string, passing number should fail
+        await expectRejection(() =>
+          client.runAction('testAction', {
+            message: 123,
+            value: 'not-a-number',
+          } as any),
+        )
+      })
+
+      it('should reject input with missing required fields', async () => {
+        // message is required, passing only optional value should fail
+        await expectRejection(() =>
+          client.runAction('testAction', {
+            value: 42,
+          } as any),
+        )
+      })
+
+      it('should accept valid input', async () => {
+        const jobId = await client.runAction('testAction', {
+          message: 'Hello',
+          value: 42,
+        })
+        expect(jobId).toBeTruthy()
+      })
+
+      it('should reject string where number expected', async () => {
+        await expectRejection(() =>
+          client.runAction('emailAction', {
+            email: 'user@example.com',
+            count: 'five',
+          } as any),
+        )
+      })
+
+      it('should accept valid email action input', async () => {
+        const jobId = await client.runAction('emailAction', {
+          email: 'user@example.com',
+          count: 10,
+        })
+        expect(jobId).toBeTruthy()
       })
 
       it('should handle actions without input schema', async () => {

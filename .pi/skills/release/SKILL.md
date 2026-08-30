@@ -155,15 +155,31 @@ Report the result:
 - ✅ GitHub releases created (link to each)
 - If not pushed yet: remind to run `git push && git push --tags`
 
+## Release notes
+
+GitHub release notes are generated automatically:
+
+1. **Changelog** — all commits between the previous tag and the new tag are listed as bullet points
+2. **Notes** — if `--notes <text>` is provided, appended under a `### Notes` section
+
+Use `--notes` when the commit messages alone don't tell the full story. Good notes explain **why** the change matters, not just **what** changed.
+
+```bash
+# Example: simple release (changelog only)
+bun run release prerelease --otp 123456
+
+# Example: with additional context
+bun run release prerelease --notes "Switched from zod to zod/mini for 60% smaller bundle" --otp 123456
+```
+
 ## Flags reference
 
-| Flag               | Effect                            |
-| ------------------ | --------------------------------- |
-| `--dry-run`        | Preview without changes           |
-| `--package <name>` | Release only one package          |
-| `--no-tag`         | Skip git commit + tag             |
-| `--no-publish`     | Skip npm publish                  |
-| `--no-build`       | Skip build step                   |
-| `--no-release`     | Skip GitHub release               |
-| `--pr <number>`    | Use specific PR for release notes |
-| `--notes <text>`   | Custom release notes              |
+| Flag               | Effect                                         |
+| ------------------ | ---------------------------------------------- |
+| `--dry-run`        | Preview without changes                        |
+| `--package <name>` | Release only one package                       |
+| `--no-tag`         | Skip git commit + tag                          |
+| `--no-publish`     | Skip npm publish                               |
+| `--no-build`       | Skip build step                                |
+| `--no-release`     | Skip GitHub release                            |
+| `--notes <text>`   | Additional notes (appended after changelog)    |

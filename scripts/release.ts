@@ -26,9 +26,8 @@
  *   --no-publish    Skip npm publish
  *   --no-build      Skip build step before publish
  *   --no-release    Skip GitHub release creation
- *   --pr <number>   Use specific PR for release notes (default: latest merged)
- *   --notes <text>  Custom release notes (instead of PR description)
-  --otp <code>   npm one-time password for 2FA (prompted if not provided)
+ *   --notes <text>  Additional notes to append after changelog
+ *   --otp <code>   npm one-time password for 2FA (prompted if not provided)
  */
 
 import { readFileSync } from 'fs'
@@ -114,48 +113,35 @@ async function isVersionPublished(name: string, version: string): Promise<boolea
   }
 }
 
-// --- PR body extraction ---
+// --- Changelog from git commits ---
 
-async function getLatestMergedPR(): Promise<{
-  number: number
-  title: string
-  body: string
-} | null> {
+async function getChangelog(fromRef: string, toRef: string): Promise<string> {
   try {
-    const result =
-      await $`gh pr list --state merged --json number,title,body --limit 1 --jq '.[0]'`.text()
-    const pr = JSON.parse(result.trim())
-    return pr.number ? pr : null
+    const result = await $`git log --oneline ${fromRef}..${toRef}`.text()
+    const lines = result.trim().split('\n').filter(Boolean)
+    return lines.map((line) => `- ${line}`).join('\n')
   } catch {
-    return null
-  }
-}
-
-async function getPRBody(prNumber: number): Promise<string | null> {
-  try {
-    const result = await $`gh pr view ${prNumber} --json title,body --jq '.body'`.text()
-    return result.trim() || null
-  } catch {
-    return null
+    return ''
   }
 }
 
 function formatReleaseNotes(
   versions: { name: string; from: string; to: string }[],
-  prBody: string | null,
+  changelog: string,
   customNotes: string | null,
 ): string {
   const header = versions.map((v) => `\`${v.name}\`: \`${v.from}\` → \`${v.to}\``).join('\n')
+  const parts = [header]
+
+  if (changelog) {
+    parts.push('', '### Changes', '', changelog)
+  }
 
   if (customNotes) {
-    return `${header}\n\n---\n\n${customNotes}`
+    parts.push('', '### Notes', '', customNotes)
   }
 
-  if (prBody) {
-    return `${header}\n\n---\n\n${prBody}`
-  }
-
-  return header
+  return parts.join('\n')
 }
 
 // --- Main ---
@@ -168,7 +154,6 @@ const { values, positionals } = parseArgs({
     'no-publish': { type: 'boolean', default: false },
     'no-build': { type: 'boolean', default: false },
     'no-release': { type: 'boolean', default: false },
-    pr: { type: 'string' },
     notes: { type: 'string' },
     otp: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
@@ -188,8 +173,7 @@ Options:
   --no-publish       Skip npm publish
   --no-build         Skip build step
   --no-release       Skip GitHub release
-  --pr <number>      Use specific PR for release notes
-  --notes <text>     Custom release notes
+  --notes <text>     Additional notes to append after changelog
   --otp <code>       npm one-time password (prompted if not provided)
   --help             Show this message
 `)
@@ -329,26 +313,13 @@ console.log('  ✅ Pushed commits + tags')
 if (doRelease) {
   console.log('\n📦 Creating GitHub releases...')
 
-  let prBody: string | null = null
-  let prNumber: number | undefined
-  if (!customNotes) {
-    if (values.pr) {
-      prNumber = +values.pr[0]
-      prBody = await getPRBody(prNumber)
-    } else {
-      const pr = await getLatestMergedPR()
-      if (pr) {
-        prNumber = pr.number
-        prBody = pr.body
-      }
-    }
-  }
-
   for (const item of plan) {
     const tagName = `${item.config.name}@${item.next}`
+    const fromRef = `${item.config.name}@${item.current}`
+    const changelog = await getChangelog(fromRef, tagName)
     const notes = formatReleaseNotes(
       [{ name: item.config.name, from: item.current, to: item.next }],
-      prBody,
+      changelog,
       customNotes,
     )
 
@@ -358,10 +329,6 @@ if (doRelease) {
     } catch {
       console.error(`  ❌ Failed to create release for ${tagName}`)
     }
-  }
-
-  if (prNumber) {
-    console.log(`\n  📝 Release notes from PR #${prNumber}`)
   }
 }
 

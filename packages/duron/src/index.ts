@@ -13,6 +13,7 @@ export * from './client.js'
 export * from './constants.js'
 export { NonRetriableError, UnhandledChildStepsError } from './errors.js'
 export * from './server.js'
+export { validateSchema, isStandardSchema } from './standard-schema.js'
 export type { TelemetryContext } from './step-manager.js'
 
 export const duron = <

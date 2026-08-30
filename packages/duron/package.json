@@ -86,12 +86,14 @@
     "@opentelemetry/sdk-trace-base": "^2.4.0",
     "@opentelemetry/sdk-trace-node": "^2.4.0",
     "@opentelemetry/semantic-conventions": "^1.39.0",
+    "@standard-schema/spec": "^1.1.0",
+    "@standard-schema/utils": "^0.3.0",
     "elysia": "^1.4.22",
     "fastq": "^1.19.1",
     "jose": "^6.1.2",
     "p-retry": "^7.1.0",
     "pino": "^10.1.0",
-    "zocker": "^3.0.0",
+    "standard-schema-faker": "^0.3.1",
     "zod": "^4.5.0"
   },
   "devDependencies": {

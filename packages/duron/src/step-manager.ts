@@ -8,9 +8,9 @@ import {
   type Tracer,
   trace,
 } from '@opentelemetry/api'
+import type { StandardSchemaV1 } from '@standard-schema/spec'
 import fastq from 'fastq'
 import type { Logger } from 'pino'
-import type { z } from 'zod/mini'
 
 import {
   type Action,
@@ -19,6 +19,7 @@ import {
   type StepDefinitionHandlerContext,
   type StepHandlerContext,
   type StepOptions,
+  type StepOptionsInput,
   StepOptionsSchema,
 } from './action.js'
 import type { Adapter, CreateOrRecoverJobStepResult } from './adapters/adapter.js'
@@ -39,6 +40,7 @@ import {
   serializeError,
   UnhandledChildStepsError,
 } from './errors.js'
+import { validateSchema } from './standard-schema.js'
 
 /**
  * Telemetry context provided to action and step handlers.
@@ -383,18 +385,18 @@ export class StepManager {
    * @returns ActionHandlerContext instance
    */
   createActionContext<
-    TInput extends z.ZodMiniObject,
-    TOutput extends z.ZodMiniObject,
+    TInput extends StandardSchemaV1,
+    TOutput extends StandardSchemaV1,
     TVariables = Record<string, unknown>,
   >(
-    job: { id: string; input: z.infer<TInput>; groupKey?: string },
+    job: { id: string; input: unknown; groupKey?: string },
     action: Action<TInput, TOutput, TVariables>,
     variables: TVariables,
     abortSignal: AbortSignal,
     logger: Logger,
-  ): ActionHandlerContext<TInput, TVariables> {
+  ): Promise<ActionHandlerContext<TInput, TVariables>> {
     const telemetryContext = createTelemetryContext(this.#jobSpan, this.#tracer)
-    return new ActionContext(this, job, action, variables, abortSignal, logger, telemetryContext)
+    return ActionContext.create(this, job, action, variables, abortSignal, logger, telemetryContext)
   }
 
   /**
@@ -603,7 +605,7 @@ export class StepManager {
         step: <TChildResult>(
           childName: string,
           childCb: (ctx: StepHandlerContext) => Promise<TChildResult>,
-          childOptions: z.input<typeof StepOptionsSchema> = {},
+          childOptions: StepOptionsInput = {},
         ): Promise<TChildResult> => {
           // Inherit parent step options EXCEPT parallel (each step's parallel status is independent)
           const { parallel: _parentParallel, ...inheritableOptions } = options
@@ -878,15 +880,15 @@ export class StepManager {
  * It implements ActionHandlerContext and provides access to input, variables, logger, and the step function.
  */
 class ActionContext<
-  TInput extends z.ZodMiniObject,
-  TOutput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
+  TOutput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 > implements ActionHandlerContext<TInput, TVariables> {
   #stepManager: StepManager
   #variables: TVariables
   #abortSignal: AbortSignal
   #logger: Logger
-  #input: z.infer<TInput>
+  #input: StandardSchemaV1.InferOutput<TInput>
   #jobId: string
   #groupKey: string = '@default'
   #action: Action<TInput, TOutput, TVariables>
@@ -898,7 +900,7 @@ class ActionContext<
 
   constructor(
     stepManager: StepManager,
-    job: { id: string; input: z.infer<TInput>; groupKey?: string },
+    job: { id: string; input: StandardSchemaV1.InferOutput<TInput>; groupKey?: string },
     action: Action<TInput, TOutput, TVariables>,
     variables: TVariables,
     abortSignal: AbortSignal,
@@ -913,14 +915,8 @@ class ActionContext<
     this.#jobId = job.id
     this.#groupKey = job.groupKey ?? '@default'
     this.#telemetryContext = telemetryContext
-    if (action.input) {
-      this.#input = action.input.parse(job.input, {
-        error: () => 'Error parsing action input',
-        reportInput: true,
-      })
-    } else {
-      this.#input = job.input ?? {}
-    }
+    // Input is already validated - job.input is InferOutput<TInput>
+    this.#input = job.input ?? ({} as StandardSchemaV1.InferOutput<TInput>)
     this.step = this.step.bind(this)
     this.run = this.run.bind(this)
     // Set the run function factory so inline steps can call step definitions with correct parent
@@ -930,6 +926,36 @@ class ActionContext<
     })
   }
 
+  static async create<
+    TInput extends StandardSchemaV1,
+    TOutput extends StandardSchemaV1,
+    TVariables = Record<string, unknown>,
+  >(
+    stepManager: StepManager,
+    job: { id: string; input: unknown; groupKey?: string },
+    action: Action<TInput, TOutput, TVariables>,
+    variables: TVariables,
+    abortSignal: AbortSignal,
+    logger: Logger,
+    telemetryContext: TelemetryContext,
+  ): Promise<ActionContext<TInput, TOutput, TVariables>> {
+    // Validate input if schema is provided
+    const validatedInput = action.input
+      ? await validateSchema(action.input, job.input)
+      : (job.input as StandardSchemaV1.InferOutput<TInput>)
+    // Create a job-like object with validated input
+    const validatedJob = { ...job, input: validatedInput }
+    return new ActionContext(
+      stepManager,
+      validatedJob,
+      action,
+      variables,
+      abortSignal,
+      logger,
+      telemetryContext,
+    )
+  }
+
   // ============================================================================
   // Public API Methods
   // ============================================================================
@@ -937,7 +963,7 @@ class ActionContext<
   /**
    * Get the input data for this action.
    */
-  get input(): z.infer<TInput> {
+  get input(): StandardSchemaV1.InferOutput<TInput> {
     return this.#input
   }
 
@@ -992,7 +1018,7 @@ class ActionContext<
   async step<TResult>(
     name: string,
     cb: (ctx: StepHandlerContext) => Promise<TResult>,
-    options: z.input<typeof StepOptionsSchema> = {},
+    options: StepOptionsInput = {},
   ): Promise<TResult> {
     const parsedOptions = StepOptionsSchema.parse({
       ...this.#action.steps,
@@ -1018,10 +1044,10 @@ class ActionContext<
    * @param options - Optional step configuration overrides
    * @returns Promise resolving to the step result
    */
-  async run<TStepInput extends z.ZodMiniObject, TResult>(
+  async run<TStepInput extends StandardSchemaV1, TResult>(
     stepDef: StepDefinition<TStepInput, TResult, TVariables>,
-    input: z.input<TStepInput>,
-    options: Partial<z.input<typeof StepOptionsSchema>> = {},
+    input: StandardSchemaV1.InferInput<TStepInput>,
+    options: Partial<StepOptionsInput> = {},
   ): Promise<TResult> {
     return this.#runInternal(stepDef, input, options, null, this.#abortSignal)
   }
@@ -1030,21 +1056,17 @@ class ActionContext<
    * Internal method to execute a step definition with explicit parent step ID and abort signal.
    * Used by both the public run method and the run functions passed to step contexts.
    */
-  async #runInternal<TStepInput extends z.ZodMiniObject, TResult>(
+  async #runInternal<TStepInput extends StandardSchemaV1, TResult>(
     stepDef: StepDefinition<TStepInput, TResult, TVariables>,
-    input: z.input<TStepInput>,
-    options: Partial<z.input<typeof StepOptionsSchema>> = {},
+    input: StandardSchemaV1.InferInput<TStepInput>,
+    options: Partial<StepOptionsInput> = {},
     parentStepId: string | null,
     abortSignal: AbortSignal,
   ): Promise<TResult> {
     // Validate input against the step's schema if provided
-    // After parsing, validatedInput is z.output<TStepInput> (same as z.infer<TStepInput>)
-    const validatedInput: z.infer<TStepInput> = stepDef.input
-      ? stepDef.input.parse(input, {
-          error: () => 'Error parsing step input',
-          reportInput: true,
-        })
-      : (input as z.infer<TStepInput>)
+    const validatedInput: StandardSchemaV1.InferOutput<TStepInput> = stepDef.input
+      ? await validateSchema(stepDef.input, input)
+      : (input as StandardSchemaV1.InferOutput<TStepInput>)
 
     // Resolve step name (static or dynamic)
     // If it's a function, pass the full context including input, variables, jobId, and parentStepId
@@ -1059,7 +1081,7 @@ class ActionContext<
         : stepDef.name
 
     // Merge options: action defaults -> step definition -> call-time overrides
-    const mergedOptions: z.input<typeof StepOptionsSchema> = {
+    const mergedOptions = {
       ...this.#action.steps,
       ...(stepDef.retry !== undefined && { retry: stepDef.retry }),
       ...(stepDef.expire !== undefined && { expire: stepDef.expire }),

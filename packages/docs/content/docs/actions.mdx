@@ -12,8 +12,15 @@ Actions are defined using the `defineAction` function. Each action must have:
 
 - **name**: A unique identifier for the action
 - **handler**: The function that executes the action logic
-- **input** (optional): A Zod schema for validating input
-- **output** (optional): A Zod schema for validating output
+- **input** (optional): A Standard Schema validator for validating input (Zod, Valibot, ArkType, etc.)
+- **output** (optional): A Standard Schema validator for validating output
+
+Duron supports any schema library that implements the [Standard Schema](https://standardschema.dev) specification. This includes:
+
+- **Zod** (v4+)
+- **Valibot** (v1+)
+- **ArkType**
+- **Effect Schema**
 
 ```ts
 import { defineAction } from 'duron/action'
@@ -194,9 +201,14 @@ handler: async (ctx) => {
 
 ### `input`
 
-**Optional.** A Zod schema for validating action input. If provided, input will be validated before the handler is called.
+**Optional.** A Standard Schema validator for validating action input. If provided, input will be validated before the handler is called.
+
+Any schema library that implements the [Standard Schema](https://standardschema.dev) specification works:
 
 ```ts
+// Using Zod
+import { z } from 'zod'
+
 {
   name: 'sendEmail',
   input: z.object({
@@ -207,9 +219,23 @@ handler: async (ctx) => {
 }
 ```
 
+```ts
+// Using Valibot
+import * as v from 'valibot'
+
+{
+  name: 'sendEmail',
+  input: v.object({
+    to: v.pipe(v.string(), v.email()),
+    subject: v.string(),
+    body: v.string(),
+  }),
+}
+```
+
 ### `output`
 
-**Optional.** A Zod schema for validating action output. If provided, output will be validated after the handler completes.
+**Optional.** A Standard Schema validator for validating action output. If provided, output will be validated after the handler completes.
 
 ```ts
 {

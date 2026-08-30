@@ -250,7 +250,7 @@ For steps that are used across multiple actions or need to be called multiple ti
 
 ### Creating a Reusable Step
 
-Use `createStep()` to define a step with its own input schema, options, and handler:
+Use `createStep()` to define a step with its own input schema, options, and handler. Like actions, steps accept any Standard Schema compliant validator:
 
 ```ts
 import { createStep } from 'duron'

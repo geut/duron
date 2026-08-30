@@ -7,8 +7,9 @@ import {
 } from '@opentelemetry/sdk-trace-base'
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
+import type { StandardSchemaV1 } from '@standard-schema/spec'
 import pino, { type Logger } from 'pino'
-import { zocker } from 'zocker'
+import { fake } from 'standard-schema-faker'
 import * as z from 'zod/mini'
 
 import { ActionManager } from './action-manager.js'
@@ -32,6 +33,7 @@ import {
   JOB_STATUS_FAILED,
   type JobStatus,
 } from './constants.js'
+import { validateSchema } from './standard-schema.js'
 
 /**
  * Extracts the inferred type from an action's input/output schema.
@@ -506,7 +508,7 @@ export class Client<
     // Validate input if schema is provided
     let validatedInput: any = input ?? {}
     if (action.input) {
-      validatedInput = action.input.parse(validatedInput)
+      validatedInput = await validateSchema(action.input, validatedInput)
     }
 
     // Determine groupKey and concurrency limit using concurrency handler or defaults
@@ -1008,51 +1010,19 @@ export class Client<
       let mockInput = {}
       if (action.input) {
         if (!this.#mockInputSchemas.has(action.name)) {
-          this.#mockInputSchemas.set(
-            action.name,
-            zocker(action.input as z.ZodMiniObject)
-              .override(z.ZodMiniString, 'string')
-              .override(z.ZodMiniBigInt, '4000' as any) // Convert BigInt to string for JSON serialization
-              .override(z.ZodMiniNumber, (schema, _ctx) => {
-                const greaterThan = schema.def.checks?.find(
-                  (check) => check._zod.def.check === 'greater_than',
-                )?._zod.def as unknown as { value: number; inclusive: boolean }
-                const lessThan = schema.def.checks?.find(
-                  (check) => check._zod.def.check === 'less_than',
-                )?._zod.def as unknown as { value: number; inclusive: boolean }
-
-                if (greaterThan && lessThan) {
-                  const min = greaterThan.inclusive ? greaterThan.value : greaterThan.value + 1
-                  // For inclusive lessThan, we want to include the value, so max should be value + 1
-                  // For exclusive lessThan, we want to exclude the value, so max is the value itself
-                  const max = lessThan.inclusive ? lessThan.value + 1 : lessThan.value
-                  // Ensure min < max
-                  if (min >= max) {
-                    return Math.floor(min)
-                  }
-                  return Math.floor(Math.random() * (max - min) + min)
-                }
-
-                if (greaterThan) {
-                  const min = greaterThan.inclusive ? greaterThan.value : greaterThan.value + 1
-                  const max = min + 1000 // Use 1000 as default range
-                  return Math.floor(Math.random() * (max - min) + min)
-                }
-
-                if (lessThan) {
-                  // For inclusive lessThan, we want to include the value, so max should be value + 1
-                  // For exclusive lessThan, we want to exclude the value, so max is the value itself
-                  const max = lessThan.inclusive ? lessThan.value + 1 : lessThan.value
-                  return Math.floor(Math.random() * max)
-                }
-
-                return Math.floor(Math.random() * 1000)
-              })
-              .number({
-                extreme_value_chance: 0.01,
-              })
-              .generate(),
-          )
+          // Use standard-schema-faker if schema implements StandardJSONSchemaV1
+          const hasJsonSchema =
+            '~standard' in action.input &&
+            'jsonSchema' in (action.input as StandardSchemaV1)['~standard']
+          if (hasJsonSchema) {
+            try {
+              mockInput = fake(action.input as any)
+            } catch {
+              // Fallback to empty object if mock generation fails
+              mockInput = {}
+            }
+          }
+          this.#mockInputSchemas.set(action.name, mockInput)
         }
         mockInput = this.#mockInputSchemas.get(action.name)
       }

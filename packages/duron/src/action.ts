@@ -1,3 +1,4 @@
+import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { Logger } from 'pino'
 import * as z from 'zod/mini'
 
@@ -8,11 +9,16 @@ export type RetryOptions = z.infer<typeof RetryOptionsSchema>
 
 export type StepOptions = z.infer<typeof StepOptionsSchema>
 
+/**
+ * Input type for step options - allows partial objects since defaults are applied.
+ */
+export type StepOptionsInput = z.input<typeof StepOptionsSchema>
+
 export interface ActionHandlerContext<
-  TInput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 > {
-  input: z.infer<TInput>
+  input: StandardSchemaV1.InferOutput<TInput>
   jobId: string
   groupKey: string
   var: TVariables
@@ -35,7 +41,7 @@ export interface ActionHandlerContext<
   step: <TResult>(
     name: string,
     cb: (ctx: StepHandlerContext) => Promise<TResult>,
-    options?: z.input<typeof StepOptionsSchema>,
+    options?: StepOptionsInput,
   ) => Promise<TResult>
 
   /**
@@ -46,10 +52,10 @@ export interface ActionHandlerContext<
    * @param options - Optional step configuration overrides
    * @returns Promise resolving to the step result
    */
-  run: <TStepInput extends z.ZodMiniObject, TResult>(
+  run: <TStepInput extends StandardSchemaV1, TResult>(
     stepDef: StepDefinition<TStepInput, TResult, TVariables>,
-    input: z.input<TStepInput>,
-    options?: Partial<z.input<typeof StepOptionsSchema>>,
+    input: StandardSchemaV1.InferInput<TStepInput>,
+    options?: Partial<StepOptions>,
   ) => Promise<TResult>
 }
 
@@ -92,7 +98,7 @@ export interface StepHandlerContext {
   step: <TResult>(
     name: string,
     cb: (ctx: StepHandlerContext) => Promise<TResult>,
-    options?: z.input<typeof StepOptionsSchema>,
+    options?: StepOptionsInput,
   ) => Promise<TResult>
 
   /**
@@ -104,10 +110,10 @@ export interface StepHandlerContext {
    * @param options - Optional step configuration overrides
    * @returns Promise resolving to the step result
    */
-  run: <TStepInput extends z.ZodMiniObject, TResult>(
+  run: <TStepInput extends StandardSchemaV1, TResult>(
     stepDef: StepDefinition<TStepInput, TResult, any>,
-    input: z.input<TStepInput>,
-    options?: Partial<z.input<typeof StepOptionsSchema>>,
+    input: StandardSchemaV1.InferInput<TStepInput>,
+    options?: Partial<StepOptions>,
   ) => Promise<TResult>
 }
 
@@ -116,13 +122,13 @@ export interface StepHandlerContext {
  * Includes all StepHandlerContext properties plus action-level context.
  */
 export interface StepDefinitionHandlerContext<
-  TInput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 > extends StepHandlerContext {
   /**
    * The validated input for this step.
    */
-  input: z.infer<TInput>
+  input: StandardSchemaV1.InferOutput<TInput>
 
   /**
    * Variables shared across the action.
@@ -145,7 +151,7 @@ export interface StepDefinitionHandlerContext<
  * Can be executed within an action handler using ctx.run().
  */
 export interface StepDefinition<
-  TInput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
   TResult,
   TVariables = Record<string, unknown>,
 > {
@@ -199,10 +205,10 @@ export interface StepDefinition<
 }
 
 export interface ConcurrencyHandlerContext<
-  TInput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 > {
-  input: z.infer<TInput>
+  input: StandardSchemaV1.InferOutput<TInput>
   var: TVariables
 }
 
@@ -211,13 +217,13 @@ export interface ConcurrencyHandlerContext<
  * Provides access to input, variables, job ID, and parent step ID.
  */
 export interface StepNameContext<
-  TInput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 > {
   /**
    * The validated input for this step.
    */
-  input: z.infer<TInput>
+  input: StandardSchemaV1.InferOutput<TInput>
 
   /**
    * Variables shared across the action.
@@ -309,7 +315,7 @@ export interface StepsConfigInput {
  * Allows grouping jobs by key and controlling concurrency per group.
  */
 export interface GroupsConfigInput<
-  TInput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 > {
   /**
@@ -357,8 +363,8 @@ export interface GroupsConfigInput<
  * @template TVariables - Type of variables available to the action handler
  */
 export interface ActionDefinitionInput<
-  TInput extends z.ZodMiniObject,
-  TOutput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
+  TOutput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 > {
   /**
@@ -475,20 +481,22 @@ export interface ActionDefinitionInput<
    * }
    * ```
    */
-  handler: (ctx: ActionHandlerContext<TInput, TVariables>) => Promise<z.infer<TOutput>>
+  handler: (
+    ctx: ActionHandlerContext<TInput, TVariables>,
+  ) => Promise<StandardSchemaV1.InferOutput<TOutput>>
 }
 
 // Type alias for backwards compatibility (inferred from Zod schema)
 export type ActionDefinition<
-  TInput extends z.ZodMiniObject,
-  TOutput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
+  TOutput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 > = ActionDefinitionInput<TInput, TOutput, TVariables>
 
 // Compile-time check: ensure ActionDefinitionInput is assignable to the Zod schema's input type
 type _EnsureActionDefinitionCompatible<
-  TInput extends z.ZodMiniObject,
-  TOutput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
+  TOutput extends StandardSchemaV1,
   TVariables,
 > =
   ActionDefinitionInput<TInput, TOutput, TVariables> extends z.input<
@@ -499,19 +507,19 @@ type _EnsureActionDefinitionCompatible<
 
 // This will cause a compile error if the types diverge
 declare const _actionDefCheck: _EnsureActionDefinitionCompatible<
-  z.ZodMiniObject<any>,
-  z.ZodMiniObject<any>,
+  StandardSchemaV1<any>,
+  StandardSchemaV1<any>,
   any
 >
 const _checkActionDef: _EnsureActionDefinitionCompatible<
-  z.ZodMiniObject<any>,
-  z.ZodMiniObject<any>,
+  StandardSchemaV1<any>,
+  StandardSchemaV1<any>,
   any
 > = true
 
 export type Action<
-  TInput extends z.ZodMiniObject,
-  TOutput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
+  TOutput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 > = z.infer<ReturnType<typeof createActionDefinitionSchema<TInput, TOutput, TVariables>>>
 
@@ -532,8 +540,8 @@ export const StepOptionsSchema = z.object({
 })
 
 export function createActionDefinitionSchema<
-  TInput extends z.ZodMiniObject,
-  TOutput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
+  TOutput extends StandardSchemaV1,
   TVariables = Record<string, unknown>,
 >() {
   return z.pipe(
@@ -542,12 +550,12 @@ export function createActionDefinitionSchema<
       version: z.optional(z.string()),
       input: z.optional(
         z.custom<TInput>((val: any) => {
-          return !val || ('_zod' in val && 'type' in val && val.type === 'object')
+          return !val || ('~standard' in val && val['~standard']?.version === 1)
         }),
       ),
       output: z.optional(
         z.custom<TOutput>((val: any) => {
-          return !val || ('_zod' in val && 'type' in val && val.type === 'object')
+          return !val || ('~standard' in val && val['~standard']?.version === 1)
         }),
       ),
       groups: z.optional(
@@ -588,7 +596,9 @@ export function createActionDefinitionSchema<
         }),
       ),
       handler: z.custom<
-        (ctx: ActionHandlerContext<TInput, TVariables>) => Promise<z.infer<TOutput>>
+        (
+          ctx: ActionHandlerContext<TInput, TVariables>,
+        ) => Promise<StandardSchemaV1.InferOutput<TOutput>>
       >((val) => {
         return typeof val === 'function'
       }),
@@ -604,7 +614,7 @@ export function createActionDefinitionSchema<
 }
 
 export const defineAction = <TVariables = Record<string, unknown>>() => {
-  return <TInput extends z.ZodMiniObject, TOutput extends z.ZodMiniObject>(
+  return <TInput extends StandardSchemaV1, TOutput extends StandardSchemaV1>(
     def: ActionDefinition<TInput, TOutput, TVariables>,
   ) => {
     return createActionDefinitionSchema<TInput, TOutput, TVariables>().parse(def)
@@ -615,7 +625,7 @@ export const defineAction = <TVariables = Record<string, unknown>>() => {
  * Input type for createStep() - the definition object before transformation.
  */
 export type StepDefinitionInput<
-  TInput extends z.ZodMiniObject,
+  TInput extends StandardSchemaV1,
   TResult,
   TVariables = Record<string, unknown>,
 > = Omit<StepDefinition<TInput, TResult, TVariables>, '__stepDefinition'>
@@ -648,7 +658,7 @@ export type StepDefinitionInput<
  * ```
  */
 export const createStep = <TVariables = Record<string, unknown>>() => {
-  return <TInput extends z.ZodMiniObject, TResult>(
+  return <TInput extends StandardSchemaV1, TResult>(
     def: StepDefinitionInput<TInput, TResult, TVariables>,
   ): StepDefinition<TInput, TResult, TVariables> => {
     return {

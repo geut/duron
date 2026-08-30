@@ -17,6 +17,7 @@ import {
   isTimeoutError,
   serializeError,
 } from './errors.js'
+import { validateSchema } from './standard-schema.js'
 import { StepManager } from './step-manager.js'
 import waitForAbort from './utils/wait-for-abort.js'
 
@@ -118,7 +119,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
       })
 
       // Create action context with step manager
-      const ctx = this.#stepManager.createActionContext(
+      const ctx = await this.#stepManager.createActionContext(
         this.#job,
         this.#action,
         this.#variables as any,
@@ -160,10 +161,7 @@ export class ActionJob<TAction extends Action<any, any, any>> {
 
       // Validate output if schema is provided
       if (this.#action.output) {
-        result = this.#action.output.parse(result, {
-          error: () => 'Error parsing action output',
-          reportInput: true,
-        })
+        result = await validateSchema(this.#action.output, result)
       }
 
       // Complete job

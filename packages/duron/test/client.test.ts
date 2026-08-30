@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
-import { z } from 'zod/mini'
+import { z } from 'zod'
 
 import { defineAction } from '../src/action.js'
 import { Client } from '../src/client.js'
@@ -274,6 +274,17 @@ function runClientTests(adapterFactory: AdapterFactory) {
         expect(jobId).toBeTruthy()
 
         await testClient.stop()
+      })
+
+      it('should generate mock input from JSON Schema', async () => {
+        const metadata = await client.getActionsMetadata()
+        const emailActionMeta = metadata.find((m) => m.name === 'email-action')
+
+        expect(emailActionMeta).toBeTruthy()
+        expect(emailActionMeta?.mockInput).toEqual({
+          email: 'string',
+          count: 0,
+        })
       })
     })
 

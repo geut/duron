@@ -15,8 +15,14 @@ export const StepStatusSchema = z.enum(STEP_STATUSES)
 
 const DateSchema = z.union([
   z.date(),
-  z.pipe(z.string(), z.transform((str) => new Date(str))),
-  z.pipe(z.number(), z.transform((num) => new Date(num))),
+  z.pipe(
+    z.string(),
+    z.transform((str) => new Date(str)),
+  ),
+  z.pipe(
+    z.number(),
+    z.transform((num) => new Date(num)),
+  ),
 ])
 
 export const SerializableErrorSchema = z.object({

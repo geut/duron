@@ -270,10 +270,7 @@ export const processOrder = defineAction<typeof variables>()({
       )
       .check(z.minLength(1))
       .check(z.describe('Order items')),
-    paymentMethod: z._default(
-      z.enum(['credit_card', 'paypal', 'bank_transfer']),
-      'credit_card',
-    ),
+    paymentMethod: z._default(z.enum(['credit_card', 'paypal', 'bank_transfer']), 'credit_card'),
     shippingAddress: z.object({
       street: z.string(),
       city: z.string(),

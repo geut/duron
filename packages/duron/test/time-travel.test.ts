@@ -46,19 +46,19 @@ const linearAction = defineAction()({
     const steps: string[] = []
 
     await ctx.step('step-1', async () => {
-      if (ctx.input["failAtStep"] === 1) throw new Error('Step 1 failed')
+      if (ctx.input['failAtStep'] === 1) throw new Error('Step 1 failed')
       steps.push('step-1')
       return { completed: 'step-1' }
     })
 
     await ctx.step('step-2', async () => {
-      if (ctx.input["failAtStep"] === 2) throw new Error('Step 2 failed')
+      if (ctx.input['failAtStep'] === 2) throw new Error('Step 2 failed')
       steps.push('step-2')
       return { completed: 'step-2' }
     })
 
     await ctx.step('step-3', async () => {
-      if (ctx.input["failAtStep"] === 3) throw new Error('Step 3 failed')
+      if (ctx.input['failAtStep'] === 3) throw new Error('Step 3 failed')
       steps.push('step-3')
       return { completed: 'step-3' }
     })
@@ -91,13 +91,13 @@ const nestedAction = defineAction()({
       executed.push('parent-1-start')
 
       await stepCtx.step('child-1-1', async () => {
-        if (ctx.input["failAtStep"] === 'child-1-1') throw new Error('child-1-1 failed')
+        if (ctx.input['failAtStep'] === 'child-1-1') throw new Error('child-1-1 failed')
         executed.push('child-1-1')
         return { done: true }
       })
 
       await stepCtx.step('child-1-2', async () => {
-        if (ctx.input["failAtStep"] === 'child-1-2') throw new Error('child-1-2 failed')
+        if (ctx.input['failAtStep'] === 'child-1-2') throw new Error('child-1-2 failed')
         executed.push('child-1-2')
         return { done: true }
       })
@@ -107,7 +107,7 @@ const nestedAction = defineAction()({
     })
 
     await ctx.step('parent-2', async () => {
-      if (ctx.input["failAtStep"] === 'parent-2') throw new Error('parent-2 failed')
+      if (ctx.input['failAtStep'] === 'parent-2') throw new Error('parent-2 failed')
       executed.push('parent-2')
       return { completed: true }
     })
@@ -149,7 +149,7 @@ const branchAction = defineAction()({
       ctx.step(
         'branch-b',
         async () => {
-          if (ctx.input["failAtStep"] === 'branch-b') throw new Error('branch-b failed')
+          if (ctx.input['failAtStep'] === 'branch-b') throw new Error('branch-b failed')
           executed.push('branch-b')
           return { result: 'b' }
         },
@@ -158,7 +158,7 @@ const branchAction = defineAction()({
     ])
 
     await ctx.step('final-step', async () => {
-      if (ctx.input["failAtStep"] === 'final-step') throw new Error('final-step failed')
+      if (ctx.input['failAtStep'] === 'final-step') throw new Error('final-step failed')
       executed.push('final-step')
       return { done: true }
     })
@@ -218,12 +218,12 @@ const nestedBranchAction = defineAction()({
           async (branchBCtx) => {
             executed.push('branch-b-start')
             await branchBCtx.step('child-b-1', async () => {
-              if (ctx.input["failAtStep"] === 'child-b-1') throw new Error('child-b-1 failed')
+              if (ctx.input['failAtStep'] === 'child-b-1') throw new Error('child-b-1 failed')
               executed.push('child-b-1')
               return { done: true }
             })
             await branchBCtx.step('child-b-2', async () => {
-              if (ctx.input["failAtStep"] === 'child-b-2') throw new Error('child-b-2 failed')
+              if (ctx.input['failAtStep'] === 'child-b-2') throw new Error('child-b-2 failed')
               executed.push('child-b-2')
               return { done: true }
             })

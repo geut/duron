@@ -210,7 +210,10 @@ export interface ConcurrencyHandlerContext<
  * Context available when generating dynamic step names.
  * Provides access to input, variables, job ID, and parent step ID.
  */
-export interface StepNameContext<TInput extends z.ZodMiniObject, TVariables = Record<string, unknown>> {
+export interface StepNameContext<
+  TInput extends z.ZodMiniObject,
+  TVariables = Record<string, unknown>,
+> {
   /**
    * The validated input for this step.
    */

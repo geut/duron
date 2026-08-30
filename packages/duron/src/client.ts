@@ -7,7 +7,6 @@ import {
 } from '@opentelemetry/sdk-trace-base'
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
-import type { StandardSchemaV1 } from '@standard-schema/spec'
 import pino, { type Logger } from 'pino'
 import * as z from 'zod/mini'
 
@@ -1011,8 +1010,7 @@ export class Client<
         if (!this.#mockInputSchemas.has(action.name)) {
           // Generate mock from JSON Schema if available
           const hasJsonSchema =
-            '~standard' in action.input &&
-            'jsonSchema' in (action.input as any)['~standard']
+            '~standard' in action.input && 'jsonSchema' in (action.input as any)['~standard']
           if (hasJsonSchema) {
             try {
               const jsonSchema = (action.input as any)['~standard'].jsonSchema.input({

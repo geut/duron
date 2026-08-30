@@ -64,7 +64,7 @@ const emailAction = defineAction()({
   output: z.object({
     sent: z.boolean(),
   }),
-  handler: async (ctx) => {
+  handler: async (_ctx) => {
     return { sent: true }
   },
 })

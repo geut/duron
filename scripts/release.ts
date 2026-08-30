@@ -273,8 +273,15 @@ if (doPublish) {
       const tag = next.includes('beta') || next.includes('alpha') ? 'next' : config.npmTag
       await $`cd ${join(ROOT, 'packages', config.name)} && npm publish --tag ${tag}`.quiet()
       console.log(`  ✅ ${config.name}@${next} published (${tag})`)
-    } catch {
+    } catch (e: any) {
       console.error(`  ❌ ${config.name} publish failed`)
+      // Bun's $ template throws errors with Buffer in stdout/stderr
+      const stdout = e?.stdout?.toString?.() || ''
+      const stderr = e?.stderr?.toString?.() || ''
+      const msg = e?.message?.toString?.() || String(e)
+      if (stdout) console.error(stdout)
+      if (stderr) console.error(stderr)
+      if (!stdout && !stderr) console.error(msg)
       process.exit(1)
     }
   }

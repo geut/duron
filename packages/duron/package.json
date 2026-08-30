@@ -1,14 +1,14 @@
 {
   "name": "duron",
-  "version": "0.4.0-beta.0",
-  "homepage": "https://github.com/tinchoz49/duron#readme",
+  "version": "0.4.0-beta.5",
+  "homepage": "https://github.com/geut/duron#readme",
   "bugs": {
-    "url": "https://github.com/tinchoz49/duron/issues"
+    "url": "https://github.com/geut/duron/issues"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tinchoz49/duron.git",
+    "url": "git+https://github.com/geut/duron.git",
     "directory": "packages/duron"
   },
   "files": [

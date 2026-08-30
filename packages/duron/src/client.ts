@@ -9,7 +9,6 @@ import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 import pino, { type Logger } from 'pino'
-import { fake } from 'standard-schema-faker'
 import * as z from 'zod/mini'
 
 import { ActionManager } from './action-manager.js'
@@ -1010,13 +1009,16 @@ export class Client<
       let mockInput = {}
       if (action.input) {
         if (!this.#mockInputSchemas.has(action.name)) {
-          // Use standard-schema-faker if schema implements StandardJSONSchemaV1
+          // Generate mock from JSON Schema if available
           const hasJsonSchema =
             '~standard' in action.input &&
-            'jsonSchema' in (action.input as StandardSchemaV1)['~standard']
+            'jsonSchema' in (action.input as any)['~standard']
           if (hasJsonSchema) {
             try {
-              mockInput = fake(action.input as any)
+              const jsonSchema = (action.input as any)['~standard'].jsonSchema.input({
+                target: 'draft-2020-12',
+              })
+              mockInput = generateMockFromJsonSchema(jsonSchema)
             } catch {
               // Fallback to empty object if mock generation fails
               mockInput = {}
@@ -1424,4 +1426,67 @@ export class Client<
 
     this.#database.on('job-available', this.#pushListener)
   }
+}
+
+// ============================================================================
+// JSON Schema Mock Generator
+// ============================================================================
+
+/**
+ * Generate mock data from a JSON Schema object.
+ * Simple implementation covering common types for dashboard preview.
+ */
+function generateMockFromJsonSchema(schema: any): any {
+  if (!schema || typeof schema !== 'object') {
+    return {}
+  }
+
+  // Handle enum
+  if (schema.enum && schema.enum.length > 0) {
+    return schema.enum[0]
+  }
+
+  // Handle const
+  if ('const' in schema) {
+    return schema.const
+  }
+
+  // Handle type
+  switch (schema.type) {
+    case 'string':
+      if (schema.format === 'email') return 'user@example.com'
+      if (schema.format === 'date') return '2024-01-01'
+      if (schema.format === 'date-time') return '2024-01-01T00:00:00Z'
+      if (schema.format === 'uri') return 'https://example.com'
+      if (schema.format === 'uuid') return '00000000-0000-0000-0000-000000000000'
+      return 'string'
+    case 'number':
+    case 'integer':
+      return schema.minimum ?? 0
+    case 'boolean':
+      return false
+    case 'array':
+      return []
+    case 'object':
+      return generateObjectMock(schema)
+    default:
+      // Handle anyOf/oneOf
+      if (schema.anyOf && schema.anyOf.length > 0) {
+        return generateMockFromJsonSchema(schema.anyOf[0])
+      }
+      if (schema.oneOf && schema.oneOf.length > 0) {
+        return generateMockFromJsonSchema(schema.oneOf[0])
+      }
+      return {}
+  }
+}
+
+function generateObjectMock(schema: any): any {
+  const result: any = {}
+  if (!schema.properties) return result
+
+  for (const [key, propSchema] of Object.entries(schema.properties)) {
+    result[key] = generateMockFromJsonSchema(propSchema)
+  }
+  return result
 }

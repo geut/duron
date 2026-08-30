@@ -107,6 +107,7 @@ function runClientTests(adapterFactory: AdapterFactory) {
         failingAction: typeof failingAction
         slowAction: typeof slowAction
         slowStepAction: typeof slowStepAction
+        emailAction: typeof emailAction
       },
       Record<string, unknown>
     >

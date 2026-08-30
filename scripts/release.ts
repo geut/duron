@@ -28,6 +28,7 @@
  *   --no-release    Skip GitHub release creation
  *   --pr <number>   Use specific PR for release notes (default: latest merged)
  *   --notes <text>  Custom release notes (instead of PR description)
+  --otp <code>   npm one-time password for 2FA (prompted if not provided)
  */
 
 import { readFileSync } from 'fs'
@@ -169,6 +170,7 @@ const { values, positionals } = parseArgs({
     'no-release': { type: 'boolean', default: false },
     pr: { type: 'string' },
     notes: { type: 'string' },
+    otp: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
   },
   allowPositionals: true,
@@ -188,6 +190,7 @@ Options:
   --no-release       Skip GitHub release
   --pr <number>      Use specific PR for release notes
   --notes <text>     Custom release notes
+  --otp <code>       npm one-time password (prompted if not provided)
   --help             Show this message
 `)
   process.exit(0)
@@ -200,6 +203,7 @@ const doPublish = !values['no-publish']
 const doBuild = !values['no-build']
 const doRelease = !values['no-release']
 const customNotes = values.notes ?? null
+const otpArg = values.otp ?? null
 
 if (onlyPackage && !PACKAGES.includes(onlyPackage)) {
   console.error(`Unknown package: ${onlyPackage}. Use: ${PACKAGES.join(' | ')}`)
@@ -275,11 +279,29 @@ if (doBuild) {
 // --- Step 3: Publish ---
 
 if (doPublish) {
+  // Prompt for OTP if not provided via --otp
+  let otp = otpArg
+  if (!otp) {
+    process.stdout.write('\n🔐 Enter npm one-time password (OTP): ')
+    otp = await new Promise<string>((resolve) => {
+      process.stdin.setEncoding('utf-8')
+      process.stdin.resume()
+      process.stdin.once('data', (data) => {
+        process.stdin.pause()
+        resolve(data.trim())
+      })
+    })
+    if (!otp) {
+      console.error('❌ No OTP provided. Aborting publish.')
+      process.exit(1)
+    }
+  }
+
   console.log('\n🚀 Publishing...')
   for (const item of plan) {
     try {
       const tag = item.next.includes('beta') || item.next.includes('alpha') ? 'next' : item.config.npmTag
-      await $`cd ${join(ROOT, 'packages', item.config.name)} && npm publish --tag ${tag}`.quiet()
+      await $`cd ${join(ROOT, 'packages', item.config.name)} && npm publish --tag ${tag} --otp ${otp}`.quiet()
       console.log(`  ✅ ${item.config.name}@${item.next} published (${tag})`)
     } catch (e: any) {
       console.error(`  ❌ ${item.config.name} publish failed`)
